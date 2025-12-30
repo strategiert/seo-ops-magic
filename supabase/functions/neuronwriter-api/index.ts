@@ -101,12 +101,14 @@ serve(async (req) => {
           });
         }
         endpoint = "/new-query";
+        // NeuronWriter API expects 'query' for the keyword
         requestBody = {
           project: projectId,
           query: keyword,
-          ...(lang && { lang }),
-          ...(country && { country }),
         };
+        // Only add language if provided
+        if (lang) requestBody.lang = lang;
+        console.log("new-query payload:", JSON.stringify(requestBody));
         break;
 
       case "get-query":

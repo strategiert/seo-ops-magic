@@ -95,21 +95,21 @@ export default function BriefDetail() {
         status: data.status || "draft",
       });
 
-      // Load related article
+      // Load related article (use maybeSingle to avoid 406 error)
       const { data: article } = await supabase
         .from("articles")
         .select("id")
         .eq("brief_id", id)
-        .single();
+        .maybeSingle();
       
       if (article) {
         setArticleId(article.id);
-        // Load related template
+        // Load related template (use maybeSingle to avoid 406 error)
         const { data: template } = await supabase
           .from("elementor_templates")
           .select("id")
           .eq("article_id", article.id)
-          .single();
+          .maybeSingle();
         
         if (template) setTemplateId(template.id);
       }
@@ -320,6 +320,7 @@ export default function BriefDetail() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="pending" disabled>Ausstehend</SelectItem>
                         <SelectItem value="draft">Entwurf</SelectItem>
                         <SelectItem value="in_progress">In Bearbeitung</SelectItem>
                         <SelectItem value="completed">Abgeschlossen</SelectItem>
