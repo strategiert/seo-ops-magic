@@ -196,6 +196,11 @@ export type Database = {
           credentials_encrypted: string | null
           id: string
           is_connected: boolean | null
+          last_sync_at: string | null
+          nw_engine: string | null
+          nw_language: string | null
+          nw_project_id: string | null
+          nw_project_name: string | null
           project_id: string
           type: string
           updated_at: string
@@ -205,6 +210,11 @@ export type Database = {
           credentials_encrypted?: string | null
           id?: string
           is_connected?: boolean | null
+          last_sync_at?: string | null
+          nw_engine?: string | null
+          nw_language?: string | null
+          nw_project_id?: string | null
+          nw_project_name?: string | null
           project_id: string
           type: string
           updated_at?: string
@@ -214,6 +224,11 @@ export type Database = {
           credentials_encrypted?: string | null
           id?: string
           is_connected?: boolean | null
+          last_sync_at?: string | null
+          nw_engine?: string | null
+          nw_language?: string | null
+          nw_project_id?: string | null
+          nw_project_name?: string | null
           project_id?: string
           type?: string
           updated_at?: string
@@ -261,6 +276,11 @@ export type Database = {
       projects: {
         Row: {
           created_at: string
+          default_country: string | null
+          default_design_preset: string | null
+          default_language: string | null
+          default_target_audience: string | null
+          default_tonality: string | null
           domain: string | null
           id: string
           name: string
@@ -270,6 +290,11 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          default_country?: string | null
+          default_design_preset?: string | null
+          default_language?: string | null
+          default_target_audience?: string | null
+          default_tonality?: string | null
           domain?: string | null
           id?: string
           name: string
@@ -279,6 +304,11 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          default_country?: string | null
+          default_design_preset?: string | null
+          default_language?: string | null
+          default_target_audience?: string | null
+          default_tonality?: string | null
           domain?: string | null
           id?: string
           name?: string

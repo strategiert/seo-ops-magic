@@ -1,61 +1,167 @@
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon, Link2, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Settings as SettingsIcon, Link2, AlertCircle } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { listNWProjects } from "@/lib/api/neuronwriter";
+import { useWorkspace } from "@/hooks/useWorkspace";
+import { supabase } from "@/integrations/supabase/client";
+import { NeuronWriterSetup } from "@/components/settings/NeuronWriterSetup";
+
+const LANGUAGES = [
+  { value: "de", label: "Deutsch" },
+  { value: "en", label: "English" },
+  { value: "fr", label: "Français" },
+  { value: "es", label: "Español" },
+];
+
+const COUNTRIES = [
+  { value: "DE", label: "Deutschland" },
+  { value: "AT", label: "Österreich" },
+  { value: "CH", label: "Schweiz" },
+  { value: "US", label: "USA" },
+  { value: "GB", label: "UK" },
+];
+
+const DESIGN_PRESETS = [
+  { value: "default", label: "Standard" },
+  { value: "modern", label: "Modern" },
+  { value: "minimal", label: "Minimal" },
+  { value: "bold", label: "Bold" },
+];
+
+interface ProjectDefaults {
+  domain: string;
+  wpUrl: string;
+  defaultLanguage: string;
+  defaultCountry: string;
+  defaultTonality: string;
+  defaultTargetAudience: string;
+  defaultDesignPreset: string;
+}
 
 export default function Settings() {
   const { toast } = useToast();
-  const [nwConnected, setNwConnected] = useState<boolean | null>(null);
-  const [nwTesting, setNwTesting] = useState(false);
-  const [nwProjectCount, setNwProjectCount] = useState<number>(0);
+  const { currentProject } = useWorkspace();
 
-  const testNeuronWriterConnection = async (opts?: { silent?: boolean }) => {
-    const silent = opts?.silent ?? false;
-    setNwTesting(true);
+  const [defaults, setDefaults] = useState<ProjectDefaults>({
+    domain: "",
+    wpUrl: "",
+    defaultLanguage: "de",
+    defaultCountry: "DE",
+    defaultTonality: "",
+    defaultTargetAudience: "",
+    defaultDesignPreset: "default",
+  });
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Load project defaults
+  useEffect(() => {
+    const loadDefaults = async () => {
+      if (!currentProject?.id) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("projects")
+          .select("domain, wp_url, default_language, default_country, default_tonality, default_target_audience, default_design_preset")
+          .eq("id", currentProject.id)
+          .single();
+
+        if (error) throw error;
+
+        if (data) {
+          setDefaults({
+            domain: data.domain || "",
+            wpUrl: data.wp_url || "",
+            defaultLanguage: data.default_language || "de",
+            defaultCountry: data.default_country || "DE",
+            defaultTonality: data.default_tonality || "",
+            defaultTargetAudience: data.default_target_audience || "",
+            defaultDesignPreset: data.default_design_preset || "default",
+          });
+        }
+      } catch (error) {
+        console.error("Error loading project defaults:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDefaults();
+  }, [currentProject?.id]);
+
+  const saveDefaults = async () => {
+    if (!currentProject?.id) return;
+
+    setSaving(true);
     try {
-      const projects = await listNWProjects();
-      setNwConnected(true);
-      setNwProjectCount(projects.length);
-      if (!silent) {
-        toast({
-          title: "Verbindung erfolgreich",
-          description: `${projects.length} NeuronWriter Projekte gefunden.`,
-        });
-      }
+      const { error } = await supabase
+        .from("projects")
+        .update({
+          domain: defaults.domain || null,
+          wp_url: defaults.wpUrl || null,
+          default_language: defaults.defaultLanguage,
+          default_country: defaults.defaultCountry,
+          default_tonality: defaults.defaultTonality || null,
+          default_target_audience: defaults.defaultTargetAudience || null,
+          default_design_preset: defaults.defaultDesignPreset,
+        })
+        .eq("id", currentProject.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Gespeichert",
+        description: "Projekt-Einstellungen wurden aktualisiert.",
+      });
     } catch (error) {
-      console.error("NeuronWriter connection test failed:", error);
-      setNwConnected(false);
-      if (!silent) {
-        toast({
-          title: "Verbindung fehlgeschlagen",
-          description: error instanceof Error ? error.message : "API Key prüfen",
-          variant: "destructive",
-        });
-      }
+      console.error("Error saving project defaults:", error);
+      toast({
+        title: "Fehler",
+        description: "Einstellungen konnten nicht gespeichert werden.",
+        variant: "destructive",
+      });
     } finally {
-      setNwTesting(false);
+      setSaving(false);
     }
   };
 
-  useEffect(() => {
-    // silent check so the status stays consistent when navigating around
-    void testNeuronWriterConnection({ silent: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  if (!currentProject) {
+    return (
+      <AppLayout>
+        <div className="flex flex-col items-center justify-center h-[50vh] text-center">
+          <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Kein Projekt ausgewählt</h2>
+          <p className="text-muted-foreground">
+            Bitte wähle zuerst ein Projekt aus, um die Einstellungen zu bearbeiten.
+          </p>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Einstellungen</h1>
-          <p className="text-muted-foreground">Projekt-Konfiguration und Integrationen</p>
+          <p className="text-muted-foreground">
+            Konfiguration für <strong>{currentProject.name}</strong>
+          </p>
         </div>
 
         <Tabs defaultValue="integrations" className="w-full">
@@ -72,55 +178,7 @@ export default function Settings() {
 
           <TabsContent value="integrations" className="space-y-4 mt-4">
             {/* NeuronWriter Integration */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      NeuronWriter
-                      {nwConnected === true && (
-                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                      )}
-                      {nwConnected === false && (
-                        <XCircle className="h-5 w-5 text-destructive" />
-                      )}
-                    </CardTitle>
-                    <CardDescription>
-                      SEO Content-Optimierung und NLP-Keyword Analyse
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>API Key Status</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Der NeuronWriter API Key ist als Secret im Backend konfiguriert.
-                    {nwConnected && ` ${nwProjectCount} Projekte verfügbar.`}
-                  </p>
-                </div>
-
-                <Button 
-                  onClick={() => testNeuronWriterConnection()} 
-                  disabled={nwTesting}
-                  variant={nwConnected ? "outline" : "default"}
-                >
-                  {nwTesting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  {nwConnected ? "Erneut testen" : "Verbindung testen"}
-                </Button>
-
-                {nwConnected && (
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-sm font-medium text-green-600">
-                      ✓ NeuronWriter ist verbunden
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Du kannst jetzt SEO Guidelines in Content Briefs importieren.
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <NeuronWriterSetup />
 
             {/* Future integrations placeholder */}
             <Card className="opacity-60">
@@ -157,19 +215,117 @@ export default function Settings() {
               <CardHeader>
                 <CardTitle>Projekt-Einstellungen</CardTitle>
                 <CardDescription>
-                  Allgemeine Konfiguration für dieses Projekt
+                  Allgemeine Konfiguration für "{currentProject.name}"
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="domain">Domain</Label>
-                  <Input id="domain" placeholder="beispiel.de" />
+              <CardContent className="space-y-6">
+                {/* Domain & WordPress */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="domain">Domain</Label>
+                    <Input
+                      id="domain"
+                      placeholder="beispiel.de"
+                      value={defaults.domain}
+                      onChange={(e) => setDefaults({ ...defaults, domain: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="wpUrl">WordPress URL</Label>
+                    <Input
+                      id="wpUrl"
+                      placeholder="https://beispiel.de/wp-json"
+                      value={defaults.wpUrl}
+                      onChange={(e) => setDefaults({ ...defaults, wpUrl: e.target.value })}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="wpUrl">WordPress URL</Label>
-                  <Input id="wpUrl" placeholder="https://beispiel.de/wp-json" />
+
+                {/* Language & Country */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Standard-Sprache</Label>
+                    <Select
+                      value={defaults.defaultLanguage}
+                      onValueChange={(v) => setDefaults({ ...defaults, defaultLanguage: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LANGUAGES.map((lang) => (
+                          <SelectItem key={lang.value} value={lang.value}>
+                            {lang.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Standard-Land</Label>
+                    <Select
+                      value={defaults.defaultCountry}
+                      onValueChange={(v) => setDefaults({ ...defaults, defaultCountry: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COUNTRIES.map((country) => (
+                          <SelectItem key={country.value} value={country.value}>
+                            {country.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <Button>Speichern</Button>
+
+                {/* Tonality & Target Audience */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="tonality">Standard-Tonalität</Label>
+                    <Input
+                      id="tonality"
+                      placeholder="z.B. professionell, freundlich"
+                      value={defaults.defaultTonality}
+                      onChange={(e) => setDefaults({ ...defaults, defaultTonality: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="audience">Standard-Zielgruppe</Label>
+                    <Input
+                      id="audience"
+                      placeholder="z.B. B2B Entscheider"
+                      value={defaults.defaultTargetAudience}
+                      onChange={(e) => setDefaults({ ...defaults, defaultTargetAudience: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                {/* Design Preset */}
+                <div className="space-y-2">
+                  <Label>Elementor Design-Preset</Label>
+                  <Select
+                    value={defaults.defaultDesignPreset}
+                    onValueChange={(v) => setDefaults({ ...defaults, defaultDesignPreset: v })}
+                  >
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DESIGN_PRESETS.map((preset) => (
+                        <SelectItem key={preset.value} value={preset.value}>
+                          {preset.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button onClick={saveDefaults} disabled={saving}>
+                  {saving ? "Speichern..." : "Speichern"}
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
