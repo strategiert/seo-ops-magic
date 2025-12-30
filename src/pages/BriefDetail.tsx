@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { NeuronWriterImport } from "@/components/briefs/NeuronWriterImport";
 import { GuidelinesDisplay } from "@/components/briefs/GuidelinesDisplay";
+import { WorkflowActions } from "@/components/briefs/WorkflowActions";
 import type { NWGuidelines } from "@/lib/api/neuronwriter";
 
 interface ContentBrief {
@@ -48,6 +49,8 @@ export default function BriefDetail() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [articleId, setArticleId] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -91,6 +94,25 @@ export default function BriefDetail() {
         notes: data.notes || "",
         status: data.status || "draft",
       });
+
+      // Load related article
+      const { data: article } = await supabase
+        .from("articles")
+        .select("id")
+        .eq("brief_id", id)
+        .single();
+      
+      if (article) {
+        setArticleId(article.id);
+        // Load related template
+        const { data: template } = await supabase
+          .from("elementor_templates")
+          .select("id")
+          .eq("article_id", article.id)
+          .single();
+        
+        if (template) setTemplateId(template.id);
+      }
     } catch (error) {
       console.error("Error loading brief:", error);
       toast({
@@ -377,6 +399,16 @@ export default function BriefDetail() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Workflow Actions */}
+            <WorkflowActions
+              briefId={id!}
+              hasGuidelines={!!brief.nw_guidelines}
+              articleId={articleId}
+              templateId={templateId}
+              onOpenImport={() => setImportModalOpen(true)}
+              onArticleGenerated={setArticleId}
+            />
           </TabsContent>
 
           <TabsContent value="guidelines" className="mt-4">

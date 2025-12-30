@@ -10,6 +10,10 @@ import Auth from "./pages/Auth";
 import Projects from "./pages/Projects";
 import Briefs from "./pages/Briefs";
 import BriefDetail from "./pages/BriefDetail";
+import Articles from "./pages/Articles";
+import ArticleDetail from "./pages/ArticleDetail";
+import Templates from "./pages/Templates";
+import TemplateDetail from "./pages/TemplateDetail";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -29,8 +33,10 @@ const App = () => (
               <Route path="/projects" element={<Projects />} />
               <Route path="/briefs" element={<Briefs />} />
               <Route path="/briefs/:id" element={<BriefDetail />} />
-              <Route path="/articles" element={<Dashboard />} />
-              <Route path="/templates" element={<Dashboard />} />
+              <Route path="/articles" element={<Articles />} />
+              <Route path="/articles/:id" element={<ArticleDetail />} />
+              <Route path="/templates" element={<Templates />} />
+              <Route path="/templates/:id" element={<TemplateDetail />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
