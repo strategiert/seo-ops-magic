@@ -58,11 +58,16 @@ serve(async (req) => {
     const nwApiKey = Deno.env.get("NEURONWRITER_API_KEY");
     if (!nwApiKey) {
       console.error("NEURONWRITER_API_KEY not configured");
-      return new Response(JSON.stringify({ error: "NeuronWriter API key not configured" }), {
+      return new Response(JSON.stringify({
+        error: "NeuronWriter API key not configured",
+        message: "Please set NEURONWRITER_API_KEY in Supabase secrets"
+      }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log("API Key present:", nwApiKey.substring(0, 10) + "...");
 
     // Parse request body
     const body: NWRequestBody = await req.json();
@@ -159,6 +164,8 @@ serve(async (req) => {
 
     // Call NeuronWriter API
     console.log(`Calling NeuronWriter: ${NW_BASE_URL}${endpoint}`);
+    console.log("Request body:", JSON.stringify(requestBody));
+
     const nwResponse = await fetch(`${NW_BASE_URL}${endpoint}`, {
       method: "POST",
       headers: {
@@ -168,14 +175,40 @@ serve(async (req) => {
       body: JSON.stringify(requestBody),
     });
 
-    const nwData = await nwResponse.json();
+    let nwData;
+    try {
+      nwData = await nwResponse.json();
+    } catch (e) {
+      console.error("Failed to parse NeuronWriter response:", e);
+      const responseText = await nwResponse.text();
+      console.error("Response text:", responseText);
+      return new Response(JSON.stringify({
+        error: "Invalid response from NeuronWriter API",
+        status: nwResponse.status,
+        statusText: nwResponse.statusText,
+        responseText: responseText.substring(0, 500)
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (!nwResponse.ok) {
-      console.error("NeuronWriter API error:", nwResponse.status, nwData);
-      return new Response(JSON.stringify({ 
-        error: "NeuronWriter API error", 
+      console.error("NeuronWriter API error:", {
+        status: nwResponse.status,
+        statusText: nwResponse.statusText,
+        endpoint: `${NW_BASE_URL}${endpoint}`,
+        requestBody,
+        responseData: nwData
+      });
+
+      return new Response(JSON.stringify({
+        error: "NeuronWriter API error",
+        message: nwData.message || nwData.error || "Unknown error from NeuronWriter API",
         details: nwData,
-        status: nwResponse.status 
+        status: nwResponse.status,
+        statusText: nwResponse.statusText,
+        endpoint: endpoint
       }), {
         status: nwResponse.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

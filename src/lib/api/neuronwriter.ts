@@ -54,9 +54,18 @@ export async function listNWProjects(): Promise<NWProject[]> {
     body: { action: "list-projects" },
   });
 
-  if (error) throw new Error(error.message);
-  if (data.error) throw new Error(data.error);
-  
+  if (error) {
+    console.error("Edge function error:", error);
+    throw new Error(`Edge Function error: ${error.message}`);
+  }
+
+  if (data.error) {
+    console.error("NeuronWriter API error:", data);
+    const errorMsg = data.message || data.error;
+    const details = data.details ? ` - ${JSON.stringify(data.details)}` : '';
+    throw new Error(`NeuronWriter API error: ${errorMsg}${details}`);
+  }
+
   return data.projects || data || [];
 }
 
@@ -90,6 +99,8 @@ export async function startNewQuery(
   // Map language code to full name if needed
   const mappedLanguage = LANGUAGE_MAP[language] || language;
 
+  console.log("Starting new query:", { projectId, keyword, language: mappedLanguage, engine });
+
   const { data, error } = await supabase.functions.invoke("neuronwriter-api", {
     body: {
       action: "new-query",
@@ -100,8 +111,17 @@ export async function startNewQuery(
     },
   });
 
-  if (error) throw new Error(error.message);
-  if (data.error) throw new Error(data.error);
+  if (error) {
+    console.error("Edge function error:", error);
+    throw new Error(`Edge Function error: ${error.message}`);
+  }
+
+  if (data.error) {
+    console.error("NeuronWriter API error:", data);
+    const errorMsg = data.message || data.error;
+    const details = data.details ? ` - ${JSON.stringify(data.details)}` : '';
+    throw new Error(`NeuronWriter API error: ${errorMsg}${details}`);
+  }
 
   return { queryId: data.query || data.id, status: data.status || "pending" };
 }
