@@ -148,15 +148,17 @@ export default function BriefDetail() {
       const { error } = await supabase
         .from("content_briefs")
         .update({
-          nw_guidelines: guidelines as unknown as null,
-          status: "ready",
+          nw_guidelines: guidelines as unknown as any,
+          status: "in_progress",
         })
         .eq("id", id);
 
       if (error) throw error;
 
-      setBrief((prev) => prev ? { ...prev, nw_guidelines: guidelines, status: "ready" } : null);
-      setFormData((prev) => ({ ...prev, status: "ready" }));
+      setBrief((prev) =>
+        prev ? { ...prev, nw_guidelines: guidelines, status: "in_progress" } : null
+      );
+      setFormData((prev) => ({ ...prev, status: "in_progress" }));
       setImportModalOpen(false);
 
       toast({
@@ -297,7 +299,6 @@ export default function BriefDetail() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="draft">Entwurf</SelectItem>
-                        <SelectItem value="ready">Bereit</SelectItem>
                         <SelectItem value="in_progress">In Bearbeitung</SelectItem>
                         <SelectItem value="completed">Abgeschlossen</SelectItem>
                       </SelectContent>
