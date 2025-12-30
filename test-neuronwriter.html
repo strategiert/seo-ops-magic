@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NeuronWriter API Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        button { margin: 10px; padding: 10px; }
+        pre { background: #f5f5f5; padding: 15px; border-radius: 5px; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h1>NeuronWriter API Debug Test</h1>
+
+    <div>
+        <h3>1. Test Projekt-Liste (funktioniert bereits)</h3>
+        <button onclick="testListProjects()">Liste Projekte</button>
+    </div>
+
+    <div>
+        <h3>2. Test New Query (aktuelles Problem)</h3>
+        <label>Projekt ID: <input id="projectId" type="text" placeholder="Aus Schritt 1 kopieren" size="30"></label><br>
+        <label>Keyword: <input id="keyword" type="text" value="test seo" size="20"></label><br>
+        <label>Language: <input id="language" type="text" value="German" size="15"></label><br>
+        <label>Engine: <input id="engine" type="text" value="google.de" size="15"></label><br>
+        <button onclick="testNewQuery()">Neue Query erstellen</button>
+    </div>
+
+    <div>
+        <h3>3. Alternative: ISO Code Test</h3>
+        <button onclick="testNewQueryISO()">Test mit "de" statt "German"</button>
+    </div>
+
+    <h3>Output:</h3>
+    <pre id="output">Bereit zum Testen...</pre>
+
+    <script>
+        const SUPABASE_URL = 'https://vmrtentqpbvvqkgsilgk.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZtcnRlbnRxcGJ2dnFrZ3NpbGdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwNjUzMDIsImV4cCI6MjA4MjY0MTMwMn0.yiTKJq2jNUemVnIsjsBVyTe1ikAk0v-6K5CUILx-dBM';
+
+        function log(message, isError = false) {
+            const output = document.getElementById('output');
+            const className = isError ? 'error' : 'success';
+            output.innerHTML = `<span class="${className}">${message}</span>`;
+            console.log(message);
+        }
+
+        async function callEdgeFunction(body) {
+            log('Sending request...');
+            console.log('Request body:', body);
+
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/neuronwriter-api`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${SUPABASE_KEY}`,
+                    'apikey': SUPABASE_KEY
+                },
+                body: JSON.stringify(body)
+            });
+
+            const data = await response.json();
+            console.log('Response:', data);
+
+            if (!response.ok) {
+                log(JSON.stringify(data, null, 2), true);
+                throw new Error(JSON.stringify(data));
+            }
+
+            return data;
+        }
+
+        async function testListProjects() {
+            try {
+                const data = await callEdgeFunction({ action: 'list-projects' });
+                const projects = data.projects || data;
+
+                let output = 'ERFOLG! Gefundene Projekte:\n\n';
+                projects.forEach(p => {
+                    output += `ID: ${p.id}\nName: ${p.name}\nLanguage: ${p.lang || 'N/A'}\nCountry: ${p.country || 'N/A'}\n\n`;
+                });
+                output += '\n📋 Kopiere eine Projekt-ID für Schritt 2!';
+
+                log(output);
+            } catch (error) {
+                log(`FEHLER:\n${error.message}`, true);
+            }
+        }
+
+        async function testNewQuery() {
+            const projectId = document.getElementById('projectId').value;
+            const keyword = document.getElementById('keyword').value;
+            const language = document.getElementById('language').value;
+            const engine = document.getElementById('engine').value;
+
+            if (!projectId) {
+                log('Bitte erst Projekt-ID eingeben!', true);
+                return;
+            }
+
+            try {
+                log(`Teste new-query mit:\n  Project: ${projectId}\n  Keyword: ${keyword}\n  Language: ${language}\n  Engine: ${engine}`);
+
+                const data = await callEdgeFunction({
+                    action: 'new-query',
+                    projectId,
+                    keyword,
+                    language,
+                    engine
+                });
+
+                log(`ERFOLG!\n\n${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                log(`FEHLER:\n${error.message}`, true);
+            }
+        }
+
+        async function testNewQueryISO() {
+            const projectId = document.getElementById('projectId').value;
+            const keyword = document.getElementById('keyword').value;
+            const engine = document.getElementById('engine').value;
+
+            if (!projectId) {
+                log('Bitte erst Projekt-ID eingeben!', true);
+                return;
+            }
+
+            try {
+                log(`Teste mit ISO Code "de" statt "German"...`);
+
+                const data = await callEdgeFunction({
+                    action: 'new-query',
+                    projectId,
+                    keyword,
+                    language: 'de',  // ISO Code statt full name
+                    engine
+                });
+
+                log(`ERFOLG mit ISO Code!\n\n${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                log(`FEHLER auch mit ISO Code:\n${error.message}`, true);
+            }
+        }
+    </script>
+</body>
+</html>
