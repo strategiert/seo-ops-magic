@@ -1,1 +1,4 @@
 project_id = "vmrtentqpbvvqkgsilgk"
+
+[functions.neuronwriter-api]
+verify_jwt = true
