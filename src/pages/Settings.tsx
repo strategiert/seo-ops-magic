@@ -101,7 +101,7 @@ export default function Settings() {
                 </div>
 
                 <Button 
-                  onClick={testNeuronWriterConnection} 
+                  onClick={() => testNeuronWriterConnection()} 
                   disabled={nwTesting}
                   variant={nwConnected ? "outline" : "default"}
                 >
