@@ -115,7 +115,8 @@ export function BriefCreationWizard({
       const { queryId } = await startNewQuery(
         neuronwriter.nwProjectId,
         keyword.trim(),
-        neuronwriter.nwLanguage
+        neuronwriter.nwLanguage || "de",
+        neuronwriter.nwEngine || "google.de"
       );
 
       // Save query ID to brief for resume capability

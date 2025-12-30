@@ -71,19 +71,38 @@ export async function listNWQueries(projectId: string, status?: string): Promise
   return data.queries || data || [];
 }
 
+// Map language codes to NeuronWriter API format
+const LANGUAGE_MAP: Record<string, string> = {
+  de: "German",
+  en: "English",
+  fr: "French",
+  es: "Spanish",
+  it: "Italian",
+  pl: "Polish",
+};
+
 export async function startNewQuery(
-  projectId: string, 
-  keyword: string, 
-  lang?: string, 
-  country?: string
+  projectId: string,
+  keyword: string,
+  language: string,
+  engine: string
 ): Promise<{ queryId: string; status: string }> {
+  // Map language code to full name if needed
+  const mappedLanguage = LANGUAGE_MAP[language] || language;
+
   const { data, error } = await supabase.functions.invoke("neuronwriter-api", {
-    body: { action: "new-query", projectId, keyword, lang, country },
+    body: {
+      action: "new-query",
+      projectId,
+      keyword,
+      language: mappedLanguage,
+      engine
+    },
   });
 
   if (error) throw new Error(error.message);
   if (data.error) throw new Error(data.error);
-  
+
   return { queryId: data.query || data.id, status: data.status || "pending" };
 }
 
