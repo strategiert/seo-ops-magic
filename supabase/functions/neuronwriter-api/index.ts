@@ -13,8 +13,8 @@ interface NWRequestBody {
   projectId?: string;
   queryId?: string;
   keyword?: string;
-  lang?: string;
-  country?: string;
+  language?: string;
+  engine?: string;
   content?: string;
   status?: string;
   tags?: string[];
@@ -66,9 +66,9 @@ serve(async (req) => {
 
     // Parse request body
     const body: NWRequestBody = await req.json();
-    const { action, projectId, queryId, keyword, lang, country, content, status, tags } = body;
+    const { action, projectId, queryId, keyword, language, engine, content, status, tags } = body;
 
-    console.log(`NeuronWriter API call: ${action}`, { projectId, queryId, keyword });
+    console.log(`NeuronWriter API call: ${action}`, { projectId, queryId, keyword, language, engine });
 
     let endpoint: string;
     let requestBody: Record<string, unknown> = {};
@@ -100,14 +100,20 @@ serve(async (req) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+        if (!language || !engine) {
+          return new Response(JSON.stringify({ error: "language and engine required for new-query" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         endpoint = "/new-query";
-        // NeuronWriter API expects 'query' for the keyword
+        // NeuronWriter API expects 'keyword', 'language', and 'engine'
         requestBody = {
           project: projectId,
-          query: keyword,
+          keyword: keyword,
+          language: language,
+          engine: engine,
         };
-        // Only add language if provided
-        if (lang) requestBody.lang = lang;
         console.log("new-query payload:", JSON.stringify(requestBody));
         break;
 

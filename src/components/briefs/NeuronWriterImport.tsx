@@ -88,8 +88,8 @@ export function NeuronWriterImport({
       const { queryId } = await startNewQuery(
         neuronwriter.nwProjectId,
         keyword.trim(),
-        neuronwriter.nwLanguage,
-        // Engine is passed via project config, not directly to API
+        neuronwriter.nwLanguage || "de",
+        neuronwriter.nwEngine || "google.de"
       );
 
       setImportProgress("Analysiere Keyword (ca. 60 Sekunden)...");
