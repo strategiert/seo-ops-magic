@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { Settings as SettingsIcon, Link2, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,28 +15,40 @@ export default function Settings() {
   const [nwTesting, setNwTesting] = useState(false);
   const [nwProjectCount, setNwProjectCount] = useState<number>(0);
 
-  const testNeuronWriterConnection = async () => {
+  const testNeuronWriterConnection = async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
     setNwTesting(true);
     try {
       const projects = await listNWProjects();
       setNwConnected(true);
       setNwProjectCount(projects.length);
-      toast({
-        title: "Verbindung erfolgreich",
-        description: `${projects.length} NeuronWriter Projekte gefunden.`,
-      });
+      if (!silent) {
+        toast({
+          title: "Verbindung erfolgreich",
+          description: `${projects.length} NeuronWriter Projekte gefunden.`,
+        });
+      }
     } catch (error) {
       console.error("NeuronWriter connection test failed:", error);
       setNwConnected(false);
-      toast({
-        title: "Verbindung fehlgeschlagen",
-        description: error instanceof Error ? error.message : "API Key prüfen",
-        variant: "destructive",
-      });
+      if (!silent) {
+        toast({
+          title: "Verbindung fehlgeschlagen",
+          description: error instanceof Error ? error.message : "API Key prüfen",
+          variant: "destructive",
+        });
+      }
     } finally {
       setNwTesting(false);
     }
   };
+
+  useEffect(() => {
+    // silent check so the status stays consistent when navigating around
+    void testNeuronWriterConnection({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   return (
     <AppLayout>
@@ -84,7 +95,7 @@ export default function Settings() {
                 <div className="space-y-2">
                   <Label>API Key Status</Label>
                   <p className="text-sm text-muted-foreground">
-                    Der NeuronWriter API Key ist als Supabase Secret konfiguriert.
+                    Der NeuronWriter API Key ist als Secret im Backend konfiguriert.
                     {nwConnected && ` ${nwProjectCount} Projekte verfügbar.`}
                   </p>
                 </div>
