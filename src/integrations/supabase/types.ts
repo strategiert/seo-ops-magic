@@ -89,6 +89,7 @@ export type Database = {
           id: string
           notes: string | null
           nw_guidelines: Json | null
+          nw_query_id: string | null
           primary_keyword: string
           priority_score: number | null
           project_id: string
@@ -105,6 +106,7 @@ export type Database = {
           id?: string
           notes?: string | null
           nw_guidelines?: Json | null
+          nw_query_id?: string | null
           primary_keyword: string
           priority_score?: number | null
           project_id: string
@@ -121,6 +123,7 @@ export type Database = {
           id?: string
           notes?: string | null
           nw_guidelines?: Json | null
+          nw_query_id?: string | null
           primary_keyword?: string
           priority_score?: number | null
           project_id?: string

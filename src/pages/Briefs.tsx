@@ -1,32 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, FileText, Search, Filter, Loader2 } from "lucide-react";
+import { Plus, FileText, Search, Loader2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { BriefCreationWizard } from "@/components/briefs/BriefCreationWizard";
 
 interface ContentBrief {
   id: string;
@@ -41,6 +24,7 @@ interface ContentBrief {
 }
 
 const statusColors: Record<string, string> = {
+  pending: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
   draft: "bg-muted text-muted-foreground",
   in_progress: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
   completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
@@ -61,19 +45,7 @@ export default function Briefs() {
   const [briefs, setBriefs] = useState<ContentBrief[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  
-  // New brief form state
-  const [newBrief, setNewBrief] = useState({
-    title: "",
-    primary_keyword: "",
-    search_intent: "informational",
-    target_audience: "",
-    tonality: "",
-    target_length: 1500,
-    notes: "",
-  });
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   useEffect(() => {
     if (currentProject?.id) {
@@ -106,63 +78,11 @@ export default function Briefs() {
     }
   };
 
-  const createBrief = async () => {
-    if (!currentProject?.id || !newBrief.title || !newBrief.primary_keyword) {
-      toast({
-        title: "Pflichtfelder fehlen",
-        description: "Titel und Primary Keyword sind erforderlich.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setCreating(true);
-    try {
-      const { data, error } = await supabase
-        .from("content_briefs")
-        .insert({
-          project_id: currentProject.id,
-          title: newBrief.title,
-          primary_keyword: newBrief.primary_keyword,
-          search_intent: newBrief.search_intent,
-          target_audience: newBrief.target_audience || null,
-          tonality: newBrief.tonality || null,
-          target_length: newBrief.target_length || null,
-          notes: newBrief.notes || null,
-          status: "draft",
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      toast({
-        title: "Brief erstellt",
-        description: "Neuer Content Brief wurde angelegt.",
-      });
-      
-      setCreateDialogOpen(false);
-      setNewBrief({
-        title: "",
-        primary_keyword: "",
-        search_intent: "informational",
-        target_audience: "",
-        tonality: "",
-        target_length: 1500,
-        notes: "",
-      });
-      
-      // Navigate to the new brief
-      navigate(`/briefs/${data.id}`);
-    } catch (error) {
-      console.error("Error creating brief:", error);
-      toast({
-        title: "Fehler",
-        description: "Brief konnte nicht erstellt werden.",
-        variant: "destructive",
-      });
-    } finally {
-      setCreating(false);
+  // Refetch briefs when wizard closes (in case new brief was created)
+  const handleWizardChange = (open: boolean) => {
+    setWizardOpen(open);
+    if (!open) {
+      loadBriefs();
     }
   };
 
@@ -201,113 +121,10 @@ export default function Briefs() {
             </p>
           </div>
           
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Neues Brief
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Neues Content Brief</DialogTitle>
-                <DialogDescription>
-                  Erstelle ein neues SEO Content Brief für deinen Artikel.
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Titel *</Label>
-                  <Input
-                    id="title"
-                    placeholder="z.B. Ultimativer Guide zu..."
-                    value={newBrief.title}
-                    onChange={(e) => setNewBrief({ ...newBrief, title: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="keyword">Primary Keyword *</Label>
-                  <Input
-                    id="keyword"
-                    placeholder="z.B. beste seo tools"
-                    value={newBrief.primary_keyword}
-                    onChange={(e) => setNewBrief({ ...newBrief, primary_keyword: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="intent">Search Intent</Label>
-                  <Select
-                    value={newBrief.search_intent}
-                    onValueChange={(value) => setNewBrief({ ...newBrief, search_intent: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="informational">Informational</SelectItem>
-                      <SelectItem value="transactional">Transaktional</SelectItem>
-                      <SelectItem value="navigational">Navigational</SelectItem>
-                      <SelectItem value="commercial">Commercial Investigation</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="audience">Zielgruppe</Label>
-                    <Input
-                      id="audience"
-                      placeholder="z.B. SEO Anfänger"
-                      value={newBrief.target_audience}
-                      onChange={(e) => setNewBrief({ ...newBrief, target_audience: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="length">Ziel-Wortanzahl</Label>
-                    <Input
-                      id="length"
-                      type="number"
-                      value={newBrief.target_length}
-                      onChange={(e) => setNewBrief({ ...newBrief, target_length: parseInt(e.target.value) || 1500 })}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="tonality">Tonalität</Label>
-                  <Input
-                    id="tonality"
-                    placeholder="z.B. professionell, freundlich, locker"
-                    value={newBrief.tonality}
-                    onChange={(e) => setNewBrief({ ...newBrief, tonality: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notizen</Label>
-                  <Textarea
-                    id="notes"
-                    placeholder="Zusätzliche Anweisungen oder Kontext..."
-                    value={newBrief.notes}
-                    onChange={(e) => setNewBrief({ ...newBrief, notes: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
-                  Abbrechen
-                </Button>
-                <Button onClick={createBrief} disabled={creating}>
-                  {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Brief erstellen
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => setWizardOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Neues Brief
+          </Button>
         </div>
 
         {/* Search */}
@@ -341,7 +158,7 @@ export default function Briefs() {
                   : "Erstelle dein erstes Content Brief, um loszulegen."}
               </p>
               {!searchQuery && (
-                <Button className="mt-4" onClick={() => setCreateDialogOpen(true)}>
+                <Button className="mt-4" onClick={() => setWizardOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Erstes Brief erstellen
                 </Button>
@@ -389,6 +206,12 @@ export default function Briefs() {
           </div>
         )}
       </div>
+
+      {/* Brief Creation Wizard */}
+      <BriefCreationWizard 
+        open={wizardOpen} 
+        onOpenChange={handleWizardChange} 
+      />
     </AppLayout>
   );
 }
