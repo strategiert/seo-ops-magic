@@ -133,7 +133,23 @@ export async function getQueryGuidelines(queryId: string): Promise<NWGuidelines>
 
   if (error) throw new Error(error.message);
   if (data.error) throw new Error(data.error);
-  
+
+  // DEBUG: Log the raw response to see the actual structure
+  console.log("NeuronWriter get-query response:", {
+    hasTerms: !!data.terms,
+    termsLength: data.terms?.length,
+    hasMetrics: !!data.metrics,
+    hasQuestions: !!data.questions,
+    questionsLength: data.questions?.length,
+    hasIdeas: !!data.ideas,
+    ideasLength: data.ideas?.length,
+    hasCompetitors: !!data.competitors,
+    competitorsLength: data.competitors?.length,
+    status: data.status,
+    allKeys: Object.keys(data)
+  });
+  console.log("Full NeuronWriter response:", data);
+
   return {
     terms: data.terms || [],
     terms_txt: data.terms_txt,
