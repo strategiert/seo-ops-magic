@@ -134,28 +134,44 @@ export async function getQueryGuidelines(queryId: string): Promise<NWGuidelines>
   if (error) throw new Error(error.message);
   if (data.error) throw new Error(data.error);
 
-  // DEBUG: Log the raw response to see the actual structure
-  console.log("NeuronWriter get-query response:", {
-    hasTerms: !!data.terms,
-    termsLength: data.terms?.length,
-    hasMetrics: !!data.metrics,
-    hasQuestions: !!data.questions,
-    questionsLength: data.questions?.length,
-    hasIdeas: !!data.ideas,
-    ideasLength: data.ideas?.length,
-    hasCompetitors: !!data.competitors,
-    competitorsLength: data.competitors?.length,
-    status: data.status,
-    allKeys: Object.keys(data)
+  // NeuronWriter API returns terms as object with content_basic array
+  // Extract NLP keywords from terms.content_basic
+  const nlpTerms = data.terms?.content_basic?.map((term: any) => ({
+    term: term.t,
+    sugg_usage: Array.isArray(term.sugg_usage) ? term.sugg_usage[1] : term.sugg_usage,
+    usage_pc: term.usage_pc,
+    in_title: data.terms?.title?.some((t: any) => t.t === term.t),
+    in_h1: data.terms?.h1?.some((t: any) => t.t === term.t),
+  })) || [];
+
+  // Extract questions from ideas object
+  const allQuestions = [
+    ...(data.ideas?.suggest_questions?.map((q: any) => q.q) || []),
+    ...(data.ideas?.people_also_ask?.map((q: any) => q.q) || []),
+    ...(data.ideas?.content_questions?.map((q: any) => q.q) || []),
+  ];
+
+  // Extract metrics
+  const metrics = data.metrics ? {
+    words_min: data.metrics.word_count?.target ? Math.round(data.metrics.word_count.target * 0.9) : undefined,
+    words_max: data.metrics.word_count?.target ? Math.round(data.metrics.word_count.target * 1.1) : undefined,
+    words_avg: data.metrics.word_count?.target,
+    readability_avg: data.metrics.readability?.target,
+  } : undefined;
+
+  console.log("Processed NeuronWriter data:", {
+    nlpTermsCount: nlpTerms.length,
+    questionsCount: allQuestions.length,
+    competitorsCount: data.competitors?.length || 0,
+    metrics
   });
-  console.log("Full NeuronWriter response:", data);
 
   return {
-    terms: data.terms || [],
+    terms: nlpTerms,
     terms_txt: data.terms_txt,
-    metrics: data.metrics,
-    ideas: data.ideas || [],
-    questions: data.questions || [],
+    metrics,
+    ideas: [], // Not used in current implementation
+    questions: allQuestions,
     competitors: data.competitors || [],
     status: data.status,
   };
