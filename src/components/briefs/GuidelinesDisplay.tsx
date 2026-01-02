@@ -51,9 +51,15 @@ export function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
   const [questionsExpanded, setQuestionsExpanded] = useState(true);
   const [competitorsExpanded, setCompetitorsExpanded] = useState(false);
 
-  const highPriorityTerms = guidelines.terms?.filter((t) => t.sugg_usage >= 3) || [];
-  const mediumPriorityTerms = guidelines.terms?.filter((t) => t.sugg_usage === 2) || [];
-  const lowPriorityTerms = guidelines.terms?.filter((t) => t.sugg_usage === 1) || [];
+  // Defensive checks: ensure all arrays are actually arrays
+  const termsArray = Array.isArray(guidelines.terms) ? guidelines.terms : [];
+  const questionsArray = Array.isArray(guidelines.questions) ? guidelines.questions : [];
+  const ideasArray = Array.isArray(guidelines.ideas) ? guidelines.ideas : [];
+  const competitorsArray = Array.isArray(guidelines.competitors) ? guidelines.competitors : [];
+
+  const highPriorityTerms = termsArray.filter((t) => t.sugg_usage >= 3);
+  const mediumPriorityTerms = termsArray.filter((t) => t.sugg_usage === 2);
+  const lowPriorityTerms = termsArray.filter((t) => t.sugg_usage === 1);
 
   return (
     <div className="space-y-6">
@@ -203,7 +209,7 @@ export function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
       </Collapsible>
 
       {/* Questions */}
-      {guidelines.questions && guidelines.questions.length > 0 && (
+      {questionsArray.length > 0 && (
         <Collapsible open={questionsExpanded} onOpenChange={setQuestionsExpanded}>
           <Card>
             <CardHeader>
@@ -212,7 +218,7 @@ export function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
                   <div className="flex items-center gap-2">
                     <HelpCircle className="h-5 w-5 text-primary" />
                     <CardTitle>Content-Fragen</CardTitle>
-                    <Badge variant="secondary">{guidelines.questions.length}</Badge>
+                    <Badge variant="secondary">{questionsArray.length}</Badge>
                   </div>
                   {questionsExpanded ? (
                     <ChevronUp className="h-5 w-5" />
@@ -228,7 +234,7 @@ export function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
             <CollapsibleContent>
               <CardContent>
                 <ul className="space-y-2">
-                  {guidelines.questions.map((question, i) => (
+                  {questionsArray.map((question, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm">
                       <span className="text-primary font-medium">•</span>
                       {question}
@@ -242,12 +248,12 @@ export function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
       )}
 
       {/* Ideas */}
-      {guidelines.ideas && guidelines.ideas.length > 0 && (
+      {ideasArray.length > 0 && (
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
               <CardTitle>Content-Ideen</CardTitle>
-              <Badge variant="secondary">{guidelines.ideas.length}</Badge>
+              <Badge variant="secondary">{ideasArray.length}</Badge>
             </div>
             <CardDescription>
               Themen und Aspekte zum Abdecken
@@ -255,7 +261,7 @@ export function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {guidelines.ideas.map((idea, i) => (
+              {ideasArray.map((idea, i) => (
                 <Badge key={i} variant="outline">
                   {idea}
                 </Badge>
@@ -266,7 +272,7 @@ export function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
       )}
 
       {/* Competitors */}
-      {guidelines.competitors && guidelines.competitors.length > 0 && (
+      {competitorsArray.length > 0 && (
         <Collapsible open={competitorsExpanded} onOpenChange={setCompetitorsExpanded}>
           <Card>
             <CardHeader>
@@ -275,7 +281,7 @@ export function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
                   <div className="flex items-center gap-2">
                     <Users className="h-5 w-5 text-primary" />
                     <CardTitle>Konkurrenz-Analyse</CardTitle>
-                    <Badge variant="secondary">{guidelines.competitors.length}</Badge>
+                    <Badge variant="secondary">{competitorsArray.length}</Badge>
                   </div>
                   {competitorsExpanded ? (
                     <ChevronUp className="h-5 w-5" />
@@ -291,7 +297,7 @@ export function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
             <CollapsibleContent>
               <CardContent>
                 <div className="space-y-3">
-                  {guidelines.competitors.map((comp, i) => (
+                  {competitorsArray.map((comp, i) => (
                     <div
                       key={i}
                       className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
