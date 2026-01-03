@@ -339,11 +339,11 @@ serve(async (req) => {
           });
       }
 
-      // Update brand profile status
+      // Update brand profile status (crawl finished)
       await supabase
         .from("brand_profiles")
         .update({
-          crawl_status: "analyzing",
+          crawl_status: "completed",
           internal_links: pages
             .filter(p => detectPageType(p.url, p.metadata?.title || "", p.markdown || "") !== "blog")
             .map(p => ({
@@ -362,7 +362,7 @@ serve(async (req) => {
           success: true,
           brandProfileId: brandProfile.id,
           pagesFound: pages.length,
-          status: "analyzing",
+          status: "completed",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
