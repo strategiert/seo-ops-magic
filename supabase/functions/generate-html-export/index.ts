@@ -29,10 +29,10 @@ async function generateBeautifulHTML(
   faqs: any[],
   metaDescription: string
 ): Promise<string> {
-  const lovableGatewayUrl = Deno.env.get("LOVABLE_GATEWAY_URL");
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-  if (!lovableGatewayUrl) {
-    throw new Error("LOVABLE_GATEWAY_URL not configured");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY not configured");
   }
 
   const designPrompt = `Du bist ein erfahrener Web-Designer mit ausgezeichnetem Geschmack für moderne, elegante Landing Pages.
@@ -109,15 +109,16 @@ Gib NUR den HTML-Content zurück, der direkt in ein Elementor Custom HTML Widget
 
 Erstelle visuell beeindruckenden Content mit perfekten inline styles!`;
 
-  console.log("Calling Claude Opus 4.5 for HTML design...");
+  console.log("Calling Lovable AI (Gemini 2.5 Pro) for HTML design...");
 
-  const response = await fetch(lovableGatewayUrl, {
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
+      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-opus-4-5",
+      model: "google/gemini-2.5-pro",
       messages: [
         {
           role: "user",
@@ -131,11 +132,26 @@ Erstelle visuell beeindruckenden Content mit perfekten inline styles!`;
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Claude API error: ${error}`);
+    console.error("Lovable AI error:", response.status, error);
+    
+    if (response.status === 429) {
+      throw new Error("Rate limit exceeded. Please try again later.");
+    }
+    if (response.status === 402) {
+      throw new Error("Payment required. Please add credits to your workspace.");
+    }
+    throw new Error(`AI API error: ${response.status}`);
   }
 
   const data = await response.json();
-  const html = data.content[0].text;
+  let html = data.choices?.[0]?.message?.content || "";
+
+  // Clean up if wrapped in code blocks
+  html = html
+    .replace(/^```html\n?/i, "")
+    .replace(/^```\n?/, "")
+    .replace(/\n?```$/g, "")
+    .trim();
 
   console.log(`Generated HTML: ${html.length} characters`);
 
