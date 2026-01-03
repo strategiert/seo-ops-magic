@@ -31,6 +31,16 @@ export function WorkflowActions({
   const handleGenerateArticle = async () => {
     setGeneratingArticle(true);
     try {
+      // Debug: Check session
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log("Current session:", sessionData.session ? "EXISTS" : "NULL");
+      console.log("User ID:", sessionData.session?.user?.id);
+      console.log("Token expires:", sessionData.session?.expires_at);
+
+      if (!sessionData.session) {
+        throw new Error("Keine aktive Session. Bitte neu einloggen.");
+      }
+
       const { data, error } = await supabase.functions.invoke("generate-article", {
         body: { briefId },
       });
