@@ -108,10 +108,12 @@ export function WorkflowActions({
       label: "Artikel generieren",
       icon: FileText,
       completed: !!articleId,
-      action: articleId ? () => navigate(`/articles/${articleId}`) : handleGenerateArticle,
-      actionLabel: articleId ? "Bearbeiten" : "Generieren",
+      action: handleGenerateArticle,
+      actionLabel: articleId ? "Regenerieren" : "Generieren",
       disabled: !hasGuidelines,
       loading: generatingArticle,
+      secondaryAction: articleId ? () => navigate(`/articles/${articleId}`) : undefined,
+      secondaryLabel: articleId ? "Bearbeiten" : undefined,
     },
     {
       id: "template",
@@ -176,21 +178,32 @@ export function WorkflowActions({
                   </div>
                 </div>
 
-                <Button
-                  variant={step.completed ? "outline" : "default"}
-                  size="sm"
-                  onClick={step.action}
-                  disabled={step.disabled || isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Generiere...
-                    </>
-                  ) : (
-                    step.actionLabel
+                <div className="flex items-center gap-2">
+                  {step.secondaryAction && step.secondaryLabel && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={step.secondaryAction}
+                    >
+                      {step.secondaryLabel}
+                    </Button>
                   )}
-                </Button>
+                  <Button
+                    variant={step.completed && !step.secondaryAction ? "outline" : "default"}
+                    size="sm"
+                    onClick={step.action}
+                    disabled={step.disabled || isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Generiere...
+                      </>
+                    ) : (
+                      step.actionLabel
+                    )}
+                  </Button>
+                </div>
               </div>
             );
           })}
