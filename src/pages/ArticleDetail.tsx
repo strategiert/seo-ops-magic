@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Save, Loader2, FileJson, Eye, FileCode } from "lucide-react";
+import { ArrowLeft, Save, Loader2, FileJson, Code } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,7 +53,7 @@ export default function ArticleDetail() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
-  const [generatingHTML, setGeneratingHTML] = useState(false);
+  const [generatingHtml, setGeneratingHtml] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -169,10 +169,10 @@ export default function ArticleDetail() {
     }
   };
 
-  const generateHTML = async () => {
+  const generateHtmlExport = async () => {
     if (!id || !article) return;
 
-    setGeneratingHTML(true);
+    setGeneratingHtml(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-html-export", {
         body: { articleId: id },
@@ -181,23 +181,23 @@ export default function ArticleDetail() {
       if (error) throw error;
 
       toast({
-        title: "HTML Export generiert",
-        description: `Wunderschöne Landing Page erstellt! (${Math.round(data.htmlLength / 1024)}KB)`,
+        title: "HTML Export erstellt",
+        description: `Landing Page wurde generiert (${Math.round((data.htmlLength || 0) / 1024)} KB).`,
       });
 
-      // Download HTML file
-      const { data: htmlExport } = await supabase
+      // Fetch and download the HTML
+      const { data: exportData } = await supabase
         .from("html_exports")
-        .select("html_content")
+        .select("html_content, name")
         .eq("id", data.exportId)
         .single();
 
-      if (htmlExport) {
-        const blob = new Blob([htmlExport.html_content], { type: "text/html" });
+      if (exportData?.html_content) {
+        const blob = new Blob([exportData.html_content], { type: "text/html" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${formData.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.html`;
+        a.download = `${article.primary_keyword || article.title}.html`.replace(/[^a-z0-9äöü\-]/gi, "_");
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -211,7 +211,7 @@ export default function ArticleDetail() {
         variant: "destructive",
       });
     } finally {
-      setGeneratingHTML(false);
+      setGeneratingHtml(false);
     }
   };
 
@@ -258,6 +258,18 @@ export default function ArticleDetail() {
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
+              onClick={generateHtmlExport}
+              disabled={generatingHtml || !formData.content_markdown}
+            >
+              {generatingHtml ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Code className="h-4 w-4 mr-2" />
+              )}
+              HTML Export
+            </Button>
+            <Button
+              variant="outline"
               onClick={generateTemplate}
               disabled={generatingTemplate || !formData.content_markdown}
             >
@@ -267,18 +279,6 @@ export default function ArticleDetail() {
                 <FileJson className="h-4 w-4 mr-2" />
               )}
               Elementor Template
-            </Button>
-            <Button
-              variant="outline"
-              onClick={generateHTML}
-              disabled={generatingHTML || !formData.content_markdown}
-            >
-              {generatingHTML ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <FileCode className="h-4 w-4 mr-2" />
-              )}
-              HTML Export
             </Button>
             <Button onClick={saveArticle} disabled={saving}>
               {saving ? (
