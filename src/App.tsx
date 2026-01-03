@@ -12,6 +12,7 @@ import Briefs from "./pages/Briefs";
 import BriefDetail from "./pages/BriefDetail";
 import Articles from "./pages/Articles";
 import ArticleDetail from "./pages/ArticleDetail";
+import ImportArticle from "./pages/ImportArticle";
 import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
 import Settings from "./pages/Settings";
@@ -35,6 +36,7 @@ const App = () => (
               <Route path="/briefs/:id" element={<BriefDetail />} />
               <Route path="/articles" element={<Articles />} />
               <Route path="/articles/:id" element={<ArticleDetail />} />
+              <Route path="/import-article" element={<ImportArticle />} />
               <Route path="/templates" element={<Templates />} />
               <Route path="/templates/:id" element={<TemplateDetail />} />
               <Route path="/settings" element={<Settings />} />
