@@ -1,0 +1,133 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    PROJECT INSTRUCTIONS - KOMPLETTPAKET                      ║
+║                         JSON Generation für Elementor                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+🎯 SCHNELLSTART
+
+1. Öffne dein Claude Project "NDT JSON to ELEMENTOR"
+2. Kopiere den Inhalt von → PROJECT_INSTRUCTIONS_JSON_COMPACT.txt
+3. Füge ihn in das "Instructions"-Feld ein (siehe Screenshot)
+4. Fertig! Claude generiert jetzt JSON aus SEO-Texten
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📦 ERSTELLTE DATEIEN
+
+┌─ FÜR DAS PROJECT INSTRUCTIONS FELD (WICHTIGSTE DATEI) ─────────────────────┐
+│                                                                              │
+│  ⭐ PROJECT_INSTRUCTIONS_JSON_COMPACT.txt (1.7KB)                           │
+│     → Kopiere diesen Text in das Instructions-Feld im Claude Project       │
+│     → Enthält: Workflow, Pflichtfelder, Markenfarben, Output-Format        │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ AUSFÜHRLICHE REFERENZ (OPTIONAL) ──────────────────────────────────────────┐
+│                                                                              │
+│  📄 PROJECT_INSTRUCTIONS_JSON_GENERATION.md (6.8KB)                         │
+│     → Vollständige Dokumentation für komplexe Fälle                         │
+│     → Detaillierte Erklärungen, Beispiele, Checklisten                      │
+│                                                                              │
+│  📘 README_PROJECT_INSTRUCTIONS.md (4.1KB)                                  │
+│     → Verwendungsanleitung & Übersicht                                      │
+│     → Was macht welches Dokument?                                           │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ MARKENSPEZIFISCHE CONTENT-REFERENZEN ──────────────────────────────────────┐
+│                                                                              │
+│  Diese Dokumente dienen als KONTEXT für den Content im JSON:               │
+│                                                                              │
+│  🔬 PROJECT_INSTRUCTIONS_MICROVISTA.docx (15KB)                             │
+│     → Wissenschaftlich, technisch präzise                                   │
+│     → Farben: #8ebfd6, #32285b, #ee7711                                     │
+│                                                                              │
+│  🏗️ PROJECT_INSTRUCTIONS_NETCO_BAUSTELLENKAMERA.docx (46KB)                │
+│     → Praxisnah, lösungsorientiert, Frameworks                              │
+│     → Farben: #ff6600, #003366, #ff8533                                     │
+│                                                                              │
+│  📹 PROJECT_INSTRUCTIONS_NETCO_BODY_CAM.docx (39KB)                         │
+│     → Klar, sicher, innovativ, 3-Stufen-Policy                              │
+│     → Farben: #1a365d, #ff6b35                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔄 WORKFLOW
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 1. USER                                                                    │
+│    └─→ Fügt SEO-Text in Chat ein                                          │
+│                                                                            │
+│ 2. CLAUDE                                                                  │
+│    ├─→ Analysiert Struktur (H1, H2, H3, Listen, CTAs)                     │
+│    ├─→ Identifiziert Marke (Microvista / NetCo BK / NetCo BC)             │
+│    ├─→ Lädt Brand Voice Kontext (view-Funktion)                           │
+│    ├─→ Referenziert Widget Templates (Elementor_JSON_Widget_Templates)    │
+│    ├─→ Generiert validen JSON mit korrekten Markenfarben                  │
+│    ├─→ Validiert mit Checkliste (Elementor_JSON_Checkliste)               │
+│    └─→ Gibt NUR JSON-Code aus (keine Erklärungen)                         │
+│                                                                            │
+│ 3. USER                                                                    │
+│    └─→ Lädt JSON in Elementor hoch → Fertig! ✅                           │
+└────────────────────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ ERFOLGSKRITERIEN
+
+Der JSON-Code ist erfolgreich, wenn:
+
+  ✓ Valide Syntax (keine JSON-Fehler beim Upload)
+  ✓ Korrekte Struktur (Sections → Columns → Widgets)
+  ✓ Markenfarben stimmen mit Brand Guide überein
+  ✓ Responsive Varianten vorhanden (Desktop/Mobile)
+  ✓ Alle Pflichtfelder aus Checkliste erfüllt
+  ✓ Kein Zusatztext (nur JSON-Code, keine Erklärungen)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 ZEITERSPARNIS
+
+  Vorher:  1 Tag manuelles Elementor-Layout erstellen
+  Nachher: 5-10 Minuten (SEO-Text → JSON → Upload)
+  
+  ════════════════════════════════════════════════════
+            Ersparnis: ~90% Zeit ⚡
+  ════════════════════════════════════════════════════
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 BENÖTIGTE DOKUMENTE IM PROJECT
+
+Pflicht (JSON-Struktur):
+  ✅ Elementor_JSON_Widget_Templates.docx (2.640 Zeilen)
+  ✅ Elementor_JSON_Checkliste.docx (44 Zeilen)
+
+Marken-Kontext (Content):
+  ✅ Microvista_GmbH_-_Brand_Voice_Guide.docx
+  ✅ NetCo_Baustellenkamera_Brand_Voice_Guide.docx
+  ✅ NetCo_Body_Cam_Brand_Voice_Guide.docx
+  ✅ Brandguide_Microvista_GmbH.pdf
+  ✅ Brand_Guide_BK_08_2025__.pdf
+  ✅ Brandguide_Body-Cam.docx
+
+Optional (Beispiele):
+  ⚪ elementor-*.json (Referenz-Templates)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 SUPPORT
+
+Bei Fragen:
+  1. Lies README_PROJECT_INSTRUCTIONS.md
+  2. Prüfe PROJECT_INSTRUCTIONS_JSON_GENERATION.md
+  3. Checke Elementor_JSON_Checkliste.docx
+
+Bei Updates:
+  → PROJECT_INSTRUCTIONS_JSON_COMPACT.txt im Project aktualisieren
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Version: 1.0 | Stand: November 2025 | Projekt: NDT JSON to ELEMENTOR
