@@ -224,42 +224,60 @@ serve(async (req) => {
       brandProfile = created;
     }
 
-    console.log(`brand-crawl: Starting crawl for ${websiteUrl}`);
+    // Format URL properly
+    let formattedUrl = websiteUrl.trim();
+    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+
+    console.log(`brand-crawl: Starting crawl for ${formattedUrl}`);
 
     // Call Firecrawl API to crawl the website
+    // Using simpler options to avoid potential issues with tag filtering
+    const crawlRequestBody = {
+      url: formattedUrl,
+      limit: maxPages,
+      scrapeOptions: {
+        formats: ["markdown", "links"],
+        onlyMainContent: true,
+      },
+    };
+
+    console.log(`brand-crawl: Request body:`, JSON.stringify(crawlRequestBody));
+
     const crawlResponse = await fetch("https://api.firecrawl.dev/v1/crawl", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${firecrawlApiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        url: websiteUrl,
-        limit: maxPages,
-        scrapeOptions: {
-          formats: ["markdown"],
-          includeTags: ["main", "article", "section", "div", "p", "h1", "h2", "h3", "h4", "ul", "ol", "li"],
-          excludeTags: ["nav", "footer", "header", "aside", "script", "style"],
-        },
-      }),
+      body: JSON.stringify(crawlRequestBody),
     });
 
+    const crawlResponseText = await crawlResponse.text();
+    console.log(`brand-crawl: Firecrawl initial response (${crawlResponse.status}):`, crawlResponseText);
+
     if (!crawlResponse.ok) {
-      const errorText = await crawlResponse.text();
-      console.error("brand-crawl: Firecrawl error:", crawlResponse.status, errorText);
+      console.error("brand-crawl: Firecrawl error:", crawlResponse.status, crawlResponseText);
 
       await supabase
         .from("brand_profiles")
-        .update({ crawl_status: "error", crawl_error: `Firecrawl error: ${crawlResponse.status}` })
+        .update({ crawl_status: "error", crawl_error: `Firecrawl error: ${crawlResponse.status} - ${crawlResponseText}` })
         .eq("id", brandProfile.id);
 
       return new Response(
-        JSON.stringify({ error: `Firecrawl error: ${crawlResponse.status}`, details: errorText }),
+        JSON.stringify({ error: `Firecrawl error: ${crawlResponse.status}`, details: crawlResponseText }),
         { status: crawlResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const crawlData = await crawlResponse.json();
+    let crawlData;
+    try {
+      crawlData = JSON.parse(crawlResponseText);
+    } catch (e) {
+      console.error("brand-crawl: Failed to parse Firecrawl response:", e);
+      throw new Error("Invalid Firecrawl response");
+    }
 
     // Firecrawl v1 returns a job ID for async crawling
     if (crawlData.id) {
@@ -278,28 +296,30 @@ serve(async (req) => {
           },
         });
 
-        if (statusResponse.ok) {
-          const statusData = await statusResponse.json();
-          console.log(`brand-crawl: Status check ${attempts + 1}: ${statusData.status}, pages: ${statusData.data?.length || 0}`);
+        const statusText = await statusResponse.text();
+        console.log(`brand-crawl: Status check ${attempts + 1} raw:`, statusText.substring(0, 500));
 
-          // Log more details for debugging
-          if (statusData.status === "completed") {
-            console.log(`brand-crawl: Firecrawl response:`, JSON.stringify({
-              total: statusData.total,
-              completed: statusData.completed,
-              creditsUsed: statusData.creditsUsed,
-              expiresAt: statusData.expiresAt,
-              dataLength: statusData.data?.length || 0,
-              firstPageUrl: statusData.data?.[0]?.url || "none"
-            }));
-          }
+        if (statusResponse.ok) {
+          const statusData = JSON.parse(statusText);
+
+          // Log full debug info
+          console.log(`brand-crawl: Status: ${statusData.status}, total: ${statusData.total}, completed: ${statusData.completed}, dataLength: ${statusData.data?.length || 0}`);
 
           if (statusData.status === "completed") {
             completed = true;
             pages = statusData.data || [];
+            
+            if (pages.length === 0) {
+              console.warn(`brand-crawl: Crawl completed but 0 pages returned. Full response:`, statusText.substring(0, 1000));
+            } else {
+              console.log(`brand-crawl: First page URL: ${pages[0]?.url}, has markdown: ${!!pages[0]?.markdown}`);
+            }
           } else if (statusData.status === "failed") {
-            throw new Error("Crawl job failed");
+            console.error("brand-crawl: Crawl failed:", statusText);
+            throw new Error(`Crawl job failed: ${statusData.error || 'Unknown error'}`);
           }
+        } else {
+          console.error(`brand-crawl: Status check failed (${statusResponse.status}):`, statusText);
         }
 
         attempts++;
