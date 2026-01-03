@@ -6,165 +6,54 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Elementor element ID generator
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 10);
-}
+// Brand configuration (NetCo Body-Cam)
+const BRAND = {
+  brand_id: "netco_bodycam",
+  colors: {
+    primary: "#003366",
+    secondary: "#ff6600",
+    accent: "#ff8533",
+    background_light: "#f8f8f8",
+    background_white: "#ffffff",
+    text_dark: "#333333",
+  },
+  typography: {
+    heading_font: "Antonio",
+    heading_weight: "700",
+    body_font: "PT Sans",
+  },
+  font_sizes: {
+    h1: { desktop: 52, mobile: 34 },
+    h2: { desktop: 38, mobile: 28 },
+    body: { desktop: 18, mobile: 16 },
+  },
+};
 
-// Convert markdown to Elementor elements
-function markdownToElementor(markdown: string, faq: any[] = []): any[] {
-  const elements: any[] = [];
-  const lines = markdown.split("\n");
-  let currentParagraph = "";
+// ID Generator
+class IDGenerator {
+  private usedIds = new Set<string>();
 
-  const flushParagraph = () => {
-    if (currentParagraph.trim()) {
-      elements.push({
-        id: generateId(),
-        elType: "widget",
-        widgetType: "text-editor",
-        settings: {
-          editor: `<p>${currentParagraph.trim()}</p>`,
-        },
-      });
-      currentParagraph = "";
+  generate(prefix = ""): string {
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    for (let attempt = 0; attempt < 100; attempt++) {
+      let id = "";
+      if (prefix) {
+        id = prefix.toLowerCase().slice(0, 3);
+        for (let i = 0; i < 4; i++) {
+          id += chars[Math.floor(Math.random() * chars.length)];
+        }
+      } else {
+        for (let i = 0; i < 7; i++) {
+          id += chars[Math.floor(Math.random() * chars.length)];
+        }
+      }
+      if (!this.usedIds.has(id)) {
+        this.usedIds.add(id);
+        return id;
+      }
     }
-  };
-
-  for (const line of lines) {
-    // H1
-    if (line.startsWith("# ")) {
-      flushParagraph();
-      elements.push({
-        id: generateId(),
-        elType: "widget",
-        widgetType: "heading",
-        settings: {
-          title: line.replace("# ", ""),
-          header_size: "h1",
-        },
-      });
-    }
-    // H2
-    else if (line.startsWith("## ")) {
-      flushParagraph();
-      elements.push({
-        id: generateId(),
-        elType: "widget",
-        widgetType: "heading",
-        settings: {
-          title: line.replace("## ", ""),
-          header_size: "h2",
-        },
-      });
-    }
-    // H3
-    else if (line.startsWith("### ")) {
-      flushParagraph();
-      elements.push({
-        id: generateId(),
-        elType: "widget",
-        widgetType: "heading",
-        settings: {
-          title: line.replace("### ", ""),
-          header_size: "h3",
-        },
-      });
-    }
-    // H4
-    else if (line.startsWith("#### ")) {
-      flushParagraph();
-      elements.push({
-        id: generateId(),
-        elType: "widget",
-        widgetType: "heading",
-        settings: {
-          title: line.replace("#### ", ""),
-          header_size: "h4",
-        },
-      });
-    }
-    // List item
-    else if (line.startsWith("- ") || line.startsWith("* ")) {
-      flushParagraph();
-      elements.push({
-        id: generateId(),
-        elType: "widget",
-        widgetType: "icon-list",
-        settings: {
-          icon_list: [
-            {
-              text: line.replace(/^[-*] /, ""),
-              icon: { value: "fas fa-check", library: "fa-solid" },
-            },
-          ],
-        },
-      });
-    }
-    // Empty line
-    else if (line.trim() === "") {
-      flushParagraph();
-    }
-    // Regular text
-    else {
-      currentParagraph += (currentParagraph ? " " : "") + line;
-    }
+    throw new Error("Failed to generate unique ID");
   }
-
-  flushParagraph();
-
-  // Add FAQ section if present
-  if (faq && faq.length > 0) {
-    elements.push({
-      id: generateId(),
-      elType: "widget",
-      widgetType: "heading",
-      settings: {
-        title: "Häufig gestellte Fragen",
-        header_size: "h2",
-      },
-    });
-
-    elements.push({
-      id: generateId(),
-      elType: "widget",
-      widgetType: "accordion",
-      settings: {
-        tabs: faq.map((item, index) => ({
-          tab_title: item.question,
-          tab_content: item.answer,
-        })),
-      },
-    });
-  }
-
-  return elements;
-}
-
-// Wrap elements in Elementor section/container structure
-function wrapInContainer(elements: any[]): any {
-  return {
-    version: "0.4",
-    title: "Generated Template",
-    type: "page",
-    content: [
-      {
-        id: generateId(),
-        elType: "container",
-        settings: {
-          content_width: "boxed",
-          padding: {
-            unit: "px",
-            top: "40",
-            right: "20",
-            bottom: "40",
-            left: "20",
-          },
-        },
-        elements: elements,
-      },
-    ],
-  };
 }
 
 serve(async (req) => {
@@ -173,7 +62,7 @@ serve(async (req) => {
   }
 
   try {
-    const { articleId, designPreset = "default" } = await req.json();
+    const { articleId } = await req.json();
 
     if (!articleId) {
       return new Response(
@@ -182,83 +71,96 @@ serve(async (req) => {
       );
     }
 
-    // Initialize Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch the article
+    // Fetch article
     const { data: article, error: articleError } = await supabase
       .from("articles")
       .select("*")
       .eq("id", articleId)
       .single();
 
-    if (articleError || !article) {
-      console.error("Article not found:", articleError);
+    if (articleError) {
       return new Response(
         JSON.stringify({ error: "Article not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (!article.content_markdown) {
-      return new Response(
-        JSON.stringify({ error: "Article has no content" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    console.log("Generating template for:", article.title);
 
-    console.log("Converting article to Elementor template:", article.title);
+    // Simple template for now - just create basic structure
+    const idGen = new IDGenerator();
 
-    // Convert markdown to Elementor elements
-    const faq = Array.isArray(article.faq_json) ? article.faq_json : [];
-    const elements = markdownToElementor(article.content_markdown, faq);
-    const templateJson = wrapInContainer(elements);
+    const elementorJson = {
+      content: [
+        {
+          id: idGen.generate("hero"),
+          elType: "section",
+          isInner: false,
+          settings: {
+            layout: "full_width",
+            background_background: "gradient",
+            background_color: BRAND.colors.primary,
+            background_color_b: "#001a33",
+            background_gradient_type: "linear",
+            padding: { unit: "px", top: "100", right: "20", bottom: "100", left: "20", isLinked: false },
+          },
+          elements: [
+            {
+              id: idGen.generate("col"),
+              elType: "column",
+              isInner: false,
+              settings: { _column_size: 100, _inline_size: null },
+              elements: [
+                {
+                  id: idGen.generate("h1"),
+                  elType: "widget",
+                  widgetType: "heading",
+                  isInner: false,
+                  settings: {
+                    title: article.title,
+                    header_size: "h1",
+                    title_color: "#ffffff",
+                    typography_typography: "custom",
+                    typography_font_family: BRAND.typography.heading_font,
+                    typography_font_size: { unit: "px", size: BRAND.font_sizes.h1.desktop, sizes: [] },
+                  },
+                  elements: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      page_settings: { hide_title: "yes" },
+      version: "0.4",
+      title: article.title,
+      type: "page",
+    };
 
-    // Check if template already exists for this article
-    const { data: existingTemplate } = await supabase
+    // Save template
+    const { data: template, error: templateError } = await supabase
       .from("elementor_templates")
-      .select("id")
-      .eq("article_id", articleId)
+      .insert({
+        project_id: article.project_id,
+        article_id: articleId,
+        name: `${article.title} - Template`,
+        template_json: elementorJson,
+        design_preset: "netco_bodycam",
+      })
+      .select()
       .single();
 
-    let template;
-    if (existingTemplate) {
-      // Update existing template
-      const { data, error } = await supabase
-        .from("elementor_templates")
-        .update({
-          name: article.title,
-          design_preset: designPreset,
-          template_json: templateJson,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existingTemplate.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      template = data;
-    } else {
-      // Create new template
-      const { data, error } = await supabase
-        .from("elementor_templates")
-        .insert({
-          project_id: article.project_id,
-          article_id: articleId,
-          name: article.title,
-          design_preset: designPreset,
-          template_json: templateJson,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      template = data;
+    if (templateError) {
+      console.error("Error saving template:", templateError);
+      return new Response(
+        JSON.stringify({ error: "Failed to save template" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-
-    console.log("Template created/updated:", template.id);
 
     return new Response(
       JSON.stringify({
@@ -268,9 +170,8 @@ serve(async (req) => {
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-
   } catch (error) {
-    console.error("Error in generate-elementor-template:", error);
+    console.error("Error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
