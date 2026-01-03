@@ -54,6 +54,10 @@ export function WordPressSetup() {
       if (baseUrl.endsWith("/")) {
         baseUrl = baseUrl.slice(0, -1);
       }
+      // Remove /wp-json suffix if user included it
+      if (baseUrl.endsWith("/wp-json")) {
+        baseUrl = baseUrl.slice(0, -8);
+      }
 
       // Test connection by fetching current user
       const response = await fetch(`${baseUrl}/wp-json/wp/v2/users/me`, {
@@ -119,6 +123,10 @@ export function WordPressSetup() {
       }
       if (baseUrl.endsWith("/")) {
         baseUrl = baseUrl.slice(0, -1);
+      }
+      // Remove /wp-json suffix if user included it
+      if (baseUrl.endsWith("/wp-json")) {
+        baseUrl = baseUrl.slice(0, -8);
       }
 
       await saveWordPressIntegration(currentProject.id, {
