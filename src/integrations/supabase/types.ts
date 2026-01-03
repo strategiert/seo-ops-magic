@@ -83,6 +83,33 @@ export type Database = {
           },
         ]
       }
+      changelog: {
+        Row: {
+          created_at: string | null
+          entries: Json
+          id: string
+          release_date: string
+          title: string
+          version: string
+        }
+        Insert: {
+          created_at?: string | null
+          entries?: Json
+          id?: string
+          release_date?: string
+          title: string
+          version: string
+        }
+        Update: {
+          created_at?: string | null
+          entries?: Json
+          id?: string
+          release_date?: string
+          title?: string
+          version?: string
+        }
+        Relationships: []
+      }
       content_briefs: {
         Row: {
           created_at: string
@@ -240,33 +267,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      changelog: {
-        Row: {
-          id: string
-          version: string
-          title: string
-          release_date: string
-          entries: Json
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          version: string
-          title: string
-          release_date?: string
-          entries?: Json
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          version?: string
-          title?: string
-          release_date?: string
-          entries?: Json
-          created_at?: string
-        }
-        Relationships: []
       }
       integrations: {
         Row: {
