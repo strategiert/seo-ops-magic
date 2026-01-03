@@ -4,10 +4,10 @@ project_id = "vmrtentqpbvvqkgsilgk"
 verify_jwt = false
 
 [functions.generate-article]
-verify_jwt = true
+verify_jwt = false
 
 [functions.generate-elementor-template]
-verify_jwt = true
+verify_jwt = false
 
 [functions.generate-html-export]
-verify_jwt = true
+verify_jwt = false
