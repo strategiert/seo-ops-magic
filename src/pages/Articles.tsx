@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Plus, Loader2, Globe, CheckCircle2, XCircle } from "lucide-react";
+import { FileText, Plus, Loader2, Globe, CheckCircle2, XCircle, Palette } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -69,6 +71,7 @@ export default function Articles() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkPublishOpen, setBulkPublishOpen] = useState(false);
   const [bulkStatus, setBulkStatus] = useState<"publish" | "draft">("draft");
+  const [bulkUseStyledHtml, setBulkUseStyledHtml] = useState(true);
 
   const toggleSelect = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -93,7 +96,10 @@ export default function Articles() {
 
   const handleBulkPublish = async () => {
     const articleIds = Array.from(selectedIds);
-    const publishResults = await publishMultiple(articleIds, { status: bulkStatus });
+    const publishResults = await publishMultiple(articleIds, {
+      status: bulkStatus,
+      useStyledHtml: bulkUseStyledHtml,
+    });
 
     const successCount = Array.from(publishResults.values()).filter((r) => r.success).length;
     const failCount = articleIds.length - successCount;
@@ -270,6 +276,24 @@ export default function Articles() {
                   <SelectItem value="publish">Sofort veröffentlichen</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Styled HTML Toggle */}
+            <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+              <div className="flex items-center gap-3">
+                <Palette className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <Label htmlFor="bulk-styled-html" className="cursor-pointer">Design verwenden</Label>
+                  <p className="text-xs text-muted-foreground">
+                    AI generiert gestyltes HTML
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="bulk-styled-html"
+                checked={bulkUseStyledHtml}
+                onCheckedChange={setBulkUseStyledHtml}
+              />
             </div>
 
             {publishing && (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon, Link2, AlertCircle, Wrench } from "lucide-react";
+import { Settings as SettingsIcon, Link2, AlertCircle, Wrench, Building2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { NeuronWriterSetup } from "@/components/settings/NeuronWriterSetup";
 import { WordPressSetup } from "@/components/settings/WordPressSetup";
 import { DatabaseAdmin } from "@/components/settings/DatabaseAdmin";
+import { BrandIntelligenceSetup } from "@/components/settings/BrandIntelligenceSetup";
 
 const LANGUAGES = [
   { value: "de", label: "Deutsch" },
@@ -176,6 +177,10 @@ export default function Settings() {
               <SettingsIcon className="h-4 w-4 mr-2" />
               Allgemein
             </TabsTrigger>
+            <TabsTrigger value="brand">
+              <Building2 className="h-4 w-4 mr-2" />
+              Brand
+            </TabsTrigger>
             <TabsTrigger value="system">
               <Wrench className="h-4 w-4 mr-2" />
               System
@@ -323,6 +328,10 @@ export default function Settings() {
                 </Button>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="brand" className="space-y-4 mt-4">
+            <BrandIntelligenceSetup />
           </TabsContent>
 
           <TabsContent value="system" className="space-y-4 mt-4">

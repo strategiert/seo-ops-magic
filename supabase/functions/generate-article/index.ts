@@ -6,6 +6,85 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Build brand context for AI prompt
+function buildBrandContext(brandProfile: Record<string, unknown> | null): string {
+  if (!brandProfile || brandProfile.crawl_status !== "completed") {
+    return "";
+  }
+
+  const sections: string[] = [];
+
+  // Brand Identity
+  if (brandProfile.brand_name) {
+    sections.push(`**Marke:** ${brandProfile.brand_name}`);
+  }
+  if (brandProfile.tagline) {
+    sections.push(`**Claim:** ${brandProfile.tagline}`);
+  }
+
+  // Brand Voice
+  const brandVoice = brandProfile.brand_voice as Record<string, unknown> | null;
+  if (brandVoice) {
+    const tone = (brandVoice.tone as string[]) || [];
+    const traits = (brandVoice.personality_traits as string[]) || [];
+    const style = brandVoice.writing_style as Record<string, string> | null;
+
+    if (tone.length > 0 || traits.length > 0) {
+      let voiceSection = "**Brand Voice:**";
+      if (tone.length > 0) voiceSection += `\n- Ton: ${tone.join(", ")}`;
+      if (traits.length > 0) voiceSection += `\n- Persönlichkeit: ${traits.join(", ")}`;
+      if (style?.formality) voiceSection += `\n- Formalität: ${style.formality}`;
+      sections.push(voiceSection);
+    }
+  }
+
+  // Products (only first 3 for context)
+  const products = (brandProfile.products as Array<Record<string, unknown>>) || [];
+  if (products.length > 0) {
+    const productList = products.slice(0, 3).map(p => `- ${p.name}: ${p.description}`).join("\n");
+    sections.push(`**Produkte/Services:**\n${productList}`);
+  }
+
+  // Services (only first 3 for context)
+  const services = (brandProfile.services as Array<Record<string, unknown>>) || [];
+  if (services.length > 0 && products.length === 0) {
+    const serviceList = services.slice(0, 3).map(s => `- ${s.name}: ${s.description}`).join("\n");
+    sections.push(`**Dienstleistungen:**\n${serviceList}`);
+  }
+
+  // Primary Keywords
+  const keywords = brandProfile.brand_keywords as Record<string, string[]> | null;
+  if (keywords?.primary && keywords.primary.length > 0) {
+    sections.push(`**Brand Keywords:** ${keywords.primary.join(", ")}`);
+  }
+
+  // Target Persona (first one)
+  const personas = (brandProfile.personas as Array<Record<string, unknown>>) || [];
+  if (personas.length > 0) {
+    const persona = personas[0];
+    sections.push(`**Zielgruppe:** ${persona.name} - ${persona.demographics || "Keine Details"}`);
+  }
+
+  // Internal links for reference
+  const internalLinks = (brandProfile.internal_links as Array<Record<string, string>>) || [];
+  if (internalLinks.length > 0) {
+    const linkList = internalLinks.slice(0, 5).map(l => `- ${l.title || l.url}`).join("\n");
+    sections.push(`**Wichtige Seiten für interne Verlinkung:**\n${linkList}`);
+  }
+
+  if (sections.length === 0) {
+    return "";
+  }
+
+  return `
+--- BRAND KONTEXT ---
+${sections.join("\n\n")}
+--- ENDE BRAND KONTEXT ---
+
+Bitte berücksichtige den Brand-Kontext beim Schreiben. Verwende die Brand Voice und integriere wo passend Verweise auf Produkte/Services. Nutze die internen Links für Verlinkungsvorschläge.
+`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -113,6 +192,18 @@ serve(async (req) => {
       );
     }
 
+    // Fetch brand profile for this project (if exists)
+    const { data: brandProfile } = await supabase
+      .from("brand_profiles")
+      .select("*")
+      .eq("project_id", brief.project_id)
+      .maybeSingle();
+
+    const brandContext = buildBrandContext(brandProfile);
+    if (brandContext) {
+      console.log("Brand context loaded for article generation");
+    }
+
     // Transform guidelines if needed (handles both old DB format and new format)
     const rawGuidelines = brief.nw_guidelines as any;
     let guidelines = rawGuidelines;
@@ -171,7 +262,7 @@ serve(async (req) => {
 - ${questions}
 
 **Zusätzliche Notizen:** ${brief.notes || "Keine"}
-
+${brandContext}
 Erstelle den Artikel im folgenden JSON-Format:
 {
   "title": "SEO-optimierter Titel",

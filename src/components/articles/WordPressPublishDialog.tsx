@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, Globe, CheckCircle2, ExternalLink, RefreshCw } from "lucide-react";
+import { Loader2, Globe, CheckCircle2, ExternalLink, RefreshCw, Palette } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useWordPress, type TaxonomyItem } from "@/hooks/useWordPress";
 
@@ -51,6 +52,7 @@ export function WordPressPublishDialog({
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+  const [useStyledHtml, setUseStyledHtml] = useState(true);
 
   const isPublishing = publishingArticleId === articleId;
 
@@ -61,6 +63,7 @@ export function WordPressPublishDialog({
       setSelectedCategories([]);
       setSelectedTags([]);
       setStatus("draft");
+      setUseStyledHtml(true);
     }
   }, [open]);
 
@@ -85,6 +88,7 @@ export function WordPressPublishDialog({
       status,
       categoryIds: selectedCategories,
       tagIds: selectedTags,
+      useStyledHtml,
     });
 
     if (result.success && result.wpUrl) {
@@ -148,6 +152,24 @@ export function WordPressPublishDialog({
                   <SelectItem value="publish">Sofort veröffentlichen</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Styled HTML Toggle */}
+            <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+              <div className="flex items-center gap-3">
+                <Palette className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <Label htmlFor="styled-html" className="cursor-pointer">Design verwenden</Label>
+                  <p className="text-xs text-muted-foreground">
+                    AI generiert gestyltes HTML mit Brand-Design
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="styled-html"
+                checked={useStyledHtml}
+                onCheckedChange={setUseStyledHtml}
+              />
             </div>
 
             {/* Categories */}
