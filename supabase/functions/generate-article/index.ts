@@ -50,11 +50,41 @@ serve(async (req) => {
       );
     }
 
+    // Transform guidelines if needed (handles both old DB format and new format)
+    const rawGuidelines = brief.nw_guidelines as any;
+    let guidelines = rawGuidelines;
+
+    // If terms is an object (old format), transform it
+    if (rawGuidelines?.terms && !Array.isArray(rawGuidelines.terms)) {
+      const basicTerms = rawGuidelines.terms?.content_basic?.map((term: any) => ({
+        term: term.t,
+        sugg_usage: Array.isArray(term.sugg_usage) ? term.sugg_usage[1] : term.sugg_usage,
+      })) || [];
+
+      const extendedTerms = rawGuidelines.terms?.content_extended?.map((term: any) => ({
+        term: term.t,
+        sugg_usage: Array.isArray(term.sugg_usage) ? term.sugg_usage[1] : term.sugg_usage,
+      })) || [];
+
+      const allQuestions = [
+        ...(rawGuidelines.ideas?.suggest_questions?.map((q: any) => q.q) || []),
+        ...(rawGuidelines.ideas?.people_also_ask?.map((q: any) => q.q) || []),
+        ...(rawGuidelines.ideas?.content_questions?.map((q: any) => q.q) || []),
+      ];
+
+      guidelines = {
+        terms: [...basicTerms, ...extendedTerms],
+        questions: allQuestions,
+        metrics: {
+          words_avg: rawGuidelines.metrics?.word_count?.target,
+        },
+      };
+    }
+
     // Build the prompt
-    const guidelines = brief.nw_guidelines as any;
     const nlpKeywords = guidelines?.terms?.slice(0, 30)?.map((t: any) => t.term).join(", ") || "";
-    const questions = guidelines?.questions?.slice(0, 10)?.map((q: any) => q.question).join("\n- ") || "";
-    const targetWords = brief.target_length || guidelines?.metrics?.avgRecommendedWords || 1500;
+    const questions = guidelines?.questions?.slice(0, 10)?.join("\n- ") || "";
+    const targetWords = brief.target_length || guidelines?.metrics?.words_avg || 1500;
 
     const systemPrompt = `Du bist ein erfahrener SEO-Texter. Schreibe hochwertige, gut strukturierte Artikel auf Deutsch.
 - Verwende das Primary Keyword natürlich im Text
