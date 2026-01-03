@@ -22,7 +22,7 @@ const BRAND = {
   },
 };
 
-// Call Lovable AI for beautiful HTML design
+// Call Claude Opus 4.5 for beautiful HTML design for Elementor Custom HTML Widget
 async function generateBeautifulHTML(
   title: string,
   markdown: string,
@@ -37,40 +37,61 @@ async function generateBeautifulHTML(
 
   const designPrompt = `Du bist ein erfahrener Web-Designer mit ausgezeichnetem Geschmack für moderne, elegante Landing Pages.
 
-**AUFGABE:** Erstelle eine wunderschöne, moderne HTML Landing Page für den folgenden Artikel.
+**AUFGABE:** Erstelle HTML-Content für ein **Elementor Custom HTML Widget**.
+
+**WICHTIG - ELEMENTOR CUSTOM HTML WIDGET FORMAT:**
+- NUR Body-Content (keine <!DOCTYPE>, <html>, <head>, <body> Tags)
+- KEINE separaten <style> oder <script> Tags
+- Alle CSS-Styles müssen INLINE in den style="" Attributen sein
+- Kein externes CSS oder JavaScript
+- Direkter HTML-Content, der in ein Custom HTML Widget eingefügt werden kann
 
 **BRAND GUIDELINES - NetCo Body-Cam:**
 - Primary Color: ${BRAND.colors.primary} (Dunkelblau)
 - Secondary Color: ${BRAND.colors.secondary} (Orange)
 - Accent Color: ${BRAND.colors.accent} (Hellorange)
+- Background Light: ${BRAND.colors.background_light} (Hellgrau)
+- Text: ${BRAND.colors.text_dark} (Dunkelgrau)
 - Headings: ${BRAND.typography.heading_font}, Bold
 - Body: ${BRAND.typography.body_font}
 
 **DESIGN ANFORDERUNGEN:**
-1. Modern und professionell
-2. Vollständig responsive (Mobile-First)
+1. Modern und professionell mit inline styles
+2. Vollständig responsive mit media queries in style="" Attributen
 3. Schöne Gradient-Hintergründe für Hero und CTA
-4. Sanfte Animationen beim Scrollen
-5. Klare Typografie-Hierarchie
-6. Ausreichend Weißraum
-7. Icon-Listen mit Checkmarks
-8. Accordion für FAQs (funktional mit JavaScript)
-9. Sticky Navigation (optional)
-10. Call-to-Action Button mit Hover-Effekt
+4. Klare Typografie-Hierarchie
+5. Ausreichend Weißraum
+6. Icon-Listen mit Unicode-Icons (✓, ✔, •) oder HTML-Entities
+7. Einfaches Accordion für FAQs (mit <details> und <summary> Tags)
+8. Call-to-Action Button mit inline hover-styles
+9. Box-Shadows und Border-Radius für moderne Optik
+10. Grid/Flexbox Layouts für responsive Struktur
 
-**TECHNISCHE ANFORDERUNGEN:**
-- Komplettes HTML-Dokument mit <!DOCTYPE html>
-- Inline CSS im <style> Tag
-- Vanilla JavaScript für Interaktivität
-- Google Fonts für Antonio und PT Sans
-- Font Awesome Icons (CDN)
-- Keine externen Abhängigkeiten außer Fonts und Icons
+**STRUKTUR:**
+<div style="max-width: 1200px; margin: 0 auto; padding: 20px;">
+  <!-- Hero Section mit Gradient -->
+  <div style="background: linear-gradient(135deg, ${BRAND.colors.primary}, #001a33); padding: 80px 20px; text-align: center; border-radius: 12px; margin-bottom: 40px;">
+    <h1 style="color: white; font-family: ${BRAND.typography.heading_font}, sans-serif; font-size: 48px; margin-bottom: 20px;">${title}</h1>
+  </div>
 
-**ARTIKEL TITEL:**
-${title}
+  <!-- Content Sections -->
+  [Für jede H2/H3 im Markdown eine Section mit:]
+  <div style="background: white/grau; padding: 60px 20px; margin-bottom: 20px; border-radius: 8px;">
+    <h2 style="color: ${BRAND.colors.primary}; font-family: ${BRAND.typography.heading_font}; ...">Überschrift</h2>
+    <p style="color: ${BRAND.colors.text_dark}; font-family: ${BRAND.typography.body_font}; line-height: 1.8;">Text</p>
+  </div>
 
-**META DESCRIPTION:**
-${metaDescription}
+  <!-- FAQ Accordion mit <details> -->
+  <details style="...">
+    <summary style="...">Frage</summary>
+    <p style="...">Antwort</p>
+  </details>
+
+  <!-- CTA Section -->
+  <div style="background: linear-gradient(...); padding: 60px 20px; text-align: center; border-radius: 12px;">
+    <a href="#kontakt" style="display: inline-block; background: ${BRAND.colors.secondary}; color: white; padding: 18px 40px; border-radius: 50px; ...">Jetzt anfragen</a>
+  </div>
+</div>
 
 **ARTIKEL INHALT (Markdown):**
 ${markdown.substring(0, 15000)}
@@ -79,10 +100,14 @@ ${markdown.substring(0, 15000)}
 ${faqs.map(f => `**${f.question}**\n${f.answer}`).join('\n\n')}
 
 **OUTPUT FORMAT:**
-Gib NUR den vollständigen HTML-Code zurück. Keine Erklärungen, keine Markdown-Codeblöcke, nur pures HTML.
-Das HTML sollte sofort in einem Browser funktionieren.
+Gib NUR den HTML-Content zurück, der direkt in ein Elementor Custom HTML Widget eingefügt werden kann.
+- Keine Erklärungen
+- Keine Markdown-Codeblöcke
+- Keine <!DOCTYPE>, <html>, <head>, <body> Tags
+- Nur der reine Content mit inline styles
+- Beginnt direkt mit einem <div> Container
 
-Erstelle eine visuell beeindruckende, professionelle Landing Page, die Besucher begeistert!`;
+Erstelle visuell beeindruckenden Content mit perfekten inline styles!`;
 
   console.log("Calling Lovable AI (Gemini 2.5 Pro) for HTML design...");
 
