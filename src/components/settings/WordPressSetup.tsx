@@ -231,6 +231,9 @@ export function WordPressSetup() {
                 value={wpUsername}
                 onChange={(e) => setWpUsername(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">
+                Dein WordPress <strong>Login-Name</strong> (nicht E-Mail oder Anzeigename)
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -243,7 +246,7 @@ export function WordPressSetup() {
                 onChange={(e) => setWpAppPassword(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Erstelle ein App-Password unter: WordPress → Benutzer → Profil → Application Passwords
+                WordPress → Benutzer → Profil → <strong>Application Passwords</strong> → Neues erstellen
               </p>
             </div>
 
