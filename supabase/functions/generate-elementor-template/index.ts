@@ -39,13 +39,11 @@ class IDGenerator {
     for (let attempt = 0; attempt < 100; attempt++) {
       let id = "";
       if (prefix) {
-        // Use first 3 chars of prefix + 4 random chars
         id = prefix.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 3);
         for (let i = 0; i < 4; i++) {
           id += chars[Math.floor(Math.random() * chars.length)];
         }
       } else {
-        // Generate 7 random chars
         for (let i = 0; i < 7; i++) {
           id += chars[Math.floor(Math.random() * chars.length)];
         }
@@ -59,7 +57,6 @@ class IDGenerator {
   }
 }
 
-// Content Section
 interface OutlineItem {
   level: number;
   text: string;
@@ -76,80 +73,84 @@ interface ContentSection {
   content: string;
 }
 
-// Extract content between headings
-function extractContentSections(markdown: string, outline: OutlineItem[]): ContentSection[] {
+// Parse markdown directly - more robust approach
+function parseMarkdownSections(markdown: string): ContentSection[] {
   const sections: ContentSection[] = [];
-
-  // Split markdown into lines
   const lines = markdown.split('\n');
 
-  // Create a map of heading text to their line numbers
-  const headingPositions: { heading: string; level: number; line: number }[] = [];
+  let currentSection: ContentSection | null = null;
+  let contentBuffer: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (line.startsWith('### ')) {
-      headingPositions.push({
-        heading: line.substring(4).trim(),
-        level: 3,
-        line: i
-      });
-    } else if (line.startsWith('## ')) {
-      headingPositions.push({
-        heading: line.substring(3).trim(),
-        level: 2,
-        line: i
-      });
-    } else if (line.startsWith('# ')) {
-      headingPositions.push({
-        heading: line.substring(2).trim(),
-        level: 1,
-        line: i
-      });
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Check for H2
+    if (trimmed.startsWith('## ') && !trimmed.startsWith('### ')) {
+      // Save previous section
+      if (currentSection && contentBuffer.length > 0) {
+        currentSection.content = contentBuffer.join('\n').trim();
+        sections.push(currentSection);
+      }
+
+      const heading = trimmed.substring(3).trim();
+
+      // Skip FAQ sections
+      if (!heading.toLowerCase().includes('faq') &&
+          !heading.toLowerCase().includes('häufig') &&
+          !heading.toLowerCase().includes('fragen')) {
+        currentSection = {
+          heading,
+          level: 2,
+          content: ''
+        };
+        contentBuffer = [];
+      } else {
+        currentSection = null;
+        contentBuffer = [];
+      }
     }
-  }
+    // Check for H3
+    else if (trimmed.startsWith('### ')) {
+      // Save previous section
+      if (currentSection && contentBuffer.length > 0) {
+        currentSection.content = contentBuffer.join('\n').trim();
+        sections.push(currentSection);
+      }
 
-  // For each outline item, find the content until the next heading
-  for (let i = 0; i < outline.length; i++) {
-    const item = outline[i];
+      const heading = trimmed.substring(4).trim();
 
-    // Skip FAQ sections (will be handled separately)
-    if (item.text.toLowerCase().includes('faq') ||
-        item.text.toLowerCase().includes('häufig')) {
+      // Skip if it's in FAQ context
+      if (!heading.toLowerCase().includes('faq') &&
+          !heading.toLowerCase().includes('häufig')) {
+        currentSection = {
+          heading,
+          level: 3,
+          content: ''
+        };
+        contentBuffer = [];
+      } else {
+        currentSection = null;
+        contentBuffer = [];
+      }
+    }
+    // Skip H1
+    else if (trimmed.startsWith('# ') && !trimmed.startsWith('## ')) {
       continue;
     }
-
-    // Find this heading in the markdown
-    const headingPos = headingPositions.find(h =>
-      h.heading === item.text && h.level === item.level
-    );
-
-    if (!headingPos) continue;
-
-    // Find next heading at same or higher level
-    const nextHeadingPos = headingPositions.find((h, idx) =>
-      idx > headingPositions.indexOf(headingPos) && h.level <= item.level
-    );
-
-    const startLine = headingPos.line + 1;
-    const endLine = nextHeadingPos ? nextHeadingPos.line : lines.length;
-
-    // Extract content lines
-    const contentLines = lines.slice(startLine, endLine);
-    const content = contentLines
-      .filter(line => line.trim().length > 0)
-      .join('\n\n')
-      .trim();
-
-    if (content) {
-      sections.push({
-        heading: item.text,
-        level: item.level,
-        content: content
-      });
+    // Collect content
+    else if (currentSection) {
+      contentBuffer.push(line);
     }
   }
 
+  // Save last section
+  if (currentSection && contentBuffer.length > 0) {
+    currentSection.content = contentBuffer.join('\n').trim();
+    sections.push(currentSection);
+  }
+
+  console.log(`Parsed ${sections.length} sections from markdown`);
   return sections;
 }
 
@@ -253,24 +254,37 @@ class ElementorBuilder {
       elements: [],
     });
 
-    // Parse content for paragraphs and lists
-    const contentLines = section.content.split('\n\n');
+    // Split content into paragraphs and lists
+    const paragraphs = section.content.split('\n\n');
     let currentList: string[] = [];
 
-    for (const block of contentLines) {
-      const trimmed = block.trim();
+    for (const para of paragraphs) {
+      const trimmed = para.trim();
+      if (!trimmed) continue;
 
-      // Check if it's a list item
-      if (trimmed.startsWith('*   ') || trimmed.startsWith('- ') || trimmed.match(/^\d+\.\s/)) {
-        // Extract all list items from this block
-        const items = trimmed.split('\n').filter(line => {
+      // Check if it's a list block
+      const lines = trimmed.split('\n');
+      const isListBlock = lines.every(line => {
+        const l = line.trim();
+        return l.startsWith('*   ') || l.startsWith('- ') || l.startsWith('* ') || l.match(/^\d+\.\s/) || l === '';
+      });
+
+      if (isListBlock) {
+        // Extract list items
+        for (const line of lines) {
           const l = line.trim();
-          return l.startsWith('*   ') || l.startsWith('- ') || l.match(/^\d+\.\s/);
-        }).map(line => line.replace(/^(\*   |- |\d+\.\s)/, '').trim());
-
-        currentList.push(...items);
+          if (l.startsWith('*   ')) {
+            currentList.push(l.substring(4).trim());
+          } else if (l.startsWith('* ')) {
+            currentList.push(l.substring(2).trim());
+          } else if (l.startsWith('- ')) {
+            currentList.push(l.substring(2).trim());
+          } else if (l.match(/^\d+\.\s/)) {
+            currentList.push(l.replace(/^\d+\.\s/, '').trim());
+          }
+        }
       } else {
-        // If we have accumulated list items, add them as icon-list
+        // Flush accumulated list
         if (currentList.length > 0) {
           const iconListItems = currentList.map((item) => ({
             _id: this.idGen.generate("item"),
@@ -297,28 +311,26 @@ class ElementorBuilder {
           currentList = [];
         }
 
-        // Add paragraph if it's not empty
-        if (trimmed.length > 0) {
-          widgets.push({
-            id: this.idGen.generate("text"),
-            elType: "widget",
-            widgetType: "text-editor",
-            isInner: false,
-            settings: {
-              editor: `<p>${trimmed}</p>`,
-              text_color: textColor,
-              typography_typography: "custom",
-              typography_font_family: BRAND.typography.body_font,
-              typography_font_size: { unit: "px", size: BRAND.font_sizes.body.desktop, sizes: [] },
-              typography_font_size_mobile: { unit: "px", size: BRAND.font_sizes.body.mobile, sizes: [] },
-            },
-            elements: [],
-          });
-        }
+        // Add paragraph
+        widgets.push({
+          id: this.idGen.generate("text"),
+          elType: "widget",
+          widgetType: "text-editor",
+          isInner: false,
+          settings: {
+            editor: `<p>${trimmed}</p>`,
+            text_color: textColor,
+            typography_typography: "custom",
+            typography_font_family: BRAND.typography.body_font,
+            typography_font_size: { unit: "px", size: BRAND.font_sizes.body.desktop, sizes: [] },
+            typography_font_size_mobile: { unit: "px", size: BRAND.font_sizes.body.mobile, sizes: [] },
+          },
+          elements: [],
+        });
       }
     }
 
-    // Add remaining list items
+    // Flush remaining list
     if (currentList.length > 0) {
       const iconListItems = currentList.map((item) => ({
         _id: this.idGen.generate("item"),
@@ -374,7 +386,6 @@ class ElementorBuilder {
   buildFAQSection(faqs: FAQ[]) {
     if (faqs.length === 0) return null;
 
-    // Build accordion items - CRITICAL: both accordion AND tabs arrays must be identical
     const accordionItems = faqs.map((faq) => {
       const id = this.idGen.generate("faq");
       return {
@@ -384,7 +395,6 @@ class ElementorBuilder {
       };
     });
 
-    // Build tabs items - SAME data as accordion!
     const tabsItems = accordionItems.map((item) => ({
       _id: item._id,
       tab_title: item.accordion_title,
@@ -432,7 +442,7 @@ class ElementorBuilder {
               isInner: false,
               settings: {
                 accordion: accordionItems,
-                tabs: tabsItems, // CRITICAL: Must match accordion array!
+                tabs: tabsItems,
                 title_color: BRAND.colors.primary,
                 content_color: BRAND.colors.text_dark,
                 icon_color: BRAND.colors.secondary,
@@ -518,23 +528,23 @@ class ElementorBuilder {
     };
   }
 
-  build(title: string, markdown: string, outline: OutlineItem[], faqs: FAQ[]): any {
+  build(title: string, markdown: string, faqs: FAQ[]): any {
     const sections: any[] = [];
 
     // 1. Hero section
     sections.push(this.buildHeroSection(title));
 
-    // 2. Extract and build content sections from outline
-    const contentSections = extractContentSections(markdown, outline);
-
-    console.log(`Extracted ${contentSections.length} content sections from outline`);
+    // 2. Parse markdown and build content sections
+    const contentSections = parseMarkdownSections(markdown);
+    console.log(`Building ${contentSections.length} content sections`);
 
     for (const section of contentSections) {
       sections.push(this.buildContentSection(section));
     }
 
     // 3. FAQ section
-    if (faqs.length > 0) {
+    if (faqs && faqs.length > 0) {
+      console.log(`Adding FAQ section with ${faqs.length} questions`);
       const faqSection = this.buildFAQSection(faqs);
       if (faqSection) sections.push(faqSection);
     }
@@ -579,27 +589,29 @@ serve(async (req) => {
       .single();
 
     if (articleError) {
+      console.error("Article error:", articleError);
       return new Response(
         JSON.stringify({ error: "Article not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log("Generating template for:", article.title);
+    console.log("=== ARTICLE DATA ===");
+    console.log("Title:", article.title);
+    console.log("Markdown length:", article.content_markdown?.length || 0);
+    console.log("FAQ count:", article.faq_json?.length || 0);
+    console.log("Outline count:", article.outline_json?.length || 0);
 
-    // Use article fields
     const title = article.title || '';
     const markdown = article.content_markdown || '';
-    const outline = article.outline_json || [];
     const faqs = article.faq_json || [];
-
-    console.log(`Article has ${outline.length} outline items and ${faqs.length} FAQs`);
 
     // Build Elementor JSON
     const builder = new ElementorBuilder();
-    const elementorJson = builder.build(title, markdown, outline, faqs);
+    const elementorJson = builder.build(title, markdown, faqs);
 
-    console.log(`Generated ${elementorJson.content.length} sections`);
+    console.log(`=== RESULT ===`);
+    console.log(`Generated ${elementorJson.content.length} total sections`);
 
     // Save template
     const { data: template, error: templateError } = await supabase
@@ -617,7 +629,7 @@ serve(async (req) => {
     if (templateError) {
       console.error("Error saving template:", templateError);
       return new Response(
-        JSON.stringify({ error: "Failed to save template" }),
+        JSON.stringify({ error: "Failed to save template", details: templateError }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
