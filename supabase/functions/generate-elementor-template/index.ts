@@ -568,6 +568,34 @@ serve(async (req) => {
   }
 
   try {
+    // Verify authorization
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      console.error("Missing authorization header");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Create auth client to verify user
+    const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: userError } = await authSupabase.auth.getUser();
+    if (userError || !user) {
+      console.error("User authentication failed:", userError);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { articleId } = await req.json();
 
     if (!articleId) {
@@ -577,9 +605,8 @@ serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Initialize Supabase client with service role for data operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Fetch article
     const { data: article, error: articleError } = await supabase
@@ -593,6 +620,43 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "Article not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify user owns the workspace that contains this article's project
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("workspace_id")
+      .eq("id", article.project_id)
+      .single();
+
+    if (projectError || !project) {
+      console.error("Project not found:", projectError);
+      return new Response(
+        JSON.stringify({ error: "Project not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { data: workspace, error: workspaceError } = await supabase
+      .from("workspaces")
+      .select("owner_id")
+      .eq("id", project.workspace_id)
+      .single();
+
+    if (workspaceError || !workspace) {
+      console.error("Workspace not found:", workspaceError);
+      return new Response(
+        JSON.stringify({ error: "Workspace not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (workspace.owner_id !== user.id) {
+      console.error("User does not own workspace");
+      return new Response(
+        JSON.stringify({ error: "Forbidden - not workspace owner" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
