@@ -1,0 +1,89 @@
+name: Publish Articles to WordPress
+
+on:
+  schedule:
+    # Täglich um 2:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      article_id:
+        description: 'Article ID to publish (optional)'
+        required: false
+        type: string
+      project_id:
+        description: 'Project ID (optional)'
+        required: false
+        type: string
+      status:
+        description: 'WordPress status'
+        required: true
+        type: choice
+        options:
+          - draft
+          - publish
+          - pending
+        default: 'draft'
+      add_links:
+        description: 'Add internal links'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: automation/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./automation
+        run: npm ci
+
+      - name: Build TypeScript
+        working-directory: ./automation
+        run: npm run build
+
+      - name: Publish articles
+        working-directory: ./automation
+        env:
+          WORDPRESS_URL: ${{ secrets.WORDPRESS_URL }}
+          WORDPRESS_USERNAME: ${{ secrets.WORDPRESS_USERNAME }}
+          WORDPRESS_APP_PASSWORD: ${{ secrets.WORDPRESS_APP_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Build command based on inputs
+          CMD="npm run publish-article --"
+
+          if [ -n "${{ github.event.inputs.article_id }}" ]; then
+            CMD="$CMD --article-id ${{ github.event.inputs.article_id }}"
+          elif [ -n "${{ github.event.inputs.project_id }}" ]; then
+            CMD="$CMD --project-id ${{ github.event.inputs.project_id }}"
+          fi
+
+          CMD="$CMD --status ${{ github.event.inputs.status || 'draft' }}"
+
+          if [ "${{ github.event.inputs.add_links }}" = "false" ]; then
+            CMD="$CMD --no-links"
+          fi
+
+          echo "Running: $CMD"
+          eval $CMD
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-logs
+          path: automation/*.log
+          retention-days: 7
