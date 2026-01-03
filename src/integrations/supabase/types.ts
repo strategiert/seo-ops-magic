@@ -363,30 +363,6 @@ export type Database = {
         }
         Relationships: []
       }
-      schema_migrations: {
-        Row: {
-          id: string
-          version: string
-          name: string
-          executed_at: string
-          executed_by: string | null
-        }
-        Insert: {
-          id?: string
-          version: string
-          name: string
-          executed_at?: string
-          executed_by?: string | null
-        }
-        Update: {
-          id?: string
-          version?: string
-          name?: string
-          executed_at?: string
-          executed_by?: string | null
-        }
-        Relationships: []
-      }
       projects: {
         Row: {
           created_at: string
