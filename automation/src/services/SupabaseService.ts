@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Article, LinkableArticle } from '../types';
+import { createSlug } from '../utils/slug';
 
 export class SupabaseService {
   private client: SupabaseClient;
@@ -64,7 +65,7 @@ export class SupabaseService {
     const articles: LinkableArticle[] = (data as any[]).map((article) => ({
       id: article.id,
       title: article.title,
-      slug: this.createSlug(article.primary_keyword || article.title),
+      slug: createSlug(article.primary_keyword || article.title),
       primaryKeyword: article.primary_keyword || article.title,
       language: 'de', // Default, could be extended with language field
     }));
@@ -112,17 +113,4 @@ export class SupabaseService {
     return data as Article[];
   }
 
-  /**
-   * Create URL-friendly slug
-   */
-  private createSlug(text: string): string {
-    return text
-      .toLowerCase()
-      .replace(/ä/g, 'ae')
-      .replace(/ö/g, 'oe')
-      .replace(/ü/g, 'ue')
-      .replace(/ß/g, 'ss')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-  }
 }
