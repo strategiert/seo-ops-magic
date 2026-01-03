@@ -282,10 +282,10 @@ export type Database = {
           project_id: string
           type: string
           updated_at: string
-          wp_username: string | null
           wp_app_password: string | null
-          wp_site_name: string | null
           wp_is_verified: boolean | null
+          wp_site_name: string | null
+          wp_username: string | null
         }
         Insert: {
           created_at?: string
@@ -300,10 +300,10 @@ export type Database = {
           project_id: string
           type: string
           updated_at?: string
-          wp_username?: string | null
           wp_app_password?: string | null
-          wp_site_name?: string | null
           wp_is_verified?: boolean | null
+          wp_site_name?: string | null
+          wp_username?: string | null
         }
         Update: {
           created_at?: string
@@ -318,10 +318,10 @@ export type Database = {
           project_id?: string
           type?: string
           updated_at?: string
-          wp_username?: string | null
           wp_app_password?: string | null
-          wp_site_name?: string | null
           wp_is_verified?: boolean | null
+          wp_site_name?: string | null
+          wp_username?: string | null
         }
         Relationships: [
           {
