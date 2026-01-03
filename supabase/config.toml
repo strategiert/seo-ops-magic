@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.run-migrations]
 verify_jwt = false
+
+[functions.wordpress-taxonomies]
+verify_jwt = false
+
+[functions.wordpress-publish]
+verify_jwt = false
