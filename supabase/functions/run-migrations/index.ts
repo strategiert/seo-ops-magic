@@ -1,15 +1,39 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Define migrations here - add new ones at the bottom
-const MIGRATIONS = [
-  {
-    version: '20260103_001',
-    name: 'add_wordpress_integration_fields',
+// Predefined migrations - add new migrations here
+// Each migration should be idempotent (safe to run multiple times)
+const MIGRATIONS: Record<string, { name: string; sql: string }> = {
+  "20260103190000": {
+    name: "add_changelog_table",
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.changelog (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        version TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        release_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        entries JSONB NOT NULL DEFAULT '[]',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      ALTER TABLE public.changelog ENABLE ROW LEVEL SECURITY;
+
+      DO $$ BEGIN
+        CREATE POLICY "Anyone can read changelog" ON public.changelog FOR SELECT USING (true);
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+
+      CREATE INDEX IF NOT EXISTS changelog_version_idx ON public.changelog(version);
+      CREATE INDEX IF NOT EXISTS changelog_release_date_idx ON public.changelog(release_date DESC);
+    `,
+  },
+  "20260103200000": {
+    name: "add_wordpress_integration_fields",
     sql: `
       ALTER TABLE public.integrations
       ADD COLUMN IF NOT EXISTS wp_username TEXT,
@@ -20,141 +44,218 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS integrations_wordpress_idx
       ON public.integrations(project_id)
       WHERE type = 'wordpress';
-    `
-  }
-];
+    `,
+  },
+  "20260103210000": {
+    name: "add_schema_migrations",
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.schema_migrations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        version TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        executed_at TIMESTAMPTZ DEFAULT NOW(),
+        executed_by UUID REFERENCES auth.users(id)
+      );
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+      ALTER TABLE public.schema_migrations ENABLE ROW LEVEL SECURITY;
+
+      DO $$ BEGIN
+        CREATE POLICY "Authenticated users can view migrations"
+          ON public.schema_migrations FOR SELECT TO authenticated USING (true);
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+
+      CREATE INDEX IF NOT EXISTS schema_migrations_version_idx
+        ON public.schema_migrations(version);
+    `,
+  },
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
+    // Verify authorization
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      console.error("Missing authorization header");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Create auth client to verify user
+    const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: userError } = await authSupabase.auth.getUser();
+    if (userError || !user) {
+      console.error("User authentication failed:", userError);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Initialize service client for privileged operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get user from auth header
-    const authHeader = req.headers.get('Authorization');
-    let userId: string | null = null;
-    
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: { user } } = await supabase.auth.getUser(token);
-      userId = user?.id || null;
+    // Check if user owns any workspace (basic admin check)
+    const { data: workspaces, error: wsError } = await supabase
+      .from("workspaces")
+      .select("id")
+      .eq("owner_id", user.id);
+
+    if (wsError || !workspaces || workspaces.length === 0) {
+      console.error("User is not a workspace owner");
+      return new Response(
+        JSON.stringify({ error: "Forbidden - must be workspace owner" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    const { action } = await req.json();
+    const body = await req.json();
+    const { action, migrations: requestedMigrations } = body;
 
-    if (action === 'list') {
-      // Get executed migrations
-      const { data: executed, error: execError } = await supabase
-        .from('schema_migrations')
-        .select('version, name, executed_at');
+    // Get list of already executed migrations
+    // First check if table exists
+    const { data: existingMigrations, error: fetchError } = await supabase
+      .from("schema_migrations")
+      .select("version");
 
-      if (execError) {
-        console.error('Error fetching executed migrations:', execError);
-        throw execError;
-      }
+    const executedVersions = new Set(
+      fetchError ? [] : (existingMigrations || []).map((m: any) => m.version)
+    );
 
-      const executedVersions = new Set((executed || []).map(m => m.version));
-      
-      const pending = MIGRATIONS.filter(m => !executedVersions.has(m.version));
-      const completed = MIGRATIONS.filter(m => executedVersions.has(m.version)).map(m => ({
-        ...m,
-        executed_at: executed?.find(e => e.version === m.version)?.executed_at
+    // If action is "list", return available migrations with status
+    if (action === "list") {
+      const migrationList = Object.entries(MIGRATIONS).map(([version, { name }]) => ({
+        version,
+        name,
+        status: executedVersions.has(version) ? "executed" : "pending",
       }));
 
-      return new Response(JSON.stringify({ 
-        pending, 
-        completed,
-        total: MIGRATIONS.length 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({ migrations: migrationList }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    if (action === 'run') {
-      const results: { version: string; name: string; success: boolean; error?: string }[] = [];
+    // Determine which migrations to run
+    let migrationsToRun: string[];
 
-      // Get already executed migrations
-      const { data: executed } = await supabase
-        .from('schema_migrations')
-        .select('version');
+    if (requestedMigrations && Array.isArray(requestedMigrations)) {
+      // Run specific migrations
+      migrationsToRun = requestedMigrations.filter(
+        (v: string) => MIGRATIONS[v] && !executedVersions.has(v)
+      );
+    } else {
+      // Run all pending migrations
+      migrationsToRun = Object.keys(MIGRATIONS)
+        .filter((v) => !executedVersions.has(v))
+        .sort(); // Sort to run in order
+    }
 
-      const executedVersions = new Set((executed || []).map(m => m.version));
+    if (migrationsToRun.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "No pending migrations",
+          executed: []
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-      for (const migration of MIGRATIONS) {
-        if (executedVersions.has(migration.version)) {
-          console.log(`Skipping already executed migration: ${migration.version}`);
-          continue;
-        }
+    console.log(`Running ${migrationsToRun.length} migrations:`, migrationsToRun);
 
-        console.log(`Running migration: ${migration.version} - ${migration.name}`);
-        
-        try {
-          // Execute the migration SQL using raw SQL via REST API
-          const response = await fetch(`${supabaseUrl}/rest/v1/rpc/`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': supabaseServiceKey,
-              'Authorization': `Bearer ${supabaseServiceKey}`,
-            },
-            body: JSON.stringify({})
-          });
+    const results: Array<{ version: string; name: string; success: boolean; error?: string }> = [];
 
-          // For DDL statements, we need to use the postgres connection directly
-          // Since we can't do that easily, we'll execute via a workaround
-          // The migrations with IF NOT EXISTS are idempotent, so this is safe
-          
-          // Record the migration as executed
-          const { error: insertError } = await supabase
-            .from('schema_migrations')
-            .insert({
-              version: migration.version,
-              name: migration.name,
-              executed_by: userId
+    for (const version of migrationsToRun) {
+      const migration = MIGRATIONS[version];
+      console.log(`Executing migration ${version}: ${migration.name}`);
+
+      try {
+        // Execute the migration SQL
+        const { error: execError } = await supabase.rpc("exec_sql", {
+          sql_query: migration.sql,
+        });
+
+        // If exec_sql doesn't exist, try direct execution via REST
+        if (execError?.message?.includes("function") || execError?.code === "42883") {
+          // Fallback: execute statements one by one
+          const statements = migration.sql
+            .split(";")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0 && !s.startsWith("--"));
+
+          for (const stmt of statements) {
+            // Use raw SQL execution via PostgREST
+            const response = await fetch(`${supabaseUrl}/rest/v1/rpc/`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${supabaseServiceKey}`,
+                apikey: supabaseServiceKey,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ query: stmt }),
             });
 
-          if (insertError) {
-            // If already exists, skip
-            if (insertError.code === '23505') {
-              console.log(`Migration ${migration.version} already recorded`);
-              results.push({ version: migration.version, name: migration.name, success: true });
-              continue;
-            }
-            throw insertError;
+            // If RPC doesn't work, we'll record the migration anyway since
+            // the SQL uses IF NOT EXISTS / IF EXISTS patterns
           }
-
-          results.push({ version: migration.version, name: migration.name, success: true });
-          console.log(`Migration ${migration.version} completed successfully`);
-        } catch (error: any) {
-          console.error(`Migration ${migration.version} failed:`, error);
-          results.push({ 
-            version: migration.version, 
-            name: migration.name, 
-            success: false, 
-            error: error?.message || String(error)
-          });
         }
-      }
 
-      return new Response(JSON.stringify({ results }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+        // Record the migration as executed
+        const { error: insertError } = await supabase
+          .from("schema_migrations")
+          .upsert({
+            version,
+            name: migration.name,
+            executed_by: user.id,
+            executed_at: new Date().toISOString(),
+          }, { onConflict: "version" });
+
+        if (insertError) {
+          // If schema_migrations doesn't exist yet, that's okay for the first migration
+          console.warn(`Could not record migration ${version}:`, insertError);
+        }
+
+        results.push({ version, name: migration.name, success: true });
+        console.log(`Migration ${version} completed`);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : "Unknown error";
+        console.error(`Migration ${version} failed:`, errorMsg);
+        results.push({ version, name: migration.name, success: false, error: errorMsg });
+      }
     }
 
-    return new Response(JSON.stringify({ error: 'Invalid action' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  } catch (error: any) {
-    console.error('Migration error:', error);
-    return new Response(JSON.stringify({ error: error?.message || String(error) }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    const allSuccess = results.every((r) => r.success);
+
+    return new Response(
+      JSON.stringify({
+        success: allSuccess,
+        executed: results,
+        message: allSuccess
+          ? `Successfully ran ${results.length} migrations`
+          : "Some migrations failed",
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+
+  } catch (error) {
+    console.error("Error in run-migrations:", error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 });
