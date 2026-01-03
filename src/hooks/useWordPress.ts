@@ -35,6 +35,7 @@ export interface PublishOptions {
   status?: "publish" | "draft";
   categoryIds?: number[];
   tagIds?: number[];
+  useStyledHtml?: boolean;
 }
 
 export function useWordPress(): UseWordPressReturn {
@@ -88,6 +89,7 @@ export function useWordPress(): UseWordPressReturn {
             status: options.status || "draft",
             categoryIds: options.categoryIds || [],
             tagIds: options.tagIds || [],
+            useStyledHtml: options.useStyledHtml !== false, // Default to true
           },
         });
 
@@ -155,6 +157,7 @@ export function useWordPressBulkPublish() {
               status: options.status || "draft",
               categoryIds: options.categoryIds || [],
               tagIds: options.tagIds || [],
+              useStyledHtml: options.useStyledHtml !== false, // Default to true
             },
           });
 

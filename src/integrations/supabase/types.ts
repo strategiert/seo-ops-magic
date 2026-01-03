@@ -83,6 +83,195 @@ export type Database = {
           },
         ]
       }
+      brand_crawl_data: {
+        Row: {
+          id: string
+          brand_profile_id: string
+          url: string
+          page_type: string | null
+          title: string | null
+          content_markdown: string | null
+          meta_description: string | null
+          headings: Json | null
+          internal_links: Json | null
+          external_links: Json | null
+          images: Json | null
+          relevance_score: number | null
+          crawled_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          brand_profile_id: string
+          url: string
+          page_type?: string | null
+          title?: string | null
+          content_markdown?: string | null
+          meta_description?: string | null
+          headings?: Json | null
+          internal_links?: Json | null
+          external_links?: Json | null
+          images?: Json | null
+          relevance_score?: number | null
+          crawled_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          brand_profile_id?: string
+          url?: string
+          page_type?: string | null
+          title?: string | null
+          content_markdown?: string | null
+          meta_description?: string | null
+          headings?: Json | null
+          internal_links?: Json | null
+          external_links?: Json | null
+          images?: Json | null
+          relevance_score?: number | null
+          crawled_at?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_crawl_data_brand_profile_id_fkey"
+            columns: ["brand_profile_id"]
+            isOneToOne: false
+            referencedRelation: "brand_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brand_profiles: {
+        Row: {
+          id: string
+          project_id: string
+          brand_name: string | null
+          tagline: string | null
+          mission_statement: string | null
+          brand_story: string | null
+          brand_voice: Json | null
+          products: Json | null
+          services: Json | null
+          personas: Json | null
+          brand_keywords: Json | null
+          competitors: Json | null
+          visual_identity: Json | null
+          internal_links: Json | null
+          current_projects: Json | null
+          openai_vector_store_id: string | null
+          crawl_status: string | null
+          crawl_error: string | null
+          last_crawl_at: string | null
+          last_analysis_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          brand_name?: string | null
+          tagline?: string | null
+          mission_statement?: string | null
+          brand_story?: string | null
+          brand_voice?: Json | null
+          products?: Json | null
+          services?: Json | null
+          personas?: Json | null
+          brand_keywords?: Json | null
+          competitors?: Json | null
+          visual_identity?: Json | null
+          internal_links?: Json | null
+          current_projects?: Json | null
+          openai_vector_store_id?: string | null
+          crawl_status?: string | null
+          crawl_error?: string | null
+          last_crawl_at?: string | null
+          last_analysis_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          brand_name?: string | null
+          tagline?: string | null
+          mission_statement?: string | null
+          brand_story?: string | null
+          brand_voice?: Json | null
+          products?: Json | null
+          services?: Json | null
+          personas?: Json | null
+          brand_keywords?: Json | null
+          competitors?: Json | null
+          visual_identity?: Json | null
+          internal_links?: Json | null
+          current_projects?: Json | null
+          openai_vector_store_id?: string | null
+          crawl_status?: string | null
+          crawl_error?: string | null
+          last_crawl_at?: string | null
+          last_analysis_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_profiles_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brand_vector_documents: {
+        Row: {
+          id: string
+          brand_profile_id: string
+          openai_file_id: string
+          document_type: string
+          source_url: string | null
+          title: string | null
+          content_preview: string | null
+          token_count: number | null
+          uploaded_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          brand_profile_id: string
+          openai_file_id: string
+          document_type: string
+          source_url?: string | null
+          title?: string | null
+          content_preview?: string | null
+          token_count?: number | null
+          uploaded_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          brand_profile_id?: string
+          openai_file_id?: string
+          document_type?: string
+          source_url?: string | null
+          title?: string | null
+          content_preview?: string | null
+          token_count?: number | null
+          uploaded_at?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_vector_documents_brand_profile_id_fkey"
+            columns: ["brand_profile_id"]
+            isOneToOne: false
+            referencedRelation: "brand_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       changelog: {
         Row: {
           created_at: string | null
