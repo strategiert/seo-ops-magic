@@ -416,6 +416,30 @@ export type Database = {
           },
         ]
       }
+      schema_migrations: {
+        Row: {
+          executed_at: string | null
+          executed_by: string | null
+          id: string
+          name: string
+          version: string
+        }
+        Insert: {
+          executed_at?: string | null
+          executed_by?: string | null
+          id?: string
+          name: string
+          version: string
+        }
+        Update: {
+          executed_at?: string | null
+          executed_by?: string | null
+          id?: string
+          name?: string
+          version?: string
+        }
+        Relationships: []
+      }
       workspaces: {
         Row: {
           created_at: string

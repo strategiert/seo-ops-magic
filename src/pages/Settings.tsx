@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon, Link2, AlertCircle } from "lucide-react";
+import { Settings as SettingsIcon, Link2, AlertCircle, Database } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import { supabase } from "@/integrations/supabase/client";
 import { NeuronWriterSetup } from "@/components/settings/NeuronWriterSetup";
 import { WordPressSetup } from "@/components/settings/WordPressSetup";
-
+import { MigrationManager } from "@/components/settings/MigrationManager";
 const LANGUAGES = [
   { value: "de", label: "Deutsch" },
   { value: "en", label: "English" },
@@ -175,6 +175,10 @@ export default function Settings() {
               <SettingsIcon className="h-4 w-4 mr-2" />
               Allgemein
             </TabsTrigger>
+            <TabsTrigger value="system">
+              <Database className="h-4 w-4 mr-2" />
+              System
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="integrations" className="space-y-4 mt-4">
@@ -318,6 +322,10 @@ export default function Settings() {
                 </Button>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="system" className="space-y-4 mt-4">
+            <MigrationManager />
           </TabsContent>
         </Tabs>
       </div>
