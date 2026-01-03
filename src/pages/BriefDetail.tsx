@@ -22,6 +22,7 @@ import { NeuronWriterImport } from "@/components/briefs/NeuronWriterImport";
 import { GuidelinesDisplay } from "@/components/briefs/GuidelinesDisplay";
 import { WorkflowActions } from "@/components/briefs/WorkflowActions";
 import type { NWGuidelines } from "@/lib/api/neuronwriter";
+import { transformNWGuidelines } from "@/lib/api/neuronwriter";
 
 interface ContentBrief {
   id: string;
@@ -83,7 +84,13 @@ export default function BriefDetail() {
 
       if (error) throw error;
 
-      setBrief(data as unknown as ContentBrief);
+      // Transform nw_guidelines if they exist (handles old stored data format)
+      const transformedData = {
+        ...data,
+        nw_guidelines: data.nw_guidelines ? transformNWGuidelines(data.nw_guidelines) : null
+      };
+
+      setBrief(transformedData as unknown as ContentBrief);
       setFormData({
         title: data.title || "",
         primary_keyword: data.primary_keyword || "",
