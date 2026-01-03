@@ -6,12 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface PublishRequest {
-  articleId: string;
-  status?: "publish" | "draft";
-  categoryIds?: number[];
-  tagIds?: number[];
-}
+type PublishStatus = "draft" | "publish";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -19,190 +14,169 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authorization
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify user
+    // Verify user from the incoming JWT
     const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
+      global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: userError } = await authSupabase.auth.getUser();
+    const {
+      data: { user },
+      error: userError,
+    } = await authSupabase.auth.getUser();
+
     if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      console.log("wordpress-publish: auth failed", userError?.message);
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const body: PublishRequest = await req.json();
-    const { articleId, status = "draft", categoryIds = [], tagIds = [] } = body;
+    const body = await req.json().catch(() => ({}));
+    const articleId = body?.articleId as string | undefined;
+    const status = (body?.status as PublishStatus | undefined) ?? "draft";
+    const categoryIds = (body?.categoryIds as number[] | undefined) ?? [];
+    const tagIds = (body?.tagIds as number[] | undefined) ?? [];
 
     if (!articleId) {
-      return new Response(
-        JSON.stringify({ error: "articleId is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "articleId is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Fetch article
     const { data: article, error: articleError } = await supabase
       .from("articles")
-      .select("*, projects!inner(id, workspace_id, wp_url)")
+      .select("id, project_id, title, content_html, content_markdown")
       .eq("id", articleId)
       .single();
 
     if (articleError || !article) {
-      return new Response(
-        JSON.stringify({ error: "Article not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Article not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Verify workspace ownership
-    const { data: workspace } = await supabase
-      .from("workspaces")
-      .select("owner_id")
-      .eq("id", article.projects.workspace_id)
+    // Fetch project
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id, wp_url, workspace_id")
+      .eq("id", article.project_id)
       .single();
 
-    if (!workspace || workspace.owner_id !== user.id) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (projectError || !project) {
+      return new Response(JSON.stringify({ error: "Project not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Verify ownership (workspace owner)
+    const { data: workspace, error: workspaceError } = await supabase
+      .from("workspaces")
+      .select("owner_id")
+      .eq("id", project.workspace_id)
+      .single();
+
+    if (workspaceError || !workspace || workspace.owner_id !== user.id) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Get WordPress credentials
-    const { data: integration } = await supabase
+    const { data: integration, error: integrationError } = await supabase
       .from("integrations")
-      .select("*")
-      .eq("project_id", article.project_id)
+      .select("wp_username, wp_app_password")
+      .eq("project_id", project.id)
       .eq("type", "wordpress")
       .single();
 
-    if (!integration || !integration.wp_username || !integration.wp_app_password) {
-      return new Response(
-        JSON.stringify({ error: "WordPress not configured for this project" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (integrationError || !integration?.wp_username || !integration?.wp_app_password) {
+      return new Response(JSON.stringify({ error: "WordPress not configured" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const wpUrl = article.projects.wp_url;
-    if (!wpUrl) {
-      return new Response(
-        JSON.stringify({ error: "WordPress URL not configured" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!project.wp_url) {
+      return new Response(JSON.stringify({ error: "WordPress URL not configured" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Prepare WordPress post data
-    const wpPost = {
-      title: article.title,
-      content: article.content_html || article.content_markdown || "",
-      status: status,
-      slug: generateSlug(article.title),
-      categories: categoryIds,
-      tags: tagIds,
-      meta: {
-        _yoast_wpseo_title: article.meta_title || article.title,
-        _yoast_wpseo_metadesc: article.meta_description || "",
-      },
-    };
-
-    // Check if article was already published (update vs create)
-    const existingWpPostId = (article as any).wp_post_id;
-    let wpResponse;
-    let wpEndpoint;
-
-    const baseUrl = wpUrl.replace(/\/$/, "").replace(/\/wp-json$/, "");
+    const baseUrl = project.wp_url.replace(/\/$/, "").replace(/\/wp-json$/, "");
     const authString = btoa(`${integration.wp_username}:${integration.wp_app_password}`);
 
-    if (existingWpPostId) {
-      // Update existing post
-      wpEndpoint = `${baseUrl}/wp-json/wp/v2/posts/${existingWpPostId}`;
-      wpResponse = await fetch(wpEndpoint, {
-        method: "POST",
-        headers: {
-          "Authorization": `Basic ${authString}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(wpPost),
-      });
-    } else {
-      // Create new post
-      wpEndpoint = `${baseUrl}/wp-json/wp/v2/posts`;
-      wpResponse = await fetch(wpEndpoint, {
-        method: "POST",
-        headers: {
-          "Authorization": `Basic ${authString}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(wpPost),
-      });
-    }
+    const content = article.content_html || article.content_markdown || "";
+
+    const wpPost = {
+      title: article.title,
+      content,
+      status,
+      categories: categoryIds,
+      tags: tagIds,
+    };
+
+    const wpEndpoint = `${baseUrl}/wp-json/wp/v2/posts`;
+
+    const wpResponse = await fetch(wpEndpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${authString}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(wpPost),
+    });
 
     if (!wpResponse.ok) {
-      const errorData = await wpResponse.text();
-      console.error("WordPress API error:", errorData);
+      const errorText = await wpResponse.text().catch(() => "");
+      console.error("wordpress-publish: WordPress API error", wpResponse.status, errorText);
       return new Response(
-        JSON.stringify({ error: `WordPress error: ${wpResponse.status}`, details: errorData }),
-        { status: wpResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: `WordPress error: ${wpResponse.status}`, details: errorText }),
+        {
+          status: wpResponse.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
 
     const wpData = await wpResponse.json();
 
-    // Save wp_post_id back to article
-    await supabase
-      .from("articles")
-      .update({
-        wp_post_id: wpData.id,
-        status: status === "publish" ? "published" : article.status
-      })
-      .eq("id", articleId);
-
-    console.log(`Published article ${articleId} to WordPress as post ${wpData.id}`);
+    console.log(`wordpress-publish: published article=${articleId} wpPostId=${wpData?.id}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        wpPostId: wpData.id,
-        wpUrl: wpData.link,
-        status: wpData.status,
+        wpPostId: wpData?.id,
+        wpUrl: wpData?.link,
+        status: wpData?.status,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-
   } catch (error) {
-    console.error("Error in wordpress-publish:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("wordpress-publish: unhandled error", error);
+    return new Response(JSON.stringify({ error: "Internal Server Error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
-
-function generateSlug(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/ä/g, "ae")
-    .replace(/ö/g, "oe")
-    .replace(/ü/g, "ue")
-    .replace(/ß/g, "ss")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 100);
-}
