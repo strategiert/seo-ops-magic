@@ -20,3 +20,15 @@ verify_jwt = false
 
 [functions.wordpress-publish]
 verify_jwt = false
+
+[functions.brand-crawl]
+verify_jwt = false
+
+[functions.brand-analyze]
+verify_jwt = false
+
+[functions.brand-vector-store]
+verify_jwt = false
+
+[functions.brand-competitor-research]
+verify_jwt = false

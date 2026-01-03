@@ -85,52 +85,52 @@ export type Database = {
       }
       brand_crawl_data: {
         Row: {
-          id: string
           brand_profile_id: string
-          url: string
-          page_type: string | null
-          title: string | null
           content_markdown: string | null
-          meta_description: string | null
-          headings: Json | null
-          internal_links: Json | null
-          external_links: Json | null
-          images: Json | null
-          relevance_score: number | null
           crawled_at: string
           created_at: string
+          external_links: Json | null
+          headings: Json | null
+          id: string
+          images: Json | null
+          internal_links: Json | null
+          meta_description: string | null
+          page_type: string | null
+          relevance_score: number | null
+          title: string | null
+          url: string
         }
         Insert: {
-          id?: string
           brand_profile_id: string
-          url: string
-          page_type?: string | null
-          title?: string | null
           content_markdown?: string | null
-          meta_description?: string | null
-          headings?: Json | null
-          internal_links?: Json | null
-          external_links?: Json | null
-          images?: Json | null
-          relevance_score?: number | null
           crawled_at?: string
           created_at?: string
+          external_links?: Json | null
+          headings?: Json | null
+          id?: string
+          images?: Json | null
+          internal_links?: Json | null
+          meta_description?: string | null
+          page_type?: string | null
+          relevance_score?: number | null
+          title?: string | null
+          url: string
         }
         Update: {
-          id?: string
           brand_profile_id?: string
-          url?: string
-          page_type?: string | null
-          title?: string | null
           content_markdown?: string | null
-          meta_description?: string | null
-          headings?: Json | null
-          internal_links?: Json | null
-          external_links?: Json | null
-          images?: Json | null
-          relevance_score?: number | null
           crawled_at?: string
           created_at?: string
+          external_links?: Json | null
+          headings?: Json | null
+          id?: string
+          images?: Json | null
+          internal_links?: Json | null
+          meta_description?: string | null
+          page_type?: string | null
+          relevance_score?: number | null
+          title?: string | null
+          url?: string
         }
         Relationships: [
           {
@@ -144,76 +144,76 @@ export type Database = {
       }
       brand_profiles: {
         Row: {
-          id: string
-          project_id: string
+          brand_keywords: Json | null
           brand_name: string | null
-          tagline: string | null
-          mission_statement: string | null
           brand_story: string | null
           brand_voice: Json | null
-          products: Json | null
-          services: Json | null
-          personas: Json | null
-          brand_keywords: Json | null
           competitors: Json | null
-          visual_identity: Json | null
-          internal_links: Json | null
-          current_projects: Json | null
-          openai_vector_store_id: string | null
-          crawl_status: string | null
           crawl_error: string | null
-          last_crawl_at: string | null
-          last_analysis_at: string | null
+          crawl_status: string | null
           created_at: string
+          current_projects: Json | null
+          id: string
+          internal_links: Json | null
+          last_analysis_at: string | null
+          last_crawl_at: string | null
+          mission_statement: string | null
+          openai_vector_store_id: string | null
+          personas: Json | null
+          products: Json | null
+          project_id: string
+          services: Json | null
+          tagline: string | null
           updated_at: string
+          visual_identity: Json | null
         }
         Insert: {
-          id?: string
-          project_id: string
+          brand_keywords?: Json | null
           brand_name?: string | null
-          tagline?: string | null
-          mission_statement?: string | null
           brand_story?: string | null
           brand_voice?: Json | null
-          products?: Json | null
-          services?: Json | null
-          personas?: Json | null
-          brand_keywords?: Json | null
           competitors?: Json | null
-          visual_identity?: Json | null
-          internal_links?: Json | null
-          current_projects?: Json | null
-          openai_vector_store_id?: string | null
-          crawl_status?: string | null
           crawl_error?: string | null
-          last_crawl_at?: string | null
-          last_analysis_at?: string | null
+          crawl_status?: string | null
           created_at?: string
+          current_projects?: Json | null
+          id?: string
+          internal_links?: Json | null
+          last_analysis_at?: string | null
+          last_crawl_at?: string | null
+          mission_statement?: string | null
+          openai_vector_store_id?: string | null
+          personas?: Json | null
+          products?: Json | null
+          project_id: string
+          services?: Json | null
+          tagline?: string | null
           updated_at?: string
+          visual_identity?: Json | null
         }
         Update: {
-          id?: string
-          project_id?: string
+          brand_keywords?: Json | null
           brand_name?: string | null
-          tagline?: string | null
-          mission_statement?: string | null
           brand_story?: string | null
           brand_voice?: Json | null
-          products?: Json | null
-          services?: Json | null
-          personas?: Json | null
-          brand_keywords?: Json | null
           competitors?: Json | null
-          visual_identity?: Json | null
-          internal_links?: Json | null
-          current_projects?: Json | null
-          openai_vector_store_id?: string | null
-          crawl_status?: string | null
           crawl_error?: string | null
-          last_crawl_at?: string | null
-          last_analysis_at?: string | null
+          crawl_status?: string | null
           created_at?: string
+          current_projects?: Json | null
+          id?: string
+          internal_links?: Json | null
+          last_analysis_at?: string | null
+          last_crawl_at?: string | null
+          mission_statement?: string | null
+          openai_vector_store_id?: string | null
+          personas?: Json | null
+          products?: Json | null
+          project_id?: string
+          services?: Json | null
+          tagline?: string | null
           updated_at?: string
+          visual_identity?: Json | null
         }
         Relationships: [
           {
@@ -227,40 +227,40 @@ export type Database = {
       }
       brand_vector_documents: {
         Row: {
-          id: string
           brand_profile_id: string
-          openai_file_id: string
+          content_preview: string | null
+          created_at: string
           document_type: string
+          id: string
+          openai_file_id: string
           source_url: string | null
           title: string | null
-          content_preview: string | null
           token_count: number | null
           uploaded_at: string
-          created_at: string
         }
         Insert: {
-          id?: string
           brand_profile_id: string
-          openai_file_id: string
+          content_preview?: string | null
+          created_at?: string
           document_type: string
+          id?: string
+          openai_file_id: string
           source_url?: string | null
           title?: string | null
-          content_preview?: string | null
           token_count?: number | null
           uploaded_at?: string
-          created_at?: string
         }
         Update: {
-          id?: string
           brand_profile_id?: string
-          openai_file_id?: string
+          content_preview?: string | null
+          created_at?: string
           document_type?: string
+          id?: string
+          openai_file_id?: string
           source_url?: string | null
           title?: string | null
-          content_preview?: string | null
           token_count?: number | null
           uploaded_at?: string
-          created_at?: string
         }
         Relationships: [
           {
