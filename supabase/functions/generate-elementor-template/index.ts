@@ -59,18 +59,10 @@ class IDGenerator {
   }
 }
 
-// Markdown Parser
-interface ParsedContent {
-  title: string;
-  sections: ContentSection[];
-  faqs: FAQ[];
-}
-
-interface ContentSection {
-  heading: string;
+// Content Section
+interface OutlineItem {
   level: number;
-  content: string[];
-  lists: string[][];
+  text: string;
 }
 
 interface FAQ {
@@ -78,112 +70,87 @@ interface FAQ {
   answer: string;
 }
 
-function parseMarkdown(markdown: string): ParsedContent {
-  const lines = markdown.split('\n');
+interface ContentSection {
+  heading: string;
+  level: number;
+  content: string;
+}
+
+// Extract content between headings
+function extractContentSections(markdown: string, outline: OutlineItem[]): ContentSection[] {
   const sections: ContentSection[] = [];
-  const faqs: FAQ[] = [];
-  let title = '';
-  let currentSection: ContentSection | null = null;
-  let currentList: string[] = [];
-  let inFaqSection = false;
-  let currentFaq: FAQ | null = null;
+
+  // Split markdown into lines
+  const lines = markdown.split('\n');
+
+  // Create a map of heading text to their line numbers
+  const headingPositions: { heading: string; level: number; line: number }[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-
-    // Parse H1 (title)
-    if (line.startsWith('# ')) {
-      title = line.substring(2).trim();
-      continue;
-    }
-
-    // Parse H2
-    if (line.startsWith('## ')) {
-      // Save current section and list
-      if (currentList.length > 0 && currentSection) {
-        currentSection.lists.push([...currentList]);
-        currentList = [];
-      }
-      if (currentSection) {
-        sections.push(currentSection);
-      }
-
-      const heading = line.substring(3).trim();
-      inFaqSection = heading.toLowerCase().includes('faq') ||
-                     heading.toLowerCase().includes('häufig') ||
-                     heading.toLowerCase().includes('fragen');
-
-      currentSection = {
-        heading,
-        level: 2,
-        content: [],
-        lists: [],
-      };
-      continue;
-    }
-
-    // Parse H3
     if (line.startsWith('### ')) {
-      // Save current list
-      if (currentList.length > 0 && currentSection) {
-        currentSection.lists.push([...currentList]);
-        currentList = [];
-      }
+      headingPositions.push({
+        heading: line.substring(4).trim(),
+        level: 3,
+        line: i
+      });
+    } else if (line.startsWith('## ')) {
+      headingPositions.push({
+        heading: line.substring(3).trim(),
+        level: 2,
+        line: i
+      });
+    } else if (line.startsWith('# ')) {
+      headingPositions.push({
+        heading: line.substring(2).trim(),
+        level: 1,
+        line: i
+      });
+    }
+  }
 
-      const heading = line.substring(4).trim();
+  // For each outline item, find the content until the next heading
+  for (let i = 0; i < outline.length; i++) {
+    const item = outline[i];
 
-      // If in FAQ section, treat H3 as question
-      if (inFaqSection) {
-        if (currentFaq) {
-          faqs.push(currentFaq);
-        }
-        currentFaq = { question: heading, answer: '' };
-      } else {
-        currentSection = {
-          heading,
-          level: 3,
-          content: [],
-          lists: [],
-        };
-      }
+    // Skip FAQ sections (will be handled separately)
+    if (item.text.toLowerCase().includes('faq') ||
+        item.text.toLowerCase().includes('häufig')) {
       continue;
     }
 
-    // Parse list items
-    if (line.startsWith('- ') || line.startsWith('* ') || line.match(/^\d+\. /)) {
-      const item = line.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '').trim();
-      currentList.push(item);
-      continue;
+    // Find this heading in the markdown
+    const headingPos = headingPositions.find(h =>
+      h.heading === item.text && h.level === item.level
+    );
+
+    if (!headingPos) continue;
+
+    // Find next heading at same or higher level
+    const nextHeadingPos = headingPositions.find((h, idx) =>
+      idx > headingPositions.indexOf(headingPos) && h.level <= item.level
+    );
+
+    const startLine = headingPos.line + 1;
+    const endLine = nextHeadingPos ? nextHeadingPos.line : lines.length;
+
+    // Extract content lines
+    const contentLines = lines.slice(startLine, endLine);
+    const content = contentLines
+      .filter(line => line.trim().length > 0)
+      .join('\n\n')
+      .trim();
+
+    if (content) {
+      sections.push({
+        heading: item.text,
+        level: item.level,
+        content: content
+      });
     }
-
-    // Regular paragraph
-    if (line.length > 0) {
-      if (inFaqSection && currentFaq) {
-        currentFaq.answer += (currentFaq.answer ? ' ' : '') + line;
-      } else if (currentSection) {
-        currentSection.content.push(line);
-      }
-    } else {
-      // Empty line - save current list
-      if (currentList.length > 0 && currentSection) {
-        currentSection.lists.push([...currentList]);
-        currentList = [];
-      }
-    }
   }
 
-  // Save last items
-  if (currentList.length > 0 && currentSection) {
-    currentSection.lists.push([...currentList]);
-  }
-  if (currentSection) {
-    sections.push(currentSection);
-  }
-  if (currentFaq) {
-    faqs.push(currentFaq);
-  }
-
-  return { title, sections, faqs };
+  return sections;
 }
 
 // Section Builder
@@ -286,29 +253,74 @@ class ElementorBuilder {
       elements: [],
     });
 
-    // Add content paragraphs
-    if (section.content.length > 0) {
-      const contentHtml = section.content.map(p => `<p>${p}</p>`).join('');
-      widgets.push({
-        id: this.idGen.generate("text"),
-        elType: "widget",
-        widgetType: "text-editor",
-        isInner: false,
-        settings: {
-          editor: contentHtml,
-          text_color: textColor,
-          typography_typography: "custom",
-          typography_font_family: BRAND.typography.body_font,
-          typography_font_size: { unit: "px", size: BRAND.font_sizes.body.desktop, sizes: [] },
-          typography_font_size_mobile: { unit: "px", size: BRAND.font_sizes.body.mobile, sizes: [] },
-        },
-        elements: [],
-      });
+    // Parse content for paragraphs and lists
+    const contentLines = section.content.split('\n\n');
+    let currentList: string[] = [];
+
+    for (const block of contentLines) {
+      const trimmed = block.trim();
+
+      // Check if it's a list item
+      if (trimmed.startsWith('*   ') || trimmed.startsWith('- ') || trimmed.match(/^\d+\.\s/)) {
+        // Extract all list items from this block
+        const items = trimmed.split('\n').filter(line => {
+          const l = line.trim();
+          return l.startsWith('*   ') || l.startsWith('- ') || l.match(/^\d+\.\s/);
+        }).map(line => line.replace(/^(\*   |- |\d+\.\s)/, '').trim());
+
+        currentList.push(...items);
+      } else {
+        // If we have accumulated list items, add them as icon-list
+        if (currentList.length > 0) {
+          const iconListItems = currentList.map((item) => ({
+            _id: this.idGen.generate("item"),
+            text: item,
+            icon: { value: "fas fa-check-circle", library: "fa-solid" },
+          }));
+
+          widgets.push({
+            id: this.idGen.generate("list"),
+            elType: "widget",
+            widgetType: "icon-list",
+            isInner: false,
+            settings: {
+              icon_list: iconListItems,
+              icon_color: bg.isGradient ? BRAND.colors.accent : BRAND.colors.secondary,
+              text_color: textColor,
+              typography_typography: "custom",
+              typography_font_family: BRAND.typography.body_font,
+              typography_font_size: { unit: "px", size: BRAND.font_sizes.body.desktop, sizes: [] },
+              typography_font_size_mobile: { unit: "px", size: BRAND.font_sizes.body.mobile, sizes: [] },
+            },
+            elements: [],
+          });
+          currentList = [];
+        }
+
+        // Add paragraph if it's not empty
+        if (trimmed.length > 0) {
+          widgets.push({
+            id: this.idGen.generate("text"),
+            elType: "widget",
+            widgetType: "text-editor",
+            isInner: false,
+            settings: {
+              editor: `<p>${trimmed}</p>`,
+              text_color: textColor,
+              typography_typography: "custom",
+              typography_font_family: BRAND.typography.body_font,
+              typography_font_size: { unit: "px", size: BRAND.font_sizes.body.desktop, sizes: [] },
+              typography_font_size_mobile: { unit: "px", size: BRAND.font_sizes.body.mobile, sizes: [] },
+            },
+            elements: [],
+          });
+        }
+      }
     }
 
-    // Add lists as icon-list
-    for (const list of section.lists) {
-      const iconListItems = list.map((item) => ({
+    // Add remaining list items
+    if (currentList.length > 0) {
+      const iconListItems = currentList.map((item) => ({
         _id: this.idGen.generate("item"),
         text: item,
         icon: { value: "fas fa-check-circle", library: "fa-solid" },
@@ -356,77 +368,6 @@ class ElementorBuilder {
           elements: widgets,
         },
       ],
-    };
-  }
-
-  buildFeatureCardsSection(section: ContentSection) {
-    if (section.lists.length === 0) {
-      return this.buildContentSection(section);
-    }
-
-    const bg = this.getNextBackground();
-    const columns: any[] = [];
-
-    // Take first list and create cards (max 4)
-    const items = section.lists[0].slice(0, 4);
-    const columnSize = items.length === 3 ? 33.333 : (items.length === 4 ? 25 : 50);
-
-    for (const item of items) {
-      columns.push({
-        id: this.idGen.generate("col"),
-        elType: "column",
-        isInner: false,
-        settings: {
-          _column_size: columnSize,
-          _inline_size: null,
-          background_background: "classic",
-          background_color: "#ffffff",
-          padding: { unit: "px", top: "30", right: "25", bottom: "30", left: "25", isLinked: false },
-          margin: { unit: "px", top: "10", right: "10", bottom: "10", left: "10", isLinked: true },
-          border_radius: { unit: "px", top: "8", right: "8", bottom: "8", left: "8", isLinked: true },
-          box_shadow_box_shadow_type: "yes",
-          box_shadow_box_shadow: {
-            horizontal: 0,
-            vertical: 5,
-            blur: 20,
-            spread: 0,
-            color: "rgba(0,0,0,0.08)"
-          },
-        },
-        elements: [
-          {
-            id: this.idGen.generate("text"),
-            elType: "widget",
-            widgetType: "text-editor",
-            isInner: false,
-            settings: {
-              editor: `<p>${item}</p>`,
-              text_color: BRAND.colors.text_dark,
-              typography_typography: "custom",
-              typography_font_family: BRAND.typography.body_font,
-              typography_font_size: { unit: "px", size: BRAND.font_sizes.body.desktop, sizes: [] },
-              typography_font_size_mobile: { unit: "px", size: BRAND.font_sizes.body.mobile, sizes: [] },
-            },
-            elements: [],
-          },
-        ],
-      });
-    }
-
-    return {
-      id: this.idGen.generate("sec"),
-      elType: "section",
-      isInner: false,
-      settings: {
-        background_background: bg.type,
-        background_color: bg.color,
-        padding: { unit: "px", top: "60", right: "20", bottom: "60", left: "20", isLinked: false },
-        padding_mobile: { unit: "px", top: "40", right: "20", bottom: "40", left: "20", isLinked: false },
-        gap: "wide",
-        column_gap: { unit: "px", size: 30, sizes: [] },
-        column_gap_mobile: { unit: "px", size: 20, sizes: [] },
-      },
-      elements: columns,
     };
   }
 
@@ -577,31 +518,24 @@ class ElementorBuilder {
     };
   }
 
-  build(parsed: ParsedContent): any {
+  build(title: string, markdown: string, outline: OutlineItem[], faqs: FAQ[]): any {
     const sections: any[] = [];
 
     // 1. Hero section
-    sections.push(this.buildHeroSection(parsed.title));
+    sections.push(this.buildHeroSection(title));
 
-    // 2. Content sections
-    for (const section of parsed.sections) {
-      // Skip FAQ sections (handled separately)
-      if (section.heading.toLowerCase().includes('faq') ||
-          section.heading.toLowerCase().includes('häufig')) {
-        continue;
-      }
+    // 2. Extract and build content sections from outline
+    const contentSections = extractContentSections(markdown, outline);
 
-      // If section has multiple list items, consider it as feature cards
-      if (section.lists.length > 0 && section.lists[0].length >= 3) {
-        sections.push(this.buildFeatureCardsSection(section));
-      } else {
-        sections.push(this.buildContentSection(section));
-      }
+    console.log(`Extracted ${contentSections.length} content sections from outline`);
+
+    for (const section of contentSections) {
+      sections.push(this.buildContentSection(section));
     }
 
     // 3. FAQ section
-    if (parsed.faqs.length > 0) {
-      const faqSection = this.buildFAQSection(parsed.faqs);
+    if (faqs.length > 0) {
+      const faqSection = this.buildFAQSection(faqs);
       if (faqSection) sections.push(faqSection);
     }
 
@@ -612,7 +546,7 @@ class ElementorBuilder {
       content: sections,
       page_settings: { hide_title: "yes" },
       version: "0.4",
-      title: parsed.title,
+      title: title,
       type: "page",
     };
   }
@@ -653,17 +587,17 @@ serve(async (req) => {
 
     console.log("Generating template for:", article.title);
 
-    // Parse markdown content
-    const parsed = parseMarkdown(article.content_markdown || '');
+    // Use article fields
+    const title = article.title || '';
+    const markdown = article.content_markdown || '';
+    const outline = article.outline_json || [];
+    const faqs = article.faq_json || [];
 
-    // If no title from markdown, use article title
-    if (!parsed.title) {
-      parsed.title = article.title;
-    }
+    console.log(`Article has ${outline.length} outline items and ${faqs.length} FAQs`);
 
     // Build Elementor JSON
     const builder = new ElementorBuilder();
-    const elementorJson = builder.build(parsed);
+    const elementorJson = builder.build(title, markdown, outline, faqs);
 
     console.log(`Generated ${elementorJson.content.length} sections`);
 
