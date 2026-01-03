@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Save, Loader2, FileJson, Eye } from "lucide-react";
+import { ArrowLeft, Save, Loader2, FileJson, Eye, FileCode } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +53,7 @@ export default function ArticleDetail() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
+  const [generatingHTML, setGeneratingHTML] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -168,6 +169,52 @@ export default function ArticleDetail() {
     }
   };
 
+  const generateHTML = async () => {
+    if (!id || !article) return;
+
+    setGeneratingHTML(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-html-export", {
+        body: { articleId: id },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "HTML Export generiert",
+        description: `Wunderschöne Landing Page erstellt! (${Math.round(data.htmlLength / 1024)}KB)`,
+      });
+
+      // Download HTML file
+      const { data: htmlExport } = await supabase
+        .from("html_exports")
+        .select("html_content")
+        .eq("id", data.exportId)
+        .single();
+
+      if (htmlExport) {
+        const blob = new Blob([htmlExport.html_content], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${formData.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error("Error generating HTML:", error);
+      toast({
+        title: "Fehler",
+        description: "HTML Export konnte nicht generiert werden.",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingHTML(false);
+    }
+  };
+
   if (loading) {
     return (
       <AppLayout>
@@ -220,6 +267,18 @@ export default function ArticleDetail() {
                 <FileJson className="h-4 w-4 mr-2" />
               )}
               Elementor Template
+            </Button>
+            <Button
+              variant="outline"
+              onClick={generateHTML}
+              disabled={generatingHTML || !formData.content_markdown}
+            >
+              {generatingHTML ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <FileCode className="h-4 w-4 mr-2" />
+              )}
+              HTML Export
             </Button>
             <Button onClick={saveArticle} disabled={saving}>
               {saving ? (
