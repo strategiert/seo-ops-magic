@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Save, Loader2, FileJson, Code } from "lucide-react";
+import { ArrowLeft, Save, Loader2, FileJson, Code, Globe } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { WordPressPublishDialog } from "@/components/articles/WordPressPublishDialog";
 
 interface Article {
   id: string;
@@ -54,6 +55,7 @@ export default function ArticleDetail() {
   const [saving, setSaving] = useState(false);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
   const [generatingHtml, setGeneratingHtml] = useState(false);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -280,6 +282,14 @@ export default function ArticleDetail() {
               )}
               Elementor Template
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => setPublishDialogOpen(true)}
+              disabled={!formData.content_markdown}
+            >
+              <Globe className="h-4 w-4 mr-2" />
+              WordPress
+            </Button>
             <Button onClick={saveArticle} disabled={saving}>
               {saving ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -427,6 +437,20 @@ export default function ArticleDetail() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* WordPress Publish Dialog */}
+      {article && (
+        <WordPressPublishDialog
+          open={publishDialogOpen}
+          onOpenChange={setPublishDialogOpen}
+          articleId={article.id}
+          articleTitle={article.title}
+          onPublished={() => {
+            // Optionally reload article to show updated status
+            loadArticle();
+          }}
+        />
+      )}
     </AppLayout>
   );
 }
