@@ -133,13 +133,58 @@ export async function getQueryGuidelines(queryId: string): Promise<NWGuidelines>
 
   if (error) throw new Error(error.message);
   if (data.error) throw new Error(data.error);
-  
+
+  // NeuronWriter API returns terms as object with content_basic and content_extended arrays
+  // Extract NLP keywords from both arrays
+  const basicTerms = data.terms?.content_basic?.map((term: any) => ({
+    term: term.t,
+    sugg_usage: Array.isArray(term.sugg_usage) ? term.sugg_usage[1] : term.sugg_usage,
+    usage_pc: term.usage_pc,
+    in_title: data.terms?.title?.some((t: any) => t.t === term.t),
+    in_h1: data.terms?.h1?.some((t: any) => t.t === term.t),
+  })) || [];
+
+  const extendedTerms = data.terms?.content_extended?.map((term: any) => ({
+    term: term.t,
+    sugg_usage: Array.isArray(term.sugg_usage) ? term.sugg_usage[1] : term.sugg_usage,
+    usage_pc: term.usage_pc,
+    in_title: data.terms?.title?.some((t: any) => t.t === term.t),
+    in_h1: data.terms?.h1?.some((t: any) => t.t === term.t),
+  })) || [];
+
+  // Combine both basic and extended terms
+  const allTerms = [...basicTerms, ...extendedTerms];
+
+  // Extract questions from ideas object
+  const allQuestions = [
+    ...(data.ideas?.suggest_questions?.map((q: any) => q.q) || []),
+    ...(data.ideas?.people_also_ask?.map((q: any) => q.q) || []),
+    ...(data.ideas?.content_questions?.map((q: any) => q.q) || []),
+  ];
+
+  // Extract metrics
+  const metrics = data.metrics ? {
+    words_min: data.metrics.word_count?.target ? Math.round(data.metrics.word_count.target * 0.9) : undefined,
+    words_max: data.metrics.word_count?.target ? Math.round(data.metrics.word_count.target * 1.1) : undefined,
+    words_avg: data.metrics.word_count?.target,
+    readability_avg: data.metrics.readability?.target,
+  } : undefined;
+
+  console.log("Processed NeuronWriter data:", {
+    basicTermsCount: basicTerms.length,
+    extendedTermsCount: extendedTerms.length,
+    totalTermsCount: allTerms.length,
+    questionsCount: allQuestions.length,
+    competitorsCount: data.competitors?.length || 0,
+    metrics
+  });
+
   return {
-    terms: data.terms || [],
+    terms: allTerms,
     terms_txt: data.terms_txt,
-    metrics: data.metrics,
-    ideas: data.ideas || [],
-    questions: data.questions || [],
+    metrics,
+    ideas: [], // Not used in current implementation
+    questions: allQuestions,
     competitors: data.competitors || [],
     status: data.status,
   };
