@@ -17,6 +17,7 @@ import {
   Link2,
   MessageSquare,
   Database,
+  RotateCcw,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ export function BrandIntelligenceSetup() {
     triggerAnalysis,
     updateProfile,
     syncVectorStore,
+    resetProfile,
     refreshProfile,
   } = useBrandProfile();
 
@@ -53,6 +55,8 @@ export function BrandIntelligenceSetup() {
   const [analyzing, setAnalyzing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [showCrawlForm, setShowCrawlForm] = useState(false);
 
   // Collapsible states
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -135,6 +139,30 @@ export function BrandIntelligenceSetup() {
       toast({
         title: "Fehler",
         description: result.error || "Synchronisation fehlgeschlagen.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleReset = async () => {
+    if (!confirm("Bist du sicher? Alle Brand-Daten werden gelöscht und der Crawl-Status zurückgesetzt.")) {
+      return;
+    }
+
+    setResetting(true);
+    const result = await resetProfile();
+    setResetting(false);
+    setShowCrawlForm(false);
+
+    if (result.success) {
+      toast({
+        title: "Zurückgesetzt",
+        description: "Das Brand-Profil wurde zurückgesetzt.",
+      });
+    } else {
+      toast({
+        title: "Fehler",
+        description: result.error || "Reset fehlgeschlagen.",
         variant: "destructive",
       });
     }
@@ -323,9 +351,36 @@ export function BrandIntelligenceSetup() {
         ) : (
           /* Brand Profile Display */
           <div className="space-y-4">
+            {/* Crawl Form (toggleable) */}
+            {showCrawlForm && (
+              <div className="p-4 border rounded-lg bg-muted/20 space-y-3">
+                <div className="space-y-2">
+                  <Label>Website-URL</Label>
+                  <Input
+                    placeholder={currentProject?.wp_url || `https://${currentProject?.domain || "beispiel.de"}`}
+                    value={websiteUrl}
+                    onChange={(e) => setWebsiteUrl(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leer lassen um die Projekt-Domain zu verwenden
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleStartCrawl} disabled={crawling}>
+                    {crawling && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    <Globe className="h-4 w-4 mr-2" />
+                    Crawlen starten
+                  </Button>
+                  <Button variant="ghost" onClick={() => setShowCrawlForm(false)}>
+                    Abbrechen
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex gap-2 flex-wrap">
-              <Button variant="outline" size="sm" onClick={handleStartCrawl} disabled={crawling}>
+              <Button variant="outline" size="sm" onClick={() => setShowCrawlForm(!showCrawlForm)} disabled={crawling}>
                 {crawling && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Neu crawlen
@@ -339,6 +394,11 @@ export function BrandIntelligenceSetup() {
                 {syncing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 <Database className="h-4 w-4 mr-2" />
                 Vector Store sync
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleReset} disabled={resetting} className="text-destructive hover:text-destructive">
+                {resetting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Zurücksetzen
               </Button>
             </div>
 
