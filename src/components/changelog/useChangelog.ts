@@ -43,7 +43,7 @@ export function useChangelog() {
       if (data && data.length > 0) {
         const parsed = data.map((item) => ({
           ...item,
-          entries: (item.entries as ChangelogEntry[]) || [],
+          entries: (item.entries as unknown as ChangelogEntry[]) || [],
         }));
         setChangelogs(parsed);
         setLatestVersion(parsed[0].version);
