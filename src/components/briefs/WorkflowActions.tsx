@@ -75,11 +75,25 @@ export function WorkflowActions({
 
     setGeneratingTemplate(true);
     try {
+      // Session-Check vor Edge Function Call
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log("Template generation - Session:", sessionData.session ? "EXISTS" : "NULL");
+      
+      if (!sessionData.session) {
+        throw new Error("Keine aktive Session. Bitte neu einloggen.");
+      }
+
       const { data, error } = await supabase.functions.invoke("generate-elementor-template", {
         body: { articleId },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Spezifische Behandlung für 401 Fehler
+        if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
+          throw new Error("Session abgelaufen. Bitte neu einloggen.");
+        }
+        throw error;
+      }
 
       if (data.error) {
         throw new Error(data.error);
