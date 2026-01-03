@@ -280,7 +280,19 @@ serve(async (req) => {
 
         if (statusResponse.ok) {
           const statusData = await statusResponse.json();
-          console.log(`brand-crawl: Status check ${attempts + 1}: ${statusData.status}`);
+          console.log(`brand-crawl: Status check ${attempts + 1}: ${statusData.status}, pages: ${statusData.data?.length || 0}`);
+
+          // Log more details for debugging
+          if (statusData.status === "completed") {
+            console.log(`brand-crawl: Firecrawl response:`, JSON.stringify({
+              total: statusData.total,
+              completed: statusData.completed,
+              creditsUsed: statusData.creditsUsed,
+              expiresAt: statusData.expiresAt,
+              dataLength: statusData.data?.length || 0,
+              firstPageUrl: statusData.data?.[0]?.url || "none"
+            }));
+          }
 
           if (statusData.status === "completed") {
             completed = true;
