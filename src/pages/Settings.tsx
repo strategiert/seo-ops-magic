@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { supabase } from "@/integrations/supabase/client";
 import { NeuronWriterSetup } from "@/components/settings/NeuronWriterSetup";
+import { WordPressSetup } from "@/components/settings/WordPressSetup";
 
 const LANGUAGES = [
   { value: "de", label: "Deutsch" },
@@ -195,19 +196,8 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            <Card className="opacity-60">
-              <CardHeader>
-                <CardTitle className="text-muted-foreground">WordPress API</CardTitle>
-                <CardDescription>
-                  Direkte Veröffentlichung und Elementor Import (Demnächst)
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button variant="outline" disabled>
-                  Bald verfügbar
-                </Button>
-              </CardContent>
-            </Card>
+            {/* WordPress Integration */}
+            <WordPressSetup />
           </TabsContent>
 
           <TabsContent value="general" className="space-y-4 mt-4">

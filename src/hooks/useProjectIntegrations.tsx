@@ -12,8 +12,17 @@ export interface NeuronWriterIntegration {
   lastSyncAt: string | null;
 }
 
+export interface WordPressIntegration {
+  id: string;
+  isConnected: boolean;
+  wpUsername: string | null;
+  wpSiteName: string | null;
+  wpIsVerified: boolean;
+}
+
 export interface ProjectIntegrations {
   neuronwriter: NeuronWriterIntegration | null;
+  wordpress: WordPressIntegration | null;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -22,12 +31,14 @@ export interface ProjectIntegrations {
 export function useProjectIntegrations(): ProjectIntegrations {
   const { currentProject } = useWorkspace();
   const [neuronwriter, setNeuronwriter] = useState<NeuronWriterIntegration | null>(null);
+  const [wordpress, setWordpress] = useState<WordPressIntegration | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchIntegrations = useCallback(async () => {
     if (!currentProject?.id) {
       setNeuronwriter(null);
+      setWordpress(null);
       setLoading(false);
       return;
     }
@@ -36,32 +47,48 @@ export function useProjectIntegrations(): ProjectIntegrations {
     setError(null);
 
     try {
+      // Fetch all integrations for this project
       const { data, error: fetchError } = await supabase
         .from("integrations")
         .select("*")
-        .eq("project_id", currentProject.id)
-        .eq("type", "neuronwriter")
-        .maybeSingle();
+        .eq("project_id", currentProject.id);
 
       if (fetchError) throw fetchError;
 
-      if (data) {
+      // Process NeuronWriter integration
+      const nwData = data?.find((i) => i.type === "neuronwriter");
+      if (nwData) {
         setNeuronwriter({
-          id: data.id,
-          isConnected: data.is_connected ?? false,
-          nwProjectId: data.nw_project_id,
-          nwProjectName: data.nw_project_name,
-          nwLanguage: data.nw_language ?? "de",
-          nwEngine: data.nw_engine ?? "google.de",
-          lastSyncAt: data.last_sync_at,
+          id: nwData.id,
+          isConnected: nwData.is_connected ?? false,
+          nwProjectId: nwData.nw_project_id,
+          nwProjectName: nwData.nw_project_name,
+          nwLanguage: nwData.nw_language ?? "de",
+          nwEngine: nwData.nw_engine ?? "google.de",
+          lastSyncAt: nwData.last_sync_at,
         });
       } else {
         setNeuronwriter(null);
+      }
+
+      // Process WordPress integration
+      const wpData = data?.find((i) => i.type === "wordpress");
+      if (wpData) {
+        setWordpress({
+          id: wpData.id,
+          isConnected: wpData.is_connected ?? false,
+          wpUsername: (wpData as any).wp_username ?? null,
+          wpSiteName: (wpData as any).wp_site_name ?? null,
+          wpIsVerified: (wpData as any).wp_is_verified ?? false,
+        });
+      } else {
+        setWordpress(null);
       }
     } catch (err) {
       console.error("Error fetching integrations:", err);
       setError(err instanceof Error ? err.message : "Fehler beim Laden der Integrationen");
       setNeuronwriter(null);
+      setWordpress(null);
     } finally {
       setLoading(false);
     }
@@ -73,6 +100,7 @@ export function useProjectIntegrations(): ProjectIntegrations {
 
   return {
     neuronwriter,
+    wordpress,
     loading,
     error,
     refetch: fetchIntegrations,
@@ -137,4 +165,59 @@ export async function updateNeuronWriterSyncTime(integrationId: string): Promise
     .eq("id", integrationId);
 
   if (error) throw error;
+}
+
+export async function saveWordPressIntegration(
+  projectId: string,
+  config: {
+    wpUrl: string;
+    wpUsername: string;
+    wpAppPassword: string;
+    wpSiteName: string;
+  }
+): Promise<void> {
+  // First, update the project's wp_url
+  const { error: projectError } = await supabase
+    .from("projects")
+    .update({ wp_url: config.wpUrl })
+    .eq("id", projectId);
+
+  if (projectError) throw projectError;
+
+  // Check if integration already exists
+  const { data: existing } = await supabase
+    .from("integrations")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("type", "wordpress")
+    .maybeSingle();
+
+  const integrationData = {
+    wp_username: config.wpUsername,
+    wp_app_password: config.wpAppPassword,
+    wp_site_name: config.wpSiteName,
+    wp_is_verified: true,
+    is_connected: true,
+  };
+
+  if (existing) {
+    // Update existing
+    const { error } = await supabase
+      .from("integrations")
+      .update(integrationData)
+      .eq("id", existing.id);
+
+    if (error) throw error;
+  } else {
+    // Insert new
+    const { error } = await supabase
+      .from("integrations")
+      .insert({
+        project_id: projectId,
+        type: "wordpress",
+        ...integrationData,
+      });
+
+    if (error) throw error;
+  }
 }
