@@ -1,28 +1,17 @@
 # Lovable - Datenbank & Deployment Anleitung
 
-## Automatisches Edge Function Deployment (GitHub Actions)
+## Edge Function Deployment
 
-Edge Functions werden jetzt automatisch bei jedem Push deployed!
+Bei Lovable Cloud werden Edge Functions über Lovable selbst deployed.
 
-### Einmalige Einrichtung: GitHub Secrets
-
-Gehe zu **GitHub Repository → Settings → Secrets and variables → Actions** und füge hinzu:
-
-| Secret Name | Wert | Wo finden? |
-|-------------|------|------------|
-| `SUPABASE_ACCESS_TOKEN` | Dein persönlicher Access Token | [Supabase Dashboard → Account → Access Tokens](https://supabase.com/dashboard/account/tokens) |
-| `SUPABASE_PROJECT_REF` | Projekt-Referenz (z.B. `abcdefghijklmnop`) | Supabase Dashboard → Project Settings → General → Reference ID |
-
-### Wie es funktioniert
-
-1. **Automatisch:** Bei jedem Push zu `main` oder `feature/wordpress-integration` mit Änderungen in `supabase/functions/`
-2. **Manuell:** GitHub → Actions → "Deploy Supabase Edge Functions" → "Run workflow"
-
-### Manuelles Deployment (falls nötig)
-
-Falls GitHub Actions nicht funktioniert, sage Lovable:
+**Sage Lovable:**
 ```
-Deploy all Supabase Edge Functions from the repository
+Pull the latest changes and deploy all edge functions from supabase/functions/
+```
+
+Oder spezifisch:
+```
+Deploy the run-migrations edge function from supabase/functions/run-migrations/
 ```
 
 ---
