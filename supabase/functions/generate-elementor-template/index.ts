@@ -25,11 +25,12 @@ const BRAND = {
   font_sizes: {
     h1: { desktop: 52, mobile: 34 },
     h2: { desktop: 38, mobile: 28 },
+    h3: { desktop: 28, mobile: 22 },
     body: { desktop: 18, mobile: 16 },
   },
 };
 
-// ID Generator
+// ID Generator - lowercase, 7-8 chars, alphanumeric only
 class IDGenerator {
   private usedIds = new Set<string>();
 
@@ -38,11 +39,13 @@ class IDGenerator {
     for (let attempt = 0; attempt < 100; attempt++) {
       let id = "";
       if (prefix) {
-        id = prefix.toLowerCase().slice(0, 3);
+        // Use first 3 chars of prefix + 4 random chars
+        id = prefix.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 3);
         for (let i = 0; i < 4; i++) {
           id += chars[Math.floor(Math.random() * chars.length)];
         }
       } else {
+        // Generate 7 random chars
         for (let i = 0; i < 7; i++) {
           id += chars[Math.floor(Math.random() * chars.length)];
         }
@@ -53,6 +56,565 @@ class IDGenerator {
       }
     }
     throw new Error("Failed to generate unique ID");
+  }
+}
+
+// Markdown Parser
+interface ParsedContent {
+  title: string;
+  sections: ContentSection[];
+  faqs: FAQ[];
+}
+
+interface ContentSection {
+  heading: string;
+  level: number;
+  content: string[];
+  lists: string[][];
+}
+
+interface FAQ {
+  question: string;
+  answer: string;
+}
+
+function parseMarkdown(markdown: string): ParsedContent {
+  const lines = markdown.split('\n');
+  const sections: ContentSection[] = [];
+  const faqs: FAQ[] = [];
+  let title = '';
+  let currentSection: ContentSection | null = null;
+  let currentList: string[] = [];
+  let inFaqSection = false;
+  let currentFaq: FAQ | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    // Parse H1 (title)
+    if (line.startsWith('# ')) {
+      title = line.substring(2).trim();
+      continue;
+    }
+
+    // Parse H2
+    if (line.startsWith('## ')) {
+      // Save current section and list
+      if (currentList.length > 0 && currentSection) {
+        currentSection.lists.push([...currentList]);
+        currentList = [];
+      }
+      if (currentSection) {
+        sections.push(currentSection);
+      }
+
+      const heading = line.substring(3).trim();
+      inFaqSection = heading.toLowerCase().includes('faq') ||
+                     heading.toLowerCase().includes('häufig') ||
+                     heading.toLowerCase().includes('fragen');
+
+      currentSection = {
+        heading,
+        level: 2,
+        content: [],
+        lists: [],
+      };
+      continue;
+    }
+
+    // Parse H3
+    if (line.startsWith('### ')) {
+      // Save current list
+      if (currentList.length > 0 && currentSection) {
+        currentSection.lists.push([...currentList]);
+        currentList = [];
+      }
+
+      const heading = line.substring(4).trim();
+
+      // If in FAQ section, treat H3 as question
+      if (inFaqSection) {
+        if (currentFaq) {
+          faqs.push(currentFaq);
+        }
+        currentFaq = { question: heading, answer: '' };
+      } else {
+        currentSection = {
+          heading,
+          level: 3,
+          content: [],
+          lists: [],
+        };
+      }
+      continue;
+    }
+
+    // Parse list items
+    if (line.startsWith('- ') || line.startsWith('* ') || line.match(/^\d+\. /)) {
+      const item = line.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '').trim();
+      currentList.push(item);
+      continue;
+    }
+
+    // Regular paragraph
+    if (line.length > 0) {
+      if (inFaqSection && currentFaq) {
+        currentFaq.answer += (currentFaq.answer ? ' ' : '') + line;
+      } else if (currentSection) {
+        currentSection.content.push(line);
+      }
+    } else {
+      // Empty line - save current list
+      if (currentList.length > 0 && currentSection) {
+        currentSection.lists.push([...currentList]);
+        currentList = [];
+      }
+    }
+  }
+
+  // Save last items
+  if (currentList.length > 0 && currentSection) {
+    currentSection.lists.push([...currentList]);
+  }
+  if (currentSection) {
+    sections.push(currentSection);
+  }
+  if (currentFaq) {
+    faqs.push(currentFaq);
+  }
+
+  return { title, sections, faqs };
+}
+
+// Section Builder
+class ElementorBuilder {
+  private idGen: IDGenerator;
+  private bgIndex = 0;
+  private backgrounds = ['gradient', 'white', 'light', 'light', 'white', 'light', 'white', 'white', 'light', 'white'];
+
+  constructor() {
+    this.idGen = new IDGenerator();
+  }
+
+  private getNextBackground(): { type: string; color: string; isGradient: boolean } {
+    const bg = this.backgrounds[this.bgIndex % this.backgrounds.length];
+    this.bgIndex++;
+
+    if (bg === 'gradient') {
+      return { type: 'gradient', color: BRAND.colors.primary, isGradient: true };
+    } else if (bg === 'white') {
+      return { type: 'classic', color: BRAND.colors.background_white, isGradient: false };
+    } else {
+      return { type: 'classic', color: BRAND.colors.background_light, isGradient: false };
+    }
+  }
+
+  buildHeroSection(title: string) {
+    return {
+      id: this.idGen.generate("hero"),
+      elType: "section",
+      isInner: false,
+      settings: {
+        layout: "full_width",
+        background_background: "gradient",
+        background_color: BRAND.colors.primary,
+        background_color_b: "#001a33",
+        background_gradient_type: "linear",
+        background_gradient_angle: { unit: "deg", size: 135 },
+        padding: { unit: "px", top: "100", right: "20", bottom: "100", left: "20", isLinked: false },
+        padding_mobile: { unit: "px", top: "60", right: "20", bottom: "60", left: "20", isLinked: false },
+      },
+      elements: [
+        {
+          id: this.idGen.generate("col"),
+          elType: "column",
+          isInner: false,
+          settings: { _column_size: 100, _inline_size: null },
+          elements: [
+            {
+              id: this.idGen.generate("h1"),
+              elType: "widget",
+              widgetType: "heading",
+              isInner: false,
+              settings: {
+                title: title.replace(/\n/g, '<br>'),
+                header_size: "h1",
+                title_color: "#ffffff",
+                typography_typography: "custom",
+                typography_font_family: BRAND.typography.heading_font,
+                typography_font_weight: BRAND.typography.heading_weight,
+                typography_font_size: { unit: "px", size: BRAND.font_sizes.h1.desktop, sizes: [] },
+                typography_font_size_mobile: { unit: "px", size: BRAND.font_sizes.h1.mobile, sizes: [] },
+                align: "center",
+                align_mobile: "center",
+              },
+              elements: [],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  buildContentSection(section: ContentSection) {
+    const bg = this.getNextBackground();
+    const textColor = bg.isGradient ? "#ffffff" : BRAND.colors.text_dark;
+    const headingColor = bg.isGradient ? "#ffffff" : (section.level === 2 ? BRAND.colors.primary : BRAND.colors.secondary);
+
+    const widgets: any[] = [];
+
+    // Add heading
+    widgets.push({
+      id: this.idGen.generate("head"),
+      elType: "widget",
+      widgetType: "heading",
+      isInner: false,
+      settings: {
+        title: section.heading,
+        header_size: section.level === 2 ? "h2" : "h3",
+        title_color: headingColor,
+        typography_typography: "custom",
+        typography_font_family: BRAND.typography.heading_font,
+        typography_font_weight: BRAND.typography.heading_weight,
+        typography_font_size: section.level === 2
+          ? { unit: "px", size: BRAND.font_sizes.h2.desktop, sizes: [] }
+          : { unit: "px", size: BRAND.font_sizes.h3.desktop, sizes: [] },
+        typography_font_size_mobile: section.level === 2
+          ? { unit: "px", size: BRAND.font_sizes.h2.mobile, sizes: [] }
+          : { unit: "px", size: BRAND.font_sizes.h3.mobile, sizes: [] },
+      },
+      elements: [],
+    });
+
+    // Add content paragraphs
+    if (section.content.length > 0) {
+      const contentHtml = section.content.map(p => `<p>${p}</p>`).join('');
+      widgets.push({
+        id: this.idGen.generate("text"),
+        elType: "widget",
+        widgetType: "text-editor",
+        isInner: false,
+        settings: {
+          editor: contentHtml,
+          text_color: textColor,
+          typography_typography: "custom",
+          typography_font_family: BRAND.typography.body_font,
+          typography_font_size: { unit: "px", size: BRAND.font_sizes.body.desktop, sizes: [] },
+          typography_font_size_mobile: { unit: "px", size: BRAND.font_sizes.body.mobile, sizes: [] },
+        },
+        elements: [],
+      });
+    }
+
+    // Add lists as icon-list
+    for (const list of section.lists) {
+      const iconListItems = list.map((item) => ({
+        _id: this.idGen.generate("item"),
+        text: item,
+        icon: { value: "fas fa-check-circle", library: "fa-solid" },
+      }));
+
+      widgets.push({
+        id: this.idGen.generate("list"),
+        elType: "widget",
+        widgetType: "icon-list",
+        isInner: false,
+        settings: {
+          icon_list: iconListItems,
+          icon_color: bg.isGradient ? BRAND.colors.accent : BRAND.colors.secondary,
+          text_color: textColor,
+          typography_typography: "custom",
+          typography_font_family: BRAND.typography.body_font,
+          typography_font_size: { unit: "px", size: BRAND.font_sizes.body.desktop, sizes: [] },
+          typography_font_size_mobile: { unit: "px", size: BRAND.font_sizes.body.mobile, sizes: [] },
+        },
+        elements: [],
+      });
+    }
+
+    return {
+      id: this.idGen.generate("sec"),
+      elType: "section",
+      isInner: false,
+      settings: {
+        background_background: bg.type,
+        background_color: bg.color,
+        ...(bg.isGradient && {
+          background_color_b: "#001a33",
+          background_gradient_type: "linear",
+          background_gradient_angle: { unit: "deg", size: 135 },
+        }),
+        padding: { unit: "px", top: "60", right: "20", bottom: "60", left: "20", isLinked: false },
+        padding_mobile: { unit: "px", top: "40", right: "20", bottom: "40", left: "20", isLinked: false },
+      },
+      elements: [
+        {
+          id: this.idGen.generate("col"),
+          elType: "column",
+          isInner: false,
+          settings: { _column_size: 100, _inline_size: null },
+          elements: widgets,
+        },
+      ],
+    };
+  }
+
+  buildFeatureCardsSection(section: ContentSection) {
+    if (section.lists.length === 0) {
+      return this.buildContentSection(section);
+    }
+
+    const bg = this.getNextBackground();
+    const columns: any[] = [];
+
+    // Take first list and create cards (max 4)
+    const items = section.lists[0].slice(0, 4);
+    const columnSize = items.length === 3 ? 33.333 : (items.length === 4 ? 25 : 50);
+
+    for (const item of items) {
+      columns.push({
+        id: this.idGen.generate("col"),
+        elType: "column",
+        isInner: false,
+        settings: {
+          _column_size: columnSize,
+          _inline_size: null,
+          background_background: "classic",
+          background_color: "#ffffff",
+          padding: { unit: "px", top: "30", right: "25", bottom: "30", left: "25", isLinked: false },
+          margin: { unit: "px", top: "10", right: "10", bottom: "10", left: "10", isLinked: true },
+          border_radius: { unit: "px", top: "8", right: "8", bottom: "8", left: "8", isLinked: true },
+          box_shadow_box_shadow_type: "yes",
+          box_shadow_box_shadow: {
+            horizontal: 0,
+            vertical: 5,
+            blur: 20,
+            spread: 0,
+            color: "rgba(0,0,0,0.08)"
+          },
+        },
+        elements: [
+          {
+            id: this.idGen.generate("text"),
+            elType: "widget",
+            widgetType: "text-editor",
+            isInner: false,
+            settings: {
+              editor: `<p>${item}</p>`,
+              text_color: BRAND.colors.text_dark,
+              typography_typography: "custom",
+              typography_font_family: BRAND.typography.body_font,
+              typography_font_size: { unit: "px", size: BRAND.font_sizes.body.desktop, sizes: [] },
+              typography_font_size_mobile: { unit: "px", size: BRAND.font_sizes.body.mobile, sizes: [] },
+            },
+            elements: [],
+          },
+        ],
+      });
+    }
+
+    return {
+      id: this.idGen.generate("sec"),
+      elType: "section",
+      isInner: false,
+      settings: {
+        background_background: bg.type,
+        background_color: bg.color,
+        padding: { unit: "px", top: "60", right: "20", bottom: "60", left: "20", isLinked: false },
+        padding_mobile: { unit: "px", top: "40", right: "20", bottom: "40", left: "20", isLinked: false },
+        gap: "wide",
+        column_gap: { unit: "px", size: 30, sizes: [] },
+        column_gap_mobile: { unit: "px", size: 20, sizes: [] },
+      },
+      elements: columns,
+    };
+  }
+
+  buildFAQSection(faqs: FAQ[]) {
+    if (faqs.length === 0) return null;
+
+    // Build accordion items - CRITICAL: both accordion AND tabs arrays must be identical
+    const accordionItems = faqs.map((faq) => {
+      const id = this.idGen.generate("faq");
+      return {
+        _id: id,
+        accordion_title: faq.question,
+        accordion_content: `<p>${faq.answer}</p>`,
+      };
+    });
+
+    // Build tabs items - SAME data as accordion!
+    const tabsItems = accordionItems.map((item) => ({
+      _id: item._id,
+      tab_title: item.accordion_title,
+      tab_content: item.accordion_content,
+    }));
+
+    return {
+      id: this.idGen.generate("sec"),
+      elType: "section",
+      isInner: false,
+      settings: {
+        background_background: "classic",
+        background_color: BRAND.colors.background_light,
+        padding: { unit: "px", top: "60", right: "20", bottom: "60", left: "20", isLinked: false },
+        padding_mobile: { unit: "px", top: "40", right: "20", bottom: "40", left: "20", isLinked: false },
+      },
+      elements: [
+        {
+          id: this.idGen.generate("col"),
+          elType: "column",
+          isInner: false,
+          settings: { _column_size: 100, _inline_size: null },
+          elements: [
+            {
+              id: this.idGen.generate("head"),
+              elType: "widget",
+              widgetType: "heading",
+              isInner: false,
+              settings: {
+                title: "Häufig gestellte Fragen",
+                header_size: "h2",
+                title_color: BRAND.colors.primary,
+                typography_typography: "custom",
+                typography_font_family: BRAND.typography.heading_font,
+                typography_font_weight: BRAND.typography.heading_weight,
+                typography_font_size: { unit: "px", size: BRAND.font_sizes.h2.desktop, sizes: [] },
+                typography_font_size_mobile: { unit: "px", size: BRAND.font_sizes.h2.mobile, sizes: [] },
+              },
+              elements: [],
+            },
+            {
+              id: this.idGen.generate("acc"),
+              elType: "widget",
+              widgetType: "accordion",
+              isInner: false,
+              settings: {
+                accordion: accordionItems,
+                tabs: tabsItems, // CRITICAL: Must match accordion array!
+                title_color: BRAND.colors.primary,
+                content_color: BRAND.colors.text_dark,
+                icon_color: BRAND.colors.secondary,
+                typography_typography: "custom",
+                typography_font_family: BRAND.typography.heading_font,
+              },
+              elements: [],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  buildCTASection() {
+    return {
+      id: this.idGen.generate("sec"),
+      elType: "section",
+      isInner: false,
+      settings: {
+        background_background: "gradient",
+        background_color: BRAND.colors.primary,
+        background_color_b: "#001a33",
+        background_gradient_type: "linear",
+        background_gradient_angle: { unit: "deg", size: 135 },
+        padding: { unit: "px", top: "80", right: "20", bottom: "80", left: "20", isLinked: false },
+        padding_mobile: { unit: "px", top: "50", right: "20", bottom: "50", left: "20", isLinked: false },
+      },
+      elements: [
+        {
+          id: this.idGen.generate("col"),
+          elType: "column",
+          isInner: false,
+          settings: { _column_size: 100, _inline_size: null },
+          elements: [
+            {
+              id: this.idGen.generate("head"),
+              elType: "widget",
+              widgetType: "heading",
+              isInner: false,
+              settings: {
+                title: "Jetzt Beratung anfragen",
+                header_size: "h2",
+                title_color: "#ffffff",
+                typography_typography: "custom",
+                typography_font_family: BRAND.typography.heading_font,
+                typography_font_weight: BRAND.typography.heading_weight,
+                typography_font_size: { unit: "px", size: BRAND.font_sizes.h2.desktop, sizes: [] },
+                typography_font_size_mobile: { unit: "px", size: BRAND.font_sizes.h2.mobile, sizes: [] },
+                align: "center",
+              },
+              elements: [],
+            },
+            {
+              id: this.idGen.generate("btn"),
+              elType: "widget",
+              widgetType: "button",
+              isInner: false,
+              settings: {
+                text: "Kontakt aufnehmen",
+                align: "center",
+                button_background_color: BRAND.colors.secondary,
+                button_text_color: "#ffffff",
+                typography_typography: "custom",
+                typography_font_family: BRAND.typography.heading_font,
+                typography_font_size: { unit: "px", size: 18, sizes: [] },
+                border_radius: { unit: "px", top: "50", right: "50", bottom: "50", left: "50", isLinked: true },
+                button_padding: { unit: "px", top: "18", right: "35", bottom: "18", left: "35", isLinked: false },
+                box_shadow_box_shadow_type: "yes",
+                box_shadow_box_shadow: {
+                  horizontal: 0,
+                  vertical: 8,
+                  blur: 20,
+                  spread: 0,
+                  color: "rgba(255,102,0,0.4)"
+                },
+              },
+              elements: [],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  build(parsed: ParsedContent): any {
+    const sections: any[] = [];
+
+    // 1. Hero section
+    sections.push(this.buildHeroSection(parsed.title));
+
+    // 2. Content sections
+    for (const section of parsed.sections) {
+      // Skip FAQ sections (handled separately)
+      if (section.heading.toLowerCase().includes('faq') ||
+          section.heading.toLowerCase().includes('häufig')) {
+        continue;
+      }
+
+      // If section has multiple list items, consider it as feature cards
+      if (section.lists.length > 0 && section.lists[0].length >= 3) {
+        sections.push(this.buildFeatureCardsSection(section));
+      } else {
+        sections.push(this.buildContentSection(section));
+      }
+    }
+
+    // 3. FAQ section
+    if (parsed.faqs.length > 0) {
+      const faqSection = this.buildFAQSection(parsed.faqs);
+      if (faqSection) sections.push(faqSection);
+    }
+
+    // 4. CTA section
+    sections.push(this.buildCTASection());
+
+    return {
+      content: sections,
+      page_settings: { hide_title: "yes" },
+      version: "0.4",
+      title: parsed.title,
+      type: "page",
+    };
   }
 }
 
@@ -91,55 +653,19 @@ serve(async (req) => {
 
     console.log("Generating template for:", article.title);
 
-    // Simple template for now - just create basic structure
-    const idGen = new IDGenerator();
+    // Parse markdown content
+    const parsed = parseMarkdown(article.content_markdown || '');
 
-    const elementorJson = {
-      content: [
-        {
-          id: idGen.generate("hero"),
-          elType: "section",
-          isInner: false,
-          settings: {
-            layout: "full_width",
-            background_background: "gradient",
-            background_color: BRAND.colors.primary,
-            background_color_b: "#001a33",
-            background_gradient_type: "linear",
-            padding: { unit: "px", top: "100", right: "20", bottom: "100", left: "20", isLinked: false },
-          },
-          elements: [
-            {
-              id: idGen.generate("col"),
-              elType: "column",
-              isInner: false,
-              settings: { _column_size: 100, _inline_size: null },
-              elements: [
-                {
-                  id: idGen.generate("h1"),
-                  elType: "widget",
-                  widgetType: "heading",
-                  isInner: false,
-                  settings: {
-                    title: article.title,
-                    header_size: "h1",
-                    title_color: "#ffffff",
-                    typography_typography: "custom",
-                    typography_font_family: BRAND.typography.heading_font,
-                    typography_font_size: { unit: "px", size: BRAND.font_sizes.h1.desktop, sizes: [] },
-                  },
-                  elements: [],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-      page_settings: { hide_title: "yes" },
-      version: "0.4",
-      title: article.title,
-      type: "page",
-    };
+    // If no title from markdown, use article title
+    if (!parsed.title) {
+      parsed.title = article.title;
+    }
+
+    // Build Elementor JSON
+    const builder = new ElementorBuilder();
+    const elementorJson = builder.build(parsed);
+
+    console.log(`Generated ${elementorJson.content.length} sections`);
 
     // Save template
     const { data: template, error: templateError } = await supabase
@@ -167,6 +693,7 @@ serve(async (req) => {
         success: true,
         templateId: template.id,
         name: template.name,
+        sectionsGenerated: elementorJson.content.length,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
