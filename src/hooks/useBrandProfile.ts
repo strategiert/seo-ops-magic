@@ -100,6 +100,7 @@ export interface UseBrandProfileReturn {
   triggerAnalysis: () => Promise<{ success: boolean; error?: string }>;
   updateProfile: (updates: Partial<BrandProfile>) => Promise<{ success: boolean; error?: string }>;
   syncVectorStore: () => Promise<{ success: boolean; error?: string }>;
+  resetProfile: () => Promise<{ success: boolean; error?: string }>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -348,6 +349,67 @@ export function useBrandProfile(): UseBrandProfileReturn {
     }
   }, [currentProject?.id, brandProfile?.id, loadProfile]);
 
+  // Reset brand profile completely
+  const resetProfile = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    if (!brandProfile?.id) {
+      return { success: false, error: "Kein Brand-Profil vorhanden" };
+    }
+
+    try {
+      // Delete all crawl data
+      await supabase
+        .from("brand_crawl_data")
+        .delete()
+        .eq("brand_profile_id", brandProfile.id);
+
+      // Delete vector documents
+      await supabase
+        .from("brand_vector_documents")
+        .delete()
+        .eq("brand_profile_id", brandProfile.id);
+
+      // Reset brand profile to initial state
+      const { error: updateError } = await supabase
+        .from("brand_profiles")
+        .update({
+          brand_name: null,
+          tagline: null,
+          mission_statement: null,
+          brand_story: null,
+          brand_voice: { tone: [], personality_traits: [], writing_style: {} },
+          products: [],
+          services: [],
+          personas: [],
+          brand_keywords: { primary: [], secondary: [], long_tail: [] },
+          competitors: [],
+          visual_identity: {},
+          internal_links: [],
+          openai_vector_store_id: null,
+          crawl_status: "pending",
+          crawl_error: null,
+          last_crawl_at: null,
+          last_analysis_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", brandProfile.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Refresh profile
+      await loadProfile();
+
+      return { success: true };
+    } catch (err) {
+      console.error("Error resetting brand profile:", err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "Reset fehlgeschlagen",
+      };
+    }
+  }, [brandProfile?.id, loadProfile]);
+
   // Auto-load profile when project changes
   useEffect(() => {
     loadProfile();
@@ -376,6 +438,7 @@ export function useBrandProfile(): UseBrandProfileReturn {
     triggerAnalysis,
     updateProfile,
     syncVectorStore,
+    resetProfile,
     refreshProfile: loadProfile,
   };
 }
