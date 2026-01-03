@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.generate-html-export]
 verify_jwt = false
+
+[functions.run-migrations]
+verify_jwt = false
