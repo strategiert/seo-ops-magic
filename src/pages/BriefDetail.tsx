@@ -245,9 +245,12 @@ export default function BriefDetail() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setImportModalOpen(true)}>
+            <Button
+              variant={brief.nw_guidelines ? "default" : "outline"}
+              onClick={() => setImportModalOpen(true)}
+            >
               <Download className="h-4 w-4 mr-2" />
-              NW Guidelines
+              {brief.nw_guidelines ? "Regenerieren" : "NW Guidelines"}
             </Button>
             <Button onClick={saveBrief} disabled={saving}>
               {saving ? (
