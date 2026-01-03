@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Plus, Loader2 } from "lucide-react";
+import { FileText, Plus, Loader2, Globe, CheckCircle2, XCircle } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -12,9 +13,25 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWordPressBulkPublish } from "@/hooks/useWordPress";
 
 interface Article {
   id: string;
@@ -45,9 +62,58 @@ export default function Articles() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentProject } = useWorkspace();
+  const { publishing, results, publishMultiple } = useWordPressBulkPublish();
 
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkPublishOpen, setBulkPublishOpen] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState<"publish" | "draft">("draft");
+
+  const toggleSelect = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === articles.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(articles.map((a) => a.id)));
+    }
+  };
+
+  const handleBulkPublish = async () => {
+    const articleIds = Array.from(selectedIds);
+    const publishResults = await publishMultiple(articleIds, { status: bulkStatus });
+
+    const successCount = Array.from(publishResults.values()).filter((r) => r.success).length;
+    const failCount = articleIds.length - successCount;
+
+    if (failCount === 0) {
+      toast({
+        title: "Alle Artikel übertragen",
+        description: `${successCount} Artikel wurden zu WordPress übertragen.`,
+      });
+      setBulkPublishOpen(false);
+      setSelectedIds(new Set());
+      loadArticles();
+    } else {
+      toast({
+        title: "Teilweise fehlgeschlagen",
+        description: `${successCount} erfolgreich, ${failCount} fehlgeschlagen.`,
+        variant: "destructive",
+      });
+    }
+  };
 
   useEffect(() => {
     if (currentProject?.id) {
@@ -90,6 +156,28 @@ export default function Articles() {
               Generierte und bearbeitete Artikel
             </p>
           </div>
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                {selectedIds.size} ausgewählt
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setBulkPublishOpen(true)}
+              >
+                <Globe className="h-4 w-4 mr-2" />
+                Zu WordPress
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Auswahl aufheben
+              </Button>
+            </div>
+          )}
         </div>
 
         {loading ? (
@@ -113,6 +201,12 @@ export default function Articles() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedIds.size === articles.length && articles.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
                   <TableHead>Titel</TableHead>
                   <TableHead>Keyword</TableHead>
                   <TableHead>Status</TableHead>
@@ -127,6 +221,9 @@ export default function Articles() {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => navigate(`/articles/${article.id}`)}
                   >
+                    <TableCell onClick={(e) => toggleSelect(article.id, e)}>
+                      <Checkbox checked={selectedIds.has(article.id)} />
+                    </TableCell>
                     <TableCell className="font-medium">{article.title}</TableCell>
                     <TableCell className="font-mono text-sm text-muted-foreground">
                       {article.primary_keyword || "-"}
@@ -147,6 +244,72 @@ export default function Articles() {
           </div>
         )}
       </div>
+
+      {/* Bulk Publish Dialog */}
+      <Dialog open={bulkPublishOpen} onOpenChange={setBulkPublishOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5" />
+              {selectedIds.size} Artikel zu WordPress übertragen
+            </DialogTitle>
+            <DialogDescription>
+              Die ausgewählten Artikel werden zu WordPress übertragen.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <Select value={bulkStatus} onValueChange={(v) => setBulkStatus(v as "publish" | "draft")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Als Entwurf speichern</SelectItem>
+                  <SelectItem value="publish">Sofort veröffentlichen</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {publishing && (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Übertrage Artikel...</p>
+                <div className="space-y-1">
+                  {Array.from(selectedIds).map((id) => {
+                    const article = articles.find((a) => a.id === id);
+                    const result = results.get(id);
+                    return (
+                      <div key={id} className="flex items-center gap-2 text-sm">
+                        {result ? (
+                          result.success ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <XCircle className="h-4 w-4 text-destructive" />
+                          )
+                        ) : (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        )}
+                        <span className="truncate">{article?.title || id}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkPublishOpen(false)} disabled={publishing}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleBulkPublish} disabled={publishing}>
+              {publishing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {publishing ? "Übertrage..." : "Übertragen"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
