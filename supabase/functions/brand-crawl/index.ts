@@ -26,8 +26,8 @@ interface FirecrawlPage {
 }
 
 // Detect page type from URL and content
-function detectPageType(url: string, title: string, content: string): string {
-  const lowerUrl = url.toLowerCase();
+function detectPageType(url: string | undefined, title: string | undefined, content: string | undefined): string {
+  const lowerUrl = (url || "").toLowerCase();
   const lowerTitle = (title || "").toLowerCase();
   const lowerContent = (content || "").substring(0, 2000).toLowerCase();
 
@@ -321,7 +321,13 @@ serve(async (req) => {
       console.log(`brand-crawl: Processing ${pages.length} pages`);
 
       for (const page of pages) {
-        const pageType = detectPageType(page.url, page.metadata?.title || "", page.markdown || "");
+        // Skip pages without URL
+        if (!page.url) {
+          console.log("brand-crawl: Skipping page without URL");
+          continue;
+        }
+
+        const pageType = detectPageType(page.url, page.metadata?.title, page.markdown);
         const headings = extractHeadings(page.markdown || "");
         const links = extractLinks(websiteUrl, page.links || []);
 
@@ -357,11 +363,11 @@ serve(async (req) => {
         .update({
           crawl_status: "analyzing",
           internal_links: pages
-            .filter(p => detectPageType(p.url, p.metadata?.title || "", p.markdown || "") !== "blog")
+            .filter(p => p.url && detectPageType(p.url, p.metadata?.title, p.markdown) !== "blog")
             .map(p => ({
               url: p.url,
               title: p.metadata?.title || p.url,
-              page_type: detectPageType(p.url, p.metadata?.title || "", p.markdown || ""),
+              page_type: detectPageType(p.url, p.metadata?.title, p.markdown),
             }))
             .slice(0, 50), // Limit to 50 links
         })
