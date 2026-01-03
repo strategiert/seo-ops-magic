@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/lib/auth";
 import { WorkspaceProvider } from "@/hooks/useWorkspace";
+import { ChangelogModal } from "@/components/changelog";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import Projects from "./pages/Projects";
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <ChangelogModal />
           </WorkspaceProvider>
         </AuthProvider>
       </BrowserRouter>

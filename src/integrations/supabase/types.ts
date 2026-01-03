@@ -241,6 +241,33 @@ export type Database = {
           },
         ]
       }
+      changelog: {
+        Row: {
+          id: string
+          version: string
+          title: string
+          release_date: string
+          entries: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          version: string
+          title: string
+          release_date?: string
+          entries?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          version?: string
+          title?: string
+          release_date?: string
+          entries?: Json
+          created_at?: string
+        }
+        Relationships: []
+      }
       integrations: {
         Row: {
           created_at: string
