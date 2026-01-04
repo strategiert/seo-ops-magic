@@ -33,8 +33,9 @@ serve(async (req) => {
     const firecrawlApiKey = Deno.env.get("FIRECRAWL_API_KEY");
 
     if (!firecrawlApiKey) {
+      console.error("brand-crawl: FIRECRAWL_API_KEY not configured");
       return new Response(
-        JSON.stringify({ error: "FIRECRAWL_API_KEY not configured" }),
+        JSON.stringify({ error: "Crawl service not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -169,12 +170,12 @@ serve(async (req) => {
 
       await supabase
         .from("brand_profiles")
-        .update({ crawl_status: "error", crawl_error: `Firecrawl error: ${crawlResponse.status}` })
+        .update({ crawl_status: "error", crawl_error: "Website crawl failed" })
         .eq("id", brandProfile.id);
 
       return new Response(
-        JSON.stringify({ error: `Firecrawl error: ${crawlResponse.status}`, details: crawlResponseText }),
-        { status: crawlResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Failed to crawl website. Please check the URL and try again." }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -237,7 +238,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: "An error occurred while crawling" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

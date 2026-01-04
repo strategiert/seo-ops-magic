@@ -146,8 +146,9 @@ serve(async (req) => {
     const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
 
     if (!geminiApiKey) {
+      console.error("brand-analyze: GEMINI_API_KEY not configured");
       return new Response(
-        JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
+        JSON.stringify({ error: "Service configuration error" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -266,11 +267,11 @@ serve(async (req) => {
 
       await supabase
         .from("brand_profiles")
-        .update({ crawl_status: "error", crawl_error: `AI analysis failed: ${aiResponse.status}` })
+        .update({ crawl_status: "error", crawl_error: "AI analysis failed" })
         .eq("id", brandProfileId);
 
       return new Response(
-        JSON.stringify({ error: `AI analysis failed: ${aiResponse.status}` }),
+        JSON.stringify({ error: "Analysis failed. Please try again." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -299,15 +300,15 @@ serve(async (req) => {
 
       analysis = JSON.parse(jsonStr);
     } catch (parseError) {
-      console.error("brand-analyze: Failed to parse AI response:", aiContent);
+      console.error("brand-analyze: Failed to parse AI response:", aiContent.substring(0, 200));
 
       await supabase
         .from("brand_profiles")
-        .update({ crawl_status: "error", crawl_error: "Failed to parse AI analysis" })
+        .update({ crawl_status: "error", crawl_error: "Analysis processing failed" })
         .eq("id", brandProfileId);
 
       return new Response(
-        JSON.stringify({ error: "Failed to parse AI analysis", raw: aiContent }),
+        JSON.stringify({ error: "Analysis processing failed. Please try again." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -359,9 +360,9 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error("brand-analyze: Error:", error);
+    console.error("brand-analyze: Error:", error instanceof Error ? error.message : error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: "An error occurred during analysis" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
