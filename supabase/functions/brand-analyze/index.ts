@@ -237,7 +237,6 @@ serve(async (req) => {
     // Intelligentes Model-Routing: Brand-Analyse braucht gutes Reasoning
     const modelConfig = routeToModel("brand_analysis", prompt, {
       requiresStructuredOutput: true,
-      requiresFactualAccuracy: true,
     });
 
     console.log(`brand-analyze: Using model ${modelConfig.model}`);

@@ -150,6 +150,7 @@ export type Database = {
           brand_voice: Json | null
           competitors: Json | null
           crawl_error: string | null
+          crawl_job_id: string | null
           crawl_status: string | null
           created_at: string
           current_projects: Json | null
@@ -174,6 +175,7 @@ export type Database = {
           brand_voice?: Json | null
           competitors?: Json | null
           crawl_error?: string | null
+          crawl_job_id?: string | null
           crawl_status?: string | null
           created_at?: string
           current_projects?: Json | null
@@ -198,6 +200,7 @@ export type Database = {
           brand_voice?: Json | null
           competitors?: Json | null
           crawl_error?: string | null
+          crawl_job_id?: string | null
           crawl_status?: string | null
           created_at?: string
           current_projects?: Json | null
