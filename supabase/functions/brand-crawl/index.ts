@@ -323,7 +323,7 @@ serve(async (req) => {
             if (pages.length === 0) {
               console.warn(`brand-crawl: Crawl completed but 0 pages returned. Full response:`, statusText.substring(0, 1000));
             } else {
-              console.log(`brand-crawl: First page URL: ${pages[0]?.url}, has markdown: ${!!pages[0]?.markdown}`);
+              console.log(`brand-crawl: First page URL: ${pages[0]?.metadata?.sourceURL}, has markdown: ${!!pages[0]?.markdown}`);
             }
           } else if (statusData.status === "failed") {
             console.error("brand-crawl: Crawl failed:", statusText);
