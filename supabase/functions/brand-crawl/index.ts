@@ -242,14 +242,16 @@ serve(async (req) => {
 
     console.log(`brand-crawl: Starting crawl for ${formattedUrl}`);
 
-    // Call Firecrawl API to crawl the website
-    // Using simpler options to avoid potential issues with tag filtering
+    // Call Firecrawl API v2 to crawl the website
     const crawlRequestBody = {
       url: formattedUrl,
       limit: maxPages,
+      sitemap: "include",  // Nutze Sitemap für bessere Crawl-Ergebnisse
       scrapeOptions: {
-        formats: ["markdown", "links"],
+        formats: ["markdown"],
         onlyMainContent: true,
+        blockAds: true,
+        timeout: 30000,
       },
     };
 
