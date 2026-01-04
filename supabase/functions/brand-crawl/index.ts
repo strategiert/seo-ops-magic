@@ -242,20 +242,22 @@ serve(async (req) => {
 
     console.log(`brand-crawl: Starting crawl for ${formattedUrl}`);
 
-    // Call Firecrawl API to crawl the website
-    // Using simpler options to avoid potential issues with tag filtering
+    // Call Firecrawl API v2 to crawl the website
     const crawlRequestBody = {
       url: formattedUrl,
       limit: maxPages,
+      sitemap: "include",  // Nutze Sitemap für bessere Crawl-Ergebnisse
       scrapeOptions: {
-        formats: ["markdown", "links"],
+        formats: ["markdown"],
         onlyMainContent: true,
+        blockAds: true,
+        timeout: 30000,
       },
     };
 
     console.log(`brand-crawl: Request body:`, JSON.stringify(crawlRequestBody));
 
-    const crawlResponse = await fetch("https://api.firecrawl.dev/v1/crawl", {
+    const crawlResponse = await fetch("https://api.firecrawl.dev/v2/crawl", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${firecrawlApiKey}`,
@@ -300,7 +302,7 @@ serve(async (req) => {
       while (attempts < maxAttempts && !completed) {
         await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
 
-        const statusResponse = await fetch(`https://api.firecrawl.dev/v1/crawl/${crawlData.id}`, {
+        const statusResponse = await fetch(`https://api.firecrawl.dev/v2/crawl/${crawlData.id}`, {
           headers: {
             "Authorization": `Bearer ${firecrawlApiKey}`,
           },
