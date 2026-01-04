@@ -439,23 +439,28 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("brand-crawl: Error:", error);
-    
-    // FIX: Set status to error so polling stops
-    if (brandProfileId && supabaseClient) {
-      try {
-        await supabaseClient
-          .from("brand_profiles")
-          .update({ 
-            crawl_status: "error", 
-            crawl_error: error instanceof Error ? error.message : "Unknown error" 
-          })
-          .eq("id", brandProfileId);
-        console.log("brand-crawl: Updated status to error for profile:", brandProfileId);
-      } catch (updateError) {
-        console.error("brand-crawl: Failed to update error status:", updateError);
+
+    // FIX: Status auf error setzen, damit das Polling stoppt
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && supabaseServiceKey) {
+        const errorSupabase = createClient(supabaseUrl, supabaseServiceKey);
+        const body = await req.clone().json().catch(() => ({}));
+        if (body.projectId) {
+          await errorSupabase
+            .from("brand_profiles")
+            .update({
+              crawl_status: "error",
+              crawl_error: error instanceof Error ? error.message : "Unknown error",
+            })
+            .eq("project_id", body.projectId);
+        }
       }
+    } catch (updateError) {
+      console.error("brand-crawl: Failed to update error status:", updateError);
     }
-    
+
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
