@@ -3,9 +3,10 @@
  * Wählt automatisch das beste AI-Model basierend auf dem Task.
  *
  * STRATEGIE:
- * - Gemini 3 Pro/Flash für Content-Erstellung (beste Qualität)
- * - Gemini 2.5 Flash-Lite nur für einfache Tasks (Kosten sparen)
- * - Nano Banana Pro für Bildgenerierung
+ * - Gemini 2.5 Pro für Content-Erstellung & Brand-Analyse (beste Qualität)
+ * - Gemini 2.5 Flash für HTML, Code, Recherche (schnell + intelligent)
+ * - Gemini 2.5 Flash-Lite für einfache Tasks (Kosten sparen, 25x günstiger!)
+ * - Gemini 2.0 Flash (Nano Banana) für Bildgenerierung
  */
 
 // ============================================================================
@@ -13,10 +14,10 @@
 // ============================================================================
 
 export type TaskType =
-  // PREMIUM → Gemini 3 Pro
+  // PREMIUM → Gemini 2.5 Pro
   | "article_generation"      // Lange Artikel schreiben
   | "brand_analysis"          // Brand-Daten extrahieren
-  // BALANCED → Gemini 3 Flash
+  // BALANCED → Gemini 2.5 Flash
   | "html_design"             // HTML/CSS generieren
   | "code_generation"         // Code schreiben
   | "competitor_research"     // Recherche
@@ -25,7 +26,7 @@ export type TaskType =
   | "summarization"           // Zusammenfassungen
   | "simple_completion"       // Kurze, einfache Aufgaben
   | "validation"              // Daten validieren
-  // IMAGE → Nano Banana Pro
+  // IMAGE → Gemini 2.0 Flash (Nano Banana)
   | "image_generation";       // Bilder erstellen
 
 // ============================================================================
@@ -33,14 +34,14 @@ export type TaskType =
 // ============================================================================
 
 export type ModelId =
-  // === GEMINI 3 (Hauptmodelle) ===
-  | "gemini-3-pro-preview"        // Bestes Reasoning - Artikel, Brand-Analyse
-  | "gemini-3-flash-preview"      // Schnell + intelligent - HTML, Code
-  // === GEMINI 2.5 (nur für Budget-Tasks) ===
-  | "gemini-2.5-flash-lite"       // Günstig - Übersetzung, Summary, Validierung
-  | "gemini-2.5-flash"            // Fallback
+  // === GEMINI 2.5 PRO (Beste Qualität - für Content) ===
+  | "gemini-2.5-pro"              // Artikel, Brand-Analyse ($1.25/$10.00 per 1M token)
+  // === GEMINI 2.5 FLASH (Balanced) ===
+  | "gemini-2.5-flash"            // HTML, Code, Recherche ($0.30/$2.50 per 1M token)
+  // === GEMINI 2.5 FLASH-LITE (Budget) ===
+  | "gemini-2.5-flash-lite"       // Übersetzung, Summary ($0.10/$0.40 per 1M token)
   // === NANO BANANA (Bildgenerierung) ===
-  | "gemini-3-pro-image-preview"; // Nano Banana Pro - beste Bildqualität
+  | "gemini-2.0-flash-exp";       // Bildgenerierung ($0.04 per image)
 
 // ============================================================================
 // COST TRACKING
@@ -48,14 +49,14 @@ export type ModelId =
 
 /** Kosten pro 1M Token (USD) */
 export const MODEL_COSTS: Record<ModelId, { input: number; output: number; perImage?: number }> = {
-  // Gemini 3 (Premium)
-  "gemini-3-pro-preview": { input: 2.00, output: 12.00 },
-  "gemini-3-flash-preview": { input: 0.50, output: 3.00 },
-  // Gemini 2.5 (Budget)
-  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40 },
+  // Gemini 2.5 Pro (Premium - beste Qualität)
+  "gemini-2.5-pro": { input: 1.25, output: 10.00 },
+  // Gemini 2.5 Flash (Balanced)
   "gemini-2.5-flash": { input: 0.30, output: 2.50 },
-  // Nano Banana Pro (Bildgenerierung)
-  "gemini-3-pro-image-preview": { input: 0, output: 0, perImage: 0.04 },
+  // Gemini 2.5 Flash-Lite (Budget)
+  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40 },
+  // Nano Banana (Bildgenerierung - experimentell)
+  "gemini-2.0-flash-exp": { input: 0, output: 0, perImage: 0.04 },
 };
 
 /** Berechnet geschätzte Kosten für einen Request */
@@ -109,10 +110,10 @@ export function analyzeTask(
   const ctx = additionalContext || {};
 
   const baseComplexity: Record<TaskType, "low" | "medium" | "high"> = {
-    // Premium → Gemini 3 Pro
+    // Premium → Gemini 2.5 Pro
     article_generation: "high",
     brand_analysis: "high",
-    // Balanced → Gemini 3 Flash
+    // Balanced → Gemini 2.5 Flash
     html_design: "medium",
     code_generation: "medium",
     competitor_research: "medium",
@@ -121,7 +122,7 @@ export function analyzeTask(
     summarization: "low",
     simple_completion: "low",
     validation: "low",
-    // Image
+    // Image → Nano Banana
     image_generation: "medium",
   };
 
@@ -142,47 +143,47 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
   const { taskType, estimatedInputTokens, estimatedOutputTokens } = analysis;
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // GEMINI 3 PRO: Content-Erstellung (beste Qualität)
+  // GEMINI 2.5 PRO: Content-Erstellung (beste Qualität)
   // ═══════════════════════════════════════════════════════════════════════════
   if (taskType === "article_generation" || taskType === "brand_analysis") {
-    const model: ModelId = "gemini-3-pro-preview";
+    const model: ModelId = "gemini-2.5-pro";
     return {
       model,
       maxTokens: Math.min(estimatedOutputTokens * 1.5, 16000),
       temperature: taskType === "article_generation" ? 0.7 : 0.3,
-      reasoning: `${taskType} → Gemini 3 Pro für beste Content-Qualität`,
+      reasoning: `${taskType} → Gemini 2.5 Pro für beste Content-Qualität`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
       tier: "premium",
     };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // NANO BANANA PRO: Bildgenerierung
+  // NANO BANANA: Bildgenerierung
   // ═══════════════════════════════════════════════════════════════════════════
   if (taskType === "image_generation") {
     return {
-      model: "gemini-3-pro-image-preview",
+      model: "gemini-2.0-flash-exp",
       maxTokens: 1000,
       temperature: 0.8,
-      reasoning: "Bildgenerierung → Nano Banana Pro (beste Bildqualität)",
+      reasoning: "Bildgenerierung → Nano Banana (experimentell)",
       tier: "image",
     };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // GEMINI 3 FLASH: HTML, Code, Recherche (schnell + intelligent)
+  // GEMINI 2.5 FLASH: HTML, Code, Recherche (schnell + intelligent)
   // ═══════════════════════════════════════════════════════════════════════════
   if (
     taskType === "html_design" ||
     taskType === "code_generation" ||
     taskType === "competitor_research"
   ) {
-    const model: ModelId = "gemini-3-flash-preview";
+    const model: ModelId = "gemini-2.5-flash";
     return {
       model,
       maxTokens: Math.min(estimatedOutputTokens * 1.5, 8000),
       temperature: taskType === "html_design" ? 0.7 : 0.4,
-      reasoning: `${taskType} → Gemini 3 Flash (schnell + intelligent)`,
+      reasoning: `${taskType} → Gemini 2.5 Flash (schnell + intelligent)`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
       tier: "balanced",
     };
@@ -209,14 +210,14 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // FALLBACK: Gemini 3 Flash
+  // FALLBACK: Gemini 2.5 Flash
   // ═══════════════════════════════════════════════════════════════════════════
-  const model: ModelId = "gemini-3-flash-preview";
+  const model: ModelId = "gemini-2.5-flash";
   return {
     model,
     maxTokens: 4000,
     temperature: 0.5,
-    reasoning: "Fallback → Gemini 3 Flash",
+    reasoning: "Fallback → Gemini 2.5 Flash",
     estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
     tier: "balanced",
   };

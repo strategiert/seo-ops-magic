@@ -12,105 +12,10 @@ interface CrawlRequest {
   maxPages?: number;
 }
 
-interface FirecrawlPage {
-  markdown?: string;
-  html?: string;
-  links?: string[];
-  metadata?: {
-    sourceURL?: string;
-    title?: string;
-    description?: string;
-    ogTitle?: string;
-    ogDescription?: string;
-    language?: string;
-    statusCode?: number;
-  };
-}
-
-// Detect page type from URL and content
-function detectPageType(url: string | undefined, title: string | undefined, content: string | undefined): string {
-  const lowerUrl = (url || "").toLowerCase();
-  const lowerTitle = (title || "").toLowerCase();
-  const lowerContent = (content || "").substring(0, 2000).toLowerCase();
-
-  if (lowerUrl === "/" || lowerUrl.endsWith("/") && lowerUrl.split("/").filter(Boolean).length <= 1) {
-    return "homepage";
-  }
-  if (lowerUrl.includes("/about") || lowerUrl.includes("/ueber") || lowerUrl.includes("/unternehmen") || lowerTitle.includes("über uns")) {
-    return "about";
-  }
-  if (lowerUrl.includes("/product") || lowerUrl.includes("/produkt") || lowerUrl.includes("/shop")) {
-    return "product";
-  }
-  if (lowerUrl.includes("/service") || lowerUrl.includes("/leistung") || lowerUrl.includes("/dienstleistung")) {
-    return "service";
-  }
-  if (lowerUrl.includes("/blog") || lowerUrl.includes("/news") || lowerUrl.includes("/artikel")) {
-    return "blog";
-  }
-  if (lowerUrl.includes("/contact") || lowerUrl.includes("/kontakt")) {
-    return "contact";
-  }
-  if (lowerUrl.includes("/team") || lowerUrl.includes("/mitarbeiter")) {
-    return "team";
-  }
-  if (lowerUrl.includes("/preis") || lowerUrl.includes("/pricing") || lowerUrl.includes("/tarif")) {
-    return "pricing";
-  }
-
-  return "other";
-}
-
-// Extract headings from markdown
-function extractHeadings(markdown: string): { level: number; text: string }[] {
-  const headings: { level: number; text: string }[] = [];
-  const lines = markdown.split("\n");
-
-  for (const line of lines) {
-    const match = line.match(/^(#{1,6})\s+(.+)$/);
-    if (match) {
-      headings.push({
-        level: match[1].length,
-        text: match[2].trim(),
-      });
-    }
-  }
-
-  return headings;
-}
-
-// Extract internal and external links
-function extractLinks(baseUrl: string, links: string[]): { internal: string[]; external: string[] } {
-  const internal: string[] = [];
-  const external: string[] = [];
-
-  const baseDomain = new URL(baseUrl).hostname;
-
-  for (const link of links || []) {
-    try {
-      const url = new URL(link, baseUrl);
-      if (url.hostname === baseDomain) {
-        internal.push(url.href);
-      } else {
-        external.push(url.href);
-      }
-    } catch {
-      // Skip invalid URLs
-    }
-  }
-
-  return { internal: [...new Set(internal)], external: [...new Set(external)] };
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
-
-  // Declare outside try block so catch can access them
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let supabaseClient: any = null;
-  let brandProfileId: string | null = null;
 
   try {
     // Verify authorization
@@ -148,7 +53,6 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    supabaseClient = supabase; // Assign to outer scope for catch block
 
     const body: CrawlRequest = await req.json();
     const { projectId, websiteUrl, maxPages = 20 } = body;
@@ -196,12 +100,12 @@ serve(async (req) => {
       .single();
 
     if (existingProfile) {
-      // Update existing profile
       const { data: updated, error: updateError } = await supabase
         .from("brand_profiles")
         .update({
           crawl_status: "crawling",
           crawl_error: null,
+          crawl_job_id: null, // Will be set after Firecrawl responds
           last_crawl_at: new Date().toISOString(),
         })
         .eq("id", existingProfile.id)
@@ -210,15 +114,7 @@ serve(async (req) => {
 
       if (updateError) throw updateError;
       brandProfile = updated;
-      brandProfileId = updated.id; // Set for catch block access
-
-      // Delete old crawl data
-      await supabase
-        .from("brand_crawl_data")
-        .delete()
-        .eq("brand_profile_id", existingProfile.id);
     } else {
-      // Create new profile
       const { data: created, error: createError } = await supabase
         .from("brand_profiles")
         .insert({
@@ -231,7 +127,6 @@ serve(async (req) => {
 
       if (createError) throw createError;
       brandProfile = created;
-      brandProfileId = created.id; // Set for catch block access
     }
 
     // Format URL properly
@@ -242,17 +137,17 @@ serve(async (req) => {
 
     console.log(`brand-crawl: Starting crawl for ${formattedUrl}`);
 
-    // Call Firecrawl API v2 to crawl the website
+    // Webhook URL - Firecrawl will call this when done
+    const webhookUrl = `${supabaseUrl}/functions/v1/brand-crawl-webhook`;
+
+    // Call Firecrawl API v2 with webhook
     const crawlRequestBody = {
       url: formattedUrl,
       limit: maxPages,
-      sitemap: "include",  // Nutze Sitemap für bessere Crawl-Ergebnisse
       scrapeOptions: {
         formats: ["markdown"],
-        onlyMainContent: true,
-        blockAds: true,
-        timeout: 30000,
       },
+      webhook: webhookUrl, // Firecrawl calls this URL when done
     };
 
     console.log(`brand-crawl: Request body:`, JSON.stringify(crawlRequestBody));
@@ -267,14 +162,14 @@ serve(async (req) => {
     });
 
     const crawlResponseText = await crawlResponse.text();
-    console.log(`brand-crawl: Firecrawl initial response (${crawlResponse.status}):`, crawlResponseText);
+    console.log(`brand-crawl: Firecrawl response (${crawlResponse.status}):`, crawlResponseText);
 
     if (!crawlResponse.ok) {
       console.error("brand-crawl: Firecrawl error:", crawlResponse.status, crawlResponseText);
 
       await supabase
         .from("brand_profiles")
-        .update({ crawl_status: "error", crawl_error: `Firecrawl error: ${crawlResponse.status} - ${crawlResponseText}` })
+        .update({ crawl_status: "error", crawl_error: `Firecrawl error: ${crawlResponse.status}` })
         .eq("id", brandProfile.id);
 
       return new Response(
@@ -291,150 +186,28 @@ serve(async (req) => {
       throw new Error("Invalid Firecrawl response");
     }
 
-    // Firecrawl v1 returns a job ID for async crawling
-    if (crawlData.id) {
-      // Poll for completion
-      let attempts = 0;
-      const maxAttempts = 60; // 5 minutes max
-      let completed = false;
-      let pages: FirecrawlPage[] = [];
+    // Store job ID so webhook can find the brand profile
+    const jobId = crawlData.id || crawlData.jobId;
 
-      while (attempts < maxAttempts && !completed) {
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-
-        const statusResponse = await fetch(`https://api.firecrawl.dev/v2/crawl/${crawlData.id}`, {
-          headers: {
-            "Authorization": `Bearer ${firecrawlApiKey}`,
-          },
-        });
-
-        const statusText = await statusResponse.text();
-        console.log(`brand-crawl: Status check ${attempts + 1} raw:`, statusText.substring(0, 500));
-
-        if (statusResponse.ok) {
-          const statusData = JSON.parse(statusText);
-
-          // Log more details for debugging
-          if (statusData.status === "completed") {
-            console.log(`brand-crawl: Firecrawl response:`, JSON.stringify({
-              total: statusData.total,
-              completed: statusData.completed,
-              creditsUsed: statusData.creditsUsed,
-              expiresAt: statusData.expiresAt,
-              dataLength: statusData.data?.length || 0,
-              firstPageUrl: statusData.data?.[0]?.metadata?.sourceURL || "none"
-            }));
-          }
-
-          if (statusData.status === "completed") {
-            completed = true;
-            pages = statusData.data || [];
-            
-            if (pages.length === 0) {
-              console.warn(`brand-crawl: Crawl completed but 0 pages returned. Full response:`, statusText.substring(0, 1000));
-            } else {
-              console.log(`brand-crawl: First page URL: ${pages[0]?.metadata?.sourceURL}, has markdown: ${!!pages[0]?.markdown}`);
-            }
-          } else if (statusData.status === "failed") {
-            console.error("brand-crawl: Crawl failed:", statusText);
-            throw new Error(`Crawl job failed: ${statusData.error || 'Unknown error'}`);
-          }
-        } else {
-          console.error(`brand-crawl: Status check failed (${statusResponse.status}):`, statusText);
-        }
-
-        attempts++;
-      }
-
-      if (!completed) {
-        await supabase
-          .from("brand_profiles")
-          .update({ crawl_status: "error", crawl_error: "Crawl timeout" })
-          .eq("id", brandProfile.id);
-
-        return new Response(
-          JSON.stringify({ error: "Crawl timeout", brandProfileId: brandProfile.id }),
-          { status: 408, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // Process and store crawled pages
-      console.log(`brand-crawl: Processing ${pages.length} pages`);
-
-      for (const page of pages) {
-        const pageUrl = page.metadata?.sourceURL;
-
-        // Skip pages without URL
-        if (!pageUrl) {
-          console.log("brand-crawl: Skipping page without sourceURL");
-          continue;
-        }
-
-        const pageType = detectPageType(pageUrl, page.metadata?.title, page.markdown);
-        const headings = extractHeadings(page.markdown || "");
-        const links = extractLinks(websiteUrl, page.links || []);
-
-        // Calculate relevance score (higher for important page types)
-        let relevanceScore = 0.5;
-        if (pageType === "homepage") relevanceScore = 1.0;
-        else if (pageType === "about") relevanceScore = 0.9;
-        else if (pageType === "product" || pageType === "service") relevanceScore = 0.85;
-        else if (pageType === "pricing") relevanceScore = 0.8;
-        else if (pageType === "team") relevanceScore = 0.7;
-        else if (pageType === "contact") relevanceScore = 0.6;
-        else if (pageType === "blog") relevanceScore = 0.4;
-
-        await supabase
-          .from("brand_crawl_data")
-          .insert({
-            brand_profile_id: brandProfile.id,
-            url: pageUrl,
-            page_type: pageType,
-            title: page.metadata?.title || null,
-            content_markdown: page.markdown || null,
-            meta_description: page.metadata?.description || page.metadata?.ogDescription || null,
-            headings: headings,
-            internal_links: links.internal.map(url => ({ href: url })),
-            external_links: links.external.map(url => ({ href: url })),
-            relevance_score: relevanceScore,
-          });
-      }
-
-      // Update brand profile status (crawl finished)
+    if (jobId) {
       await supabase
         .from("brand_profiles")
-        .update({
-          crawl_status: "completed",
-          internal_links: pages
-            .filter(p => p.metadata?.sourceURL && detectPageType(p.metadata.sourceURL, p.metadata?.title, p.markdown) !== "blog")
-            .map(p => ({
-              url: p.metadata!.sourceURL,
-              title: p.metadata?.title || p.metadata!.sourceURL,
-              page_type: detectPageType(p.metadata!.sourceURL, p.metadata?.title, p.markdown),
-            }))
-            .slice(0, 50), // Limit to 50 links
-        })
+        .update({ crawl_job_id: jobId })
         .eq("id", brandProfile.id);
 
-      console.log(`brand-crawl: Completed. ${pages.length} pages stored.`);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          brandProfileId: brandProfile.id,
-          pagesFound: pages.length,
-          status: "completed",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      console.log(`brand-crawl: Job started with ID ${jobId}. Webhook will process results.`);
+    } else {
+      console.warn("brand-crawl: No job ID returned from Firecrawl");
     }
 
-    // Handle synchronous response (fallback)
+    // Return immediately - webhook will handle the rest
     return new Response(
       JSON.stringify({
         success: true,
         brandProfileId: brandProfile.id,
+        jobId: jobId,
         status: "crawling",
+        message: "Crawl started. Results will be processed via webhook.",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -442,7 +215,7 @@ serve(async (req) => {
   } catch (error) {
     console.error("brand-crawl: Error:", error);
 
-    // FIX: Status auf error setzen, damit das Polling stoppt
+    // Try to update error status
     try {
       const supabaseUrl = Deno.env.get("SUPABASE_URL");
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
