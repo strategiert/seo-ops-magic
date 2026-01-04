@@ -61,10 +61,13 @@ serve(async (req) => {
     const brandContext = buildBrandContext(brief.project.brand);
     const targetWords = brief.target_length || guidelines.targetWords;
 
-    // 4. Prompting Setup
-    const systemPrompt = `Du bist ein Elite SEO-Texter. 
-ANTWORTE AUSSCHLIESSLICH IM GÜLTIGEN JSON-FORMAT.
-Kein Markdown außerhalb des JSONs. Keine Einleitung.`;
+    // 4. Prompting Setup - Verstärkter System-Prompt für JSON
+    const systemPrompt = `Du bist ein Elite SEO-Texter.
+WICHTIG: Deine Antwort muss ein valides JSON-Objekt sein.
+- Beginne direkt mit {
+- Ende mit }
+- Schreibe KEINEN Text vor oder nach dem JSON.
+- Keine Markdown-Codeblöcke (kein \`\`\`json).`;
 
     const userPrompt = `Schreibe einen Artikel basierend auf:
 Titel: ${brief.title}
@@ -92,7 +95,7 @@ Erwarte JSON Struktur:
     const modelConfig = routeToModel("article_generation", userPrompt, { targetLength: targetWords });
     console.log(`[Generate] Using model: ${modelConfig.model}`);
 
-    // 6. AI Call
+    // 6. AI Call - OHNE response_format (nicht von Gemini unterstützt)
     const aiResponse = await fetch(getGeminiEndpoint(), {
       method: "POST",
       headers: {
@@ -105,8 +108,6 @@ Erwarte JSON Struktur:
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        // WICHTIG: JSON Mode erzwingen (Verhindert "No content" Fehler)
-        response_format: { type: "json_object" },
         temperature: modelConfig.temperature,
         max_tokens: modelConfig.maxTokens,
       }),
@@ -119,15 +120,27 @@ Erwarte JSON Struktur:
     }
 
     const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content;
+    console.log("[AI Response Raw]", JSON.stringify(aiData).substring(0, 300) + "...");
     
-    if (!content) throw new Error("AI returned empty content (Safety Filter?)");
+    let content = aiData.choices?.[0]?.message?.content;
+    
+    if (!content) {
+      console.error("[AI Empty] Full Response:", JSON.stringify(aiData));
+      throw new Error("AI returned empty content. Check logs for details.");
+    }
+
+    // Markdown-Backticks entfernen, falls die KI sie trotz Anweisung sendet
+    content = content
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
 
     let articleData;
     try {
       articleData = JSON.parse(content);
     } catch (e) {
-      console.error("JSON Parse failed", content.substring(0, 100));
+      console.error("[JSON Parse Failed]", content.substring(0, 200));
       throw new Error("AI did not return valid JSON");
     }
 
