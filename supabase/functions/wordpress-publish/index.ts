@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { routeToModel, getGeminiEndpoint } from "../_shared/model-router.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,17 +25,17 @@ const BRAND = {
   },
 };
 
-// Generate beautiful HTML using Lovable AI (same as generate-html-export)
+// Generate beautiful HTML using Gemini API (same as generate-html-export)
 async function generateBeautifulHTML(
   title: string,
   markdown: string,
   faqs: any[],
   metaDescription: string
 ): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 
-  if (!LOVABLE_API_KEY) {
-    throw new Error("LOVABLE_API_KEY not configured");
+  if (!GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY not configured");
   }
 
   const faqsText = faqs?.map(f => `**${f.question}**\n${f.answer}`).join('\n\n') || 'Keine FAQs';
@@ -86,23 +87,28 @@ Gib NUR den HTML-Content zurück.
 - Keine Markdown-Codeblöcke
 - Beginnt direkt mit einem <div> Container`;
 
-  console.log("wordpress-publish: Generating styled HTML with Lovable AI...");
+  // Intelligentes Model-Routing für HTML-Generierung
+  const modelConfig = routeToModel("html_design", designPrompt);
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  console.log(`wordpress-publish: Generating styled HTML with ${modelConfig.model}...`);
+
+  const response = await fetch(getGeminiEndpoint("/chat/completions"), {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+      "Authorization": `Bearer ${GEMINI_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: modelConfig.model,
       messages: [{ role: "user", content: designPrompt }],
+      max_tokens: modelConfig.maxTokens,
+      temperature: modelConfig.temperature,
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    console.error("wordpress-publish: Lovable AI error:", response.status, error);
+    console.error("wordpress-publish: Gemini API error:", response.status, error);
     throw new Error(`AI API error: ${response.status}`);
   }
 

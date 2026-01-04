@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { routeToModel, getGeminiEndpoint } from "../_shared/model-router.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,17 +23,17 @@ const BRAND = {
   },
 };
 
-// Call Claude Opus 4.5 for beautiful HTML design for Elementor Custom HTML Widget
+// Call Gemini API for beautiful HTML design for Elementor Custom HTML Widget
 async function generateBeautifulHTML(
   title: string,
   markdown: string,
   faqs: any[],
   metaDescription: string
 ): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 
-  if (!LOVABLE_API_KEY) {
-    throw new Error("LOVABLE_API_KEY not configured");
+  if (!GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY not configured");
   }
 
   const designPrompt = `Du bist ein erfahrener Web-Designer mit ausgezeichnetem Geschmack für moderne, elegante Landing Pages.
@@ -109,30 +110,35 @@ Gib NUR den HTML-Content zurück, der direkt in ein Elementor Custom HTML Widget
 
 Erstelle visuell beeindruckenden Content mit perfekten inline styles!`;
 
-  console.log("Calling Lovable AI (Gemini 2.5 Pro) for HTML design...");
+  // Intelligentes Model-Routing: HTML-Design braucht Kreativität
+  const modelConfig = routeToModel("html_design", designPrompt, {
+    targetLength: 10000,
+  });
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  console.log(`Calling Gemini API (${modelConfig.model}) for HTML design...`);
+
+  const response = await fetch(getGeminiEndpoint("/chat/completions"), {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+      "Authorization": `Bearer ${GEMINI_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-pro",
+      model: modelConfig.model,
       messages: [
         {
           role: "user",
           content: designPrompt,
         },
       ],
-      max_tokens: 16000,
-      temperature: 0.7,
+      max_tokens: modelConfig.maxTokens,
+      temperature: modelConfig.temperature,
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    console.error("Lovable AI error:", response.status, error);
+    console.error("Gemini API error:", response.status, error);
     
     if (response.status === 429) {
       throw new Error("Rate limit exceeded. Please try again later.");
@@ -261,7 +267,7 @@ serve(async (req) => {
     console.log("Markdown length:", article.content_markdown?.length || 0);
     console.log("FAQ count:", article.faq_json?.length || 0);
 
-    // Generate beautiful HTML with Claude Opus 4.5
+    // Generate beautiful HTML with Gemini API
     const html = await generateBeautifulHTML(
       article.title,
       article.content_markdown || '',
