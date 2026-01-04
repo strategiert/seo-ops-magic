@@ -107,6 +107,11 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Declare outside try block so catch can access them
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let supabaseClient: any = null;
+  let brandProfileId: string | null = null;
+
   try {
     // Verify authorization
     const authHeader = req.headers.get("Authorization");
@@ -143,6 +148,7 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    supabaseClient = supabase; // Assign to outer scope for catch block
 
     const body: CrawlRequest = await req.json();
     const { projectId, websiteUrl, maxPages = 20 } = body;
@@ -204,6 +210,7 @@ serve(async (req) => {
 
       if (updateError) throw updateError;
       brandProfile = updated;
+      brandProfileId = updated.id; // Set for catch block access
 
       // Delete old crawl data
       await supabase
@@ -224,6 +231,7 @@ serve(async (req) => {
 
       if (createError) throw createError;
       brandProfile = created;
+      brandProfileId = created.id; // Set for catch block access
     }
 
     // Format URL properly
@@ -323,7 +331,7 @@ serve(async (req) => {
             if (pages.length === 0) {
               console.warn(`brand-crawl: Crawl completed but 0 pages returned. Full response:`, statusText.substring(0, 1000));
             } else {
-              console.log(`brand-crawl: First page URL: ${pages[0]?.url}, has markdown: ${!!pages[0]?.markdown}`);
+              console.log(`brand-crawl: First page URL: ${pages[0]?.metadata?.sourceURL}, has markdown: ${!!pages[0]?.markdown}`);
             }
           } else if (statusData.status === "failed") {
             console.error("brand-crawl: Crawl failed:", statusText);
