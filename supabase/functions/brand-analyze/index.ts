@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { routeToModel, getGeminiEndpoint } from "../_shared/model-router.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -142,11 +143,11 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
 
-    if (!lovableApiKey) {
+    if (!geminiApiKey) {
       return new Response(
-        JSON.stringify({ error: "LOVABLE_API_KEY not configured" }),
+        JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -233,22 +234,30 @@ serve(async (req) => {
     // Build prompt and call AI
     const prompt = buildAnalysisPrompt(crawlData);
 
-    const aiResponse = await fetch("https://api.lovable.dev/v1/chat/completions", {
+    // Intelligentes Model-Routing: Brand-Analyse braucht gutes Reasoning
+    const modelConfig = routeToModel("brand_analysis", prompt, {
+      requiresStructuredOutput: true,
+      requiresFactualAccuracy: true,
+    });
+
+    console.log(`brand-analyze: Using model ${modelConfig.model}`);
+
+    const aiResponse = await fetch(getGeminiEndpoint("/chat/completions"), {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${lovableApiKey}`,
+        "Authorization": `Bearer ${geminiApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gemini-2.5-pro",
+        model: modelConfig.model,
         messages: [
           {
             role: "user",
             content: prompt,
           },
         ],
-        temperature: 0.3,
-        max_tokens: 8000,
+        temperature: modelConfig.temperature,
+        max_tokens: modelConfig.maxTokens,
       }),
     });
 

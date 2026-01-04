@@ -52,7 +52,7 @@ curl -X POST http://localhost:54321/functions/v1/generate-article \
 
 **500 Error:**
 - Edge Function ist noch nicht deployed (warten Sie 2-3 Minuten)
-- LOVABLE_API_KEY fehlt (setzen Sie in Supabase → Settings → Edge Functions → Secrets)
+- GEMINI_API_KEY fehlt (setzen Sie in Supabase → Settings → Edge Functions → Secrets)
 - Datenbank-Verbindung fehlgeschlagen
 
 **404 Error:**
@@ -60,8 +60,8 @@ curl -X POST http://localhost:54321/functions/v1/generate-article \
 - Falsche URL
 
 **402 Error:**
-- Lovable AI Credits aufgebraucht
-- Fügen Sie Credits hinzu: https://lovable.dev/billing
+- Gemini API Credits aufgebraucht
+- Prüfen Sie Ihr Google Cloud Billing
 
 ## Aktueller Status
 
