@@ -107,6 +107,11 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Declare outside try block so catch can access them
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let supabaseClient: any = null;
+  let brandProfileId: string | null = null;
+
   try {
     // Verify authorization
     const authHeader = req.headers.get("Authorization");
@@ -143,6 +148,7 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    supabaseClient = supabase; // Assign to outer scope for catch block
 
     const body: CrawlRequest = await req.json();
     const { projectId, websiteUrl, maxPages = 20 } = body;
@@ -204,6 +210,7 @@ serve(async (req) => {
 
       if (updateError) throw updateError;
       brandProfile = updated;
+      brandProfileId = updated.id; // Set for catch block access
 
       // Delete old crawl data
       await supabase
@@ -224,6 +231,7 @@ serve(async (req) => {
 
       if (createError) throw createError;
       brandProfile = created;
+      brandProfileId = created.id; // Set for catch block access
     }
 
     // Format URL properly
@@ -431,6 +439,23 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("brand-crawl: Error:", error);
+    
+    // FIX: Set status to error so polling stops
+    if (brandProfileId && supabaseClient) {
+      try {
+        await supabaseClient
+          .from("brand_profiles")
+          .update({ 
+            crawl_status: "error", 
+            crawl_error: error instanceof Error ? error.message : "Unknown error" 
+          })
+          .eq("id", brandProfileId);
+        console.log("brand-crawl: Updated status to error for profile:", brandProfileId);
+      } catch (updateError) {
+        console.error("brand-crawl: Failed to update error status:", updateError);
+      }
+    }
+    
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
