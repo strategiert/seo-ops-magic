@@ -13,21 +13,23 @@ interface CrawlRequest {
 }
 
 interface FirecrawlPage {
-  url: string;
-  markdown: string;
+  markdown?: string;
+  html?: string;
+  links?: string[];
   metadata?: {
+    sourceURL?: string;
     title?: string;
     description?: string;
     ogTitle?: string;
     ogDescription?: string;
+    language?: string;
+    statusCode?: number;
   };
-  html?: string;
-  links?: string[];
 }
 
 // Detect page type from URL and content
-function detectPageType(url: string, title: string, content: string): string {
-  const lowerUrl = url.toLowerCase();
+function detectPageType(url: string | undefined, title: string | undefined, content: string | undefined): string {
+  const lowerUrl = (url || "").toLowerCase();
   const lowerTitle = (title || "").toLowerCase();
   const lowerContent = (content || "").substring(0, 2000).toLowerCase();
 
@@ -302,8 +304,17 @@ serve(async (req) => {
         if (statusResponse.ok) {
           const statusData = JSON.parse(statusText);
 
-          // Log full debug info
-          console.log(`brand-crawl: Status: ${statusData.status}, total: ${statusData.total}, completed: ${statusData.completed}, dataLength: ${statusData.data?.length || 0}`);
+          // Log more details for debugging
+          if (statusData.status === "completed") {
+            console.log(`brand-crawl: Firecrawl response:`, JSON.stringify({
+              total: statusData.total,
+              completed: statusData.completed,
+              creditsUsed: statusData.creditsUsed,
+              expiresAt: statusData.expiresAt,
+              dataLength: statusData.data?.length || 0,
+              firstPageUrl: statusData.data?.[0]?.metadata?.sourceURL || "none"
+            }));
+          }
 
           if (statusData.status === "completed") {
             completed = true;
@@ -341,7 +352,15 @@ serve(async (req) => {
       console.log(`brand-crawl: Processing ${pages.length} pages`);
 
       for (const page of pages) {
-        const pageType = detectPageType(page.url, page.metadata?.title || "", page.markdown || "");
+        const pageUrl = page.metadata?.sourceURL;
+
+        // Skip pages without URL
+        if (!pageUrl) {
+          console.log("brand-crawl: Skipping page without sourceURL");
+          continue;
+        }
+
+        const pageType = detectPageType(pageUrl, page.metadata?.title, page.markdown);
         const headings = extractHeadings(page.markdown || "");
         const links = extractLinks(websiteUrl, page.links || []);
 
@@ -359,7 +378,7 @@ serve(async (req) => {
           .from("brand_crawl_data")
           .insert({
             brand_profile_id: brandProfile.id,
-            url: page.url,
+            url: pageUrl,
             page_type: pageType,
             title: page.metadata?.title || null,
             content_markdown: page.markdown || null,
@@ -377,11 +396,11 @@ serve(async (req) => {
         .update({
           crawl_status: "completed",
           internal_links: pages
-            .filter(p => detectPageType(p.url, p.metadata?.title || "", p.markdown || "") !== "blog")
+            .filter(p => p.metadata?.sourceURL && detectPageType(p.metadata.sourceURL, p.metadata?.title, p.markdown) !== "blog")
             .map(p => ({
-              url: p.url,
-              title: p.metadata?.title || p.url,
-              page_type: detectPageType(p.url, p.metadata?.title || "", p.markdown || ""),
+              url: p.metadata!.sourceURL,
+              title: p.metadata?.title || p.metadata!.sourceURL,
+              page_type: detectPageType(p.metadata!.sourceURL, p.metadata?.title, p.markdown),
             }))
             .slice(0, 50), // Limit to 50 links
         })
