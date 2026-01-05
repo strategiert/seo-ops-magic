@@ -2,10 +2,11 @@
  * Intelligent Model Router
  * Wählt automatisch das beste AI-Model basierend auf dem Task.
  *
- * AKTUELLE MODELLE (Stand: Januar 2026):
- * - gemini-2.5-flash-lite → Budget Tasks (Übersetzung, Summary)
- * - gemini-2.5-flash → Balanced Tasks (Code, Recherche)
- * - gemini-2.5-pro → Premium Tasks (Artikel, Brand-Analyse, HTML)
+ * STRATEGIE:
+ * - Gemini 3 Pro Preview für Content-Erstellung & Brand-Analyse (beste Qualität)
+ * - Gemini 2.5 Flash für HTML, Code, Recherche (schnell + intelligent)
+ * - Gemini 2.5 Flash-Lite für einfache Tasks (Kosten sparen, 25x günstiger!)
+ * - Gemini 3 Pro Image Preview für Bildgenerierung
  */
 
 // ============================================================================
@@ -13,11 +14,11 @@
 // ============================================================================
 
 export type TaskType =
-  // PREMIUM → Gemini 2.5 Pro
+  // PREMIUM → Gemini 3 Pro Preview
   | "article_generation"      // Lange Artikel schreiben
   | "brand_analysis"          // Brand-Daten extrahieren
-  | "html_design"             // HTML/CSS generieren (braucht viel Output)
   // BALANCED → Gemini 2.5 Flash
+  | "html_design"             // HTML/CSS generieren
   | "code_generation"         // Code schreiben
   | "competitor_research"     // Recherche
   // BUDGET → Gemini 2.5 Flash-Lite
@@ -25,22 +26,24 @@ export type TaskType =
   | "summarization"           // Zusammenfassungen
   | "simple_completion"       // Kurze, einfache Aufgaben
   | "validation"              // Daten validieren
-  // IMAGE → Imagen 3
+  // IMAGE → Gemini 3 Pro Image Preview
   | "image_generation";       // Bilder erstellen
 
 // ============================================================================
-// MODEL DEFINITIONS (Korrekte Namen für Google AI API)
+// MODEL DEFINITIONS
 // ============================================================================
 
 export type ModelId =
-  // === GEMINI 2.5 PRO (Premium - beste Qualität) ===
-  | "gemini-2.5-pro"              // Artikel, Brand-Analyse, HTML
+  // === GEMINI 3 PRO PREVIEW (Beste Qualität - für Content) ===
+  | "gemini-3-pro-preview"         // Artikel, Brand-Analyse ($2.00/$8.00 per 1M token)
+  // === GEMINI 3 FLASH PREVIEW (Balanced - Next Gen) ===
+  | "gemini-3-flash-preview"       // Schnell + intelligent ($0.30/$1.00 per 1M token)
   // === GEMINI 2.5 FLASH (Balanced) ===
-  | "gemini-2.5-flash"            // Code, Recherche
+  | "gemini-2.5-flash"             // HTML, Code, Recherche ($0.20/$0.80 per 1M token)
   // === GEMINI 2.5 FLASH-LITE (Budget) ===
-  | "gemini-2.5-flash-lite"       // Übersetzung, Summary
-  // === IMAGEN 3 (Bildgenerierung) ===
-  | "imagen-3";                   // Bildgenerierung
+  | "gemini-2.5-flash-lite"        // Übersetzung, Summary ($0.10/$0.40 per 1M token)
+  // === GEMINI 3 PRO IMAGE PREVIEW (Bildgenerierung) ===
+  | "gemini-3-pro-image-preview";  // Bildgenerierung ($0.04 per image)
 
 // ============================================================================
 // COST TRACKING
@@ -48,14 +51,16 @@ export type ModelId =
 
 /** Kosten pro 1M Token (USD) */
 export const MODEL_COSTS: Record<ModelId, { input: number; output: number; perImage?: number }> = {
-  // Gemini 2.5 Pro (Premium)
-  "gemini-2.5-pro": { input: 1.25, output: 10.00 },
+  // Gemini 3 Pro Preview (Premium - beste Qualität)
+  "gemini-3-pro-preview": { input: 2.00, output: 8.00 },
+  // Gemini 3 Flash Preview (Next-Gen Balanced)
+  "gemini-3-flash-preview": { input: 0.30, output: 1.00 },
   // Gemini 2.5 Flash (Balanced)
-  "gemini-2.5-flash": { input: 0.15, output: 0.60 },
+  "gemini-2.5-flash": { input: 0.20, output: 0.80 },
   // Gemini 2.5 Flash-Lite (Budget)
-  "gemini-2.5-flash-lite": { input: 0.075, output: 0.30 },
-  // Imagen 3 (Bildgenerierung)
-  "imagen-3": { input: 0, output: 0, perImage: 0.03 },
+  "gemini-2.5-flash-lite": { input: 0.10, output: 0.40 },
+  // Gemini 3 Pro Image Preview (Bildgenerierung)
+  "gemini-3-pro-image-preview": { input: 0, output: 0, perImage: 0.04 },
 };
 
 /** Berechnet geschätzte Kosten für einen Request */
@@ -109,11 +114,11 @@ export function analyzeTask(
   const ctx = additionalContext || {};
 
   const baseComplexity: Record<TaskType, "low" | "medium" | "high"> = {
-    // Premium → Gemini 2.5 Pro
+    // Premium → Gemini 3 Pro Preview
     article_generation: "high",
     brand_analysis: "high",
-    html_design: "high",
     // Balanced → Gemini 2.5 Flash
+    html_design: "medium",
     code_generation: "medium",
     competitor_research: "medium",
     // Budget → Gemini 2.5 Flash-Lite
@@ -121,7 +126,7 @@ export function analyzeTask(
     summarization: "low",
     simple_completion: "low",
     validation: "low",
-    // Image → Imagen 3
+    // Image → Gemini 3 Pro Image Preview
     image_generation: "medium",
   };
 
@@ -142,45 +147,53 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
   const { taskType, estimatedInputTokens, estimatedOutputTokens } = analysis;
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // GEMINI 2.5 PRO: Artikel, Brand-Analyse, HTML Design (beste Qualität)
+  // GEMINI 3 PRO PREVIEW: Content-Erstellung (beste Qualität)
   // ═══════════════════════════════════════════════════════════════════════════
-  if (
-    taskType === "article_generation" ||
-    taskType === "brand_analysis" ||
-    taskType === "html_design"
-  ) {
-    const model: ModelId = "gemini-2.5-pro";
+  if (taskType === "article_generation" || taskType === "brand_analysis") {
+    const model: ModelId = "gemini-3-pro-preview";
 
-    // HTML und Artikel brauchen viel Output
-    let maxTokens: number;
-    if (taskType === "html_design") {
-      maxTokens = 16000; // HTML-Seiten brauchen viel Platz
-    } else if (taskType === "article_generation") {
-      maxTokens = Math.min(Math.max(estimatedOutputTokens * 1.5, 12000), 16000);
-    } else {
-      maxTokens = Math.min(estimatedOutputTokens * 1.5, 8000);
-    }
+    // Articles frequently exceed smaller output windows; ensure a safe minimum to avoid
+    // truncated JSON (finish_reason="length"), while still respecting the hard cap.
+    const rawMax = Math.min(estimatedOutputTokens * 1.5, 20000);
+    const maxTokens = taskType === "article_generation"
+      ? Math.min(Math.max(rawMax, 12000), 20000)
+      : rawMax;
 
     return {
       model,
       maxTokens: Math.floor(maxTokens),
-      temperature: taskType === "brand_analysis" ? 0.3 : 0.7,
-      reasoning: `${taskType} → Gemini 2.5 Pro für maximale Qualität`,
+      temperature: taskType === "article_generation" ? 0.7 : 0.3,
+      reasoning: `${taskType} → Gemini 3 Pro Preview für maximale SEO-Qualität`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
       tier: "premium",
     };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // IMAGEN 3: Bildgenerierung
+  // GEMINI 3 PRO IMAGE PREVIEW: Bildgenerierung
   // ═══════════════════════════════════════════════════════════════════════════
   if (taskType === "image_generation") {
     return {
-      model: "imagen-3",
+      model: "gemini-3-pro-image-preview",
       maxTokens: 1000,
       temperature: 0.8,
-      reasoning: "Bildgenerierung → Imagen 3",
+      reasoning: "Bildgenerierung → Gemini 3 Pro Image Preview",
       tier: "image",
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GEMINI 3 PRO: HTML Design (braucht viel Output für vollständige Seiten)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (taskType === "html_design") {
+    const model: ModelId = "gemini-3-pro-preview";
+    return {
+      model,
+      maxTokens: 30000, // HTML-Seiten können sehr lang sein
+      temperature: 0.7,
+      reasoning: `${taskType} → Gemini 3 Pro Preview (für vollständige HTML-Ausgabe)`,
+      estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
+      tier: "premium",
     };
   }
 
@@ -194,7 +207,7 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
     const model: ModelId = "gemini-2.5-flash";
     return {
       model,
-      maxTokens: Math.floor(Math.min(estimatedOutputTokens * 1.5, 8000)),
+      maxTokens: Math.floor(Math.min(estimatedOutputTokens * 1.5, 8000)), // Must be integer
       temperature: 0.4,
       reasoning: `${taskType} → Gemini 2.5 Flash (schnell + intelligent)`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
@@ -214,9 +227,9 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
     const model: ModelId = "gemini-2.5-flash-lite";
     return {
       model,
-      maxTokens: Math.floor(Math.min(estimatedOutputTokens * 2, 4000)),
+      maxTokens: Math.floor(Math.min(estimatedOutputTokens * 2, 4000)), // Must be integer
       temperature: 0.3,
-      reasoning: `${taskType} → Gemini 2.5 Flash-Lite (günstig!)`,
+      reasoning: `${taskType} → Gemini 2.5 Flash-Lite (30x günstiger!)`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
       tier: "budget",
     };
@@ -250,9 +263,9 @@ export function routeToModel(
   }
 ): ModelConfig {
   if (options?.forceModel) {
-    const tier = options.forceModel.includes("pro") ? "premium" :
+    const tier = options.forceModel.includes("3-pro") && !options.forceModel.includes("image") ? "premium" :
                  options.forceModel.includes("lite") ? "budget" :
-                 options.forceModel.includes("imagen") ? "image" : "balanced";
+                 options.forceModel.includes("image") ? "image" : "balanced";
     return {
       model: options.forceModel,
       maxTokens: 8000,
@@ -268,7 +281,6 @@ export function routeToModel(
   console.log(`[ModelRouter] ═══════════════════════════════════════`);
   console.log(`[ModelRouter] Task: ${taskType}`);
   console.log(`[ModelRouter] Model: ${config.model} (${config.tier})`);
-  console.log(`[ModelRouter] MaxTokens: ${config.maxTokens}`);
   console.log(`[ModelRouter] ${config.reasoning}`);
   if (config.estimatedCost) {
     console.log(`[ModelRouter] Est. Cost: $${config.estimatedCost.totalCost}`);
