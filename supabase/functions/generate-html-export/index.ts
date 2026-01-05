@@ -95,7 +95,7 @@ async function generateBeautifulHTML(
 </div>
 
 **ARTIKEL INHALT (Markdown):**
-${markdown.substring(0, 15000)}
+${markdown.substring(0, 60000)}
 
 **FAQs:**
 ${faqs.map(f => `**${f.question}**\n${f.answer}`).join('\n\n')}
