@@ -151,9 +151,17 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
   // ═══════════════════════════════════════════════════════════════════════════
   if (taskType === "article_generation" || taskType === "brand_analysis") {
     const model: ModelId = "gemini-3-pro-preview";
+
+    // Articles frequently exceed smaller output windows; ensure a safe minimum to avoid
+    // truncated JSON (finish_reason="length"), while still respecting the hard cap.
+    const rawMax = Math.min(estimatedOutputTokens * 1.5, 20000);
+    const maxTokens = taskType === "article_generation"
+      ? Math.min(Math.max(rawMax, 12000), 20000)
+      : rawMax;
+
     return {
       model,
-      maxTokens: Math.min(estimatedOutputTokens * 1.5, 20000), // Gemini 3 hat größeres Output Window
+      maxTokens: Math.floor(maxTokens),
       temperature: taskType === "article_generation" ? 0.7 : 0.3,
       reasoning: `${taskType} → Gemini 3 Pro Preview für maximale SEO-Qualität`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
@@ -185,7 +193,7 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
     const model: ModelId = "gemini-2.5-flash";
     return {
       model,
-      maxTokens: Math.min(estimatedOutputTokens * 1.5, 8000),
+      maxTokens: Math.floor(Math.min(estimatedOutputTokens * 1.5, 8000)), // Must be integer
       temperature: taskType === "html_design" ? 0.7 : 0.4,
       reasoning: `${taskType} → Gemini 2.5 Flash (schnell + intelligent)`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
@@ -205,7 +213,7 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
     const model: ModelId = "gemini-2.5-flash-lite";
     return {
       model,
-      maxTokens: Math.min(estimatedOutputTokens * 2, 4000),
+      maxTokens: Math.floor(Math.min(estimatedOutputTokens * 2, 4000)), // Must be integer
       temperature: 0.3,
       reasoning: `${taskType} → Gemini 2.5 Flash-Lite (30x günstiger!)`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),

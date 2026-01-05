@@ -35,7 +35,8 @@ async function generateBeautifulHTML(
   const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 
   if (!GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY not configured");
+    console.error("wordpress-publish: GEMINI_API_KEY not configured");
+    throw new Error("Service configuration error");
   }
 
   const faqsText = faqs?.map(f => `**${f.question}**\n${f.answer}`).join('\n\n') || 'Keine FAQs';
@@ -110,9 +111,9 @@ Gib NUR den HTML-Content zurück.
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    console.error("wordpress-publish: Gemini API error:", response.status, error);
-    throw new Error(`AI API error: ${response.status}`);
+    const errorText = await response.text();
+    console.error("wordpress-publish: Gemini API error:", response.status, errorText);
+    throw new Error("Content styling failed");
   }
 
   const data = await response.json();
@@ -320,7 +321,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: `WordPress error: ${wpResponse.status}`, details: wpResponseText }),
         {
-          status: wpResponse.status,
+          status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
