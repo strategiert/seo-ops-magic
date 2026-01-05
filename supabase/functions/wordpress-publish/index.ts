@@ -117,7 +117,20 @@ Gib NUR den HTML-Content zurück.
   }
 
   const data = await response.json();
+
+  // Debug: Log full response structure
+  console.log("wordpress-publish: Gemini response:", JSON.stringify({
+    finish_reason: data.choices?.[0]?.finish_reason,
+    usage: data.usage,
+    content_length: data.choices?.[0]?.message?.content?.length || 0,
+  }));
+
   let html = data.choices?.[0]?.message?.content || "";
+
+  // Check if response was truncated
+  if (data.choices?.[0]?.finish_reason === "length") {
+    console.warn("wordpress-publish: WARNING - Response was truncated due to token limit!");
+  }
 
   // Clean up code blocks if present
   html = html
