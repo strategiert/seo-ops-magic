@@ -131,7 +131,7 @@ Erstelle visuell beeindruckenden Content mit perfekten inline styles!`;
           content: designPrompt,
         },
       ],
-      max_tokens: 20000, // Große HTML-Seiten brauchen viele Tokens
+      max_tokens: modelConfig.maxTokens, // Vom Router: 30000 für HTML
       temperature: modelConfig.temperature,
     }),
   });
