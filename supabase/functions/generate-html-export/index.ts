@@ -150,6 +150,18 @@ Erstelle visuell beeindruckenden Content mit perfekten inline styles!`;
   }
 
   const data = await response.json();
+
+  // Check if generation was completed or truncated
+  const finishReason = data.choices?.[0]?.finish_reason;
+  const usage = data.usage;
+
+  console.log(`Gemini finish_reason: ${finishReason}`);
+  console.log(`Gemini usage:`, JSON.stringify(usage));
+
+  if (finishReason === "length") {
+    console.error("WARNING: Content was truncated due to token limit!");
+  }
+
   let html = data.choices?.[0]?.message?.content || "";
 
   // Clean up if wrapped in code blocks
@@ -160,6 +172,7 @@ Erstelle visuell beeindruckenden Content mit perfekten inline styles!`;
     .trim();
 
   console.log(`Generated HTML: ${html.length} characters`);
+  console.log(`HTML ends with: ...${html.slice(-100)}`);
 
   return html;
 }

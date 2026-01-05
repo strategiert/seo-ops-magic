@@ -153,6 +153,7 @@ serve(async (req) => {
     }
 
     console.log("wordpress-publish: Content length:", content.length);
+    console.log("wordpress-publish: Content ends with:", content.slice(-200));
 
     // =========================================================================
     // SEND TO WORDPRESS
