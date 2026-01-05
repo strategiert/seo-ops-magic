@@ -1,6 +1,23 @@
 # Edge Function Deployment Guide
 
-## Aktuelles Update: Model-Router & Auto-Analyze
+## AKTUELL ZU DEPLOYEN (05.01.2026)
+
+### Priorität HOCH:
+```
+supabase functions deploy brand-crawl
+supabase functions deploy brand-crawl-webhook
+supabase functions deploy wordpress-publish
+```
+
+### Migration ausführen:
+```sql
+ALTER TABLE brand_profiles ADD COLUMN IF NOT EXISTS crawl_job_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_brand_profiles_crawl_job_id ON public.brand_profiles(crawl_job_id);
+```
+
+---
+
+## Alle Edge Functions
 
 ### Diese Edge Functions müssen deployed werden:
 
