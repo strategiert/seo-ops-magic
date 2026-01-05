@@ -4,8 +4,8 @@
  *
  * STRATEGIE:
  * - Gemini 3 Pro Preview für Content-Erstellung & Brand-Analyse (beste Qualität)
- * - Gemini 2.5 Flash für HTML, Code, Recherche (schnell + intelligent)
- * - Gemini 2.5 Flash-Lite für einfache Tasks (Kosten sparen, 25x günstiger!)
+ * - Gemini 3 Flash Preview für HTML, Code, Recherche (Pro-Level, schnell)
+ * - Gemini 2.5 Flash-Lite für einfache Tasks (Kosten sparen)
  * - Gemini 3 Pro Image Preview für Bildgenerierung
  */
 
@@ -183,19 +183,19 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // GEMINI 2.5 FLASH: HTML, Code, Recherche (schnell + intelligent)
+  // GEMINI 3 FLASH PREVIEW: HTML, Code, Recherche (Pro-Level, schnell)
   // ═══════════════════════════════════════════════════════════════════════════
   if (
     taskType === "html_design" ||
     taskType === "code_generation" ||
     taskType === "competitor_research"
   ) {
-    const model: ModelId = "gemini-2.5-flash";
+    const model: ModelId = "gemini-3-flash-preview";
     return {
       model,
       maxTokens: Math.floor(Math.min(estimatedOutputTokens * 1.5, 8000)), // Must be integer
       temperature: taskType === "html_design" ? 0.7 : 0.4,
-      reasoning: `${taskType} → Gemini 2.5 Flash (schnell + intelligent)`,
+      reasoning: `${taskType} → Gemini 3 Flash Preview (Pro-Level, schnell)`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
       tier: "balanced",
     };
@@ -222,14 +222,14 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // FALLBACK: Gemini 2.5 Flash
+  // FALLBACK: Gemini 3 Flash Preview
   // ═══════════════════════════════════════════════════════════════════════════
-  const model: ModelId = "gemini-2.5-flash";
+  const model: ModelId = "gemini-3-flash-preview";
   return {
     model,
     maxTokens: 4000,
     temperature: 0.5,
-    reasoning: "Fallback → Gemini 2.5 Flash",
+    reasoning: "Fallback → Gemini 3 Flash Preview",
     estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
     tier: "balanced",
   };
