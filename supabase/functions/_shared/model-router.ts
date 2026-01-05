@@ -194,7 +194,7 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
     return {
       model,
       maxTokens: Math.floor(Math.min(estimatedOutputTokens * 1.5, 8000)), // Must be integer
-      temperature: taskType === "html_design" ? 0.7 : 0.4,
+      temperature: 0.4, // Niedrigere Temp für konsistentere Ausgabe
       reasoning: `${taskType} → Gemini 3 Flash Preview (Pro-Level, schnell)`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
       tier: "balanced",
