@@ -95,7 +95,7 @@ async function generateBeautifulHTML(
 </div>
 
 **ARTIKEL INHALT (Markdown):**
-${markdown.substring(0, 60000)}
+${markdown.substring(0, 15000)}
 
 **FAQs:**
 ${faqs.map(f => `**${f.question}**\n${f.answer}`).join('\n\n')}
@@ -131,7 +131,7 @@ Erstelle visuell beeindruckenden Content mit perfekten inline styles!`;
           content: designPrompt,
         },
       ],
-      max_tokens: modelConfig.maxTokens, // Vom Router: 30000 für HTML
+      max_tokens: 20000, // Große HTML-Seiten brauchen viele Tokens
       temperature: modelConfig.temperature,
     }),
   });

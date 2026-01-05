@@ -183,24 +183,10 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // GEMINI 3 PRO: HTML Design (braucht viel Output für vollständige Seiten)
-  // ═══════════════════════════════════════════════════════════════════════════
-  if (taskType === "html_design") {
-    const model: ModelId = "gemini-3-pro-preview";
-    return {
-      model,
-      maxTokens: 30000, // HTML-Seiten können sehr lang sein
-      temperature: 0.7,
-      reasoning: `${taskType} → Gemini 3 Pro Preview (für vollständige HTML-Ausgabe)`,
-      estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
-      tier: "premium",
-    };
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // GEMINI 2.5 FLASH: Code, Recherche (schnell + intelligent)
+  // GEMINI 2.5 FLASH: HTML, Code, Recherche (schnell + intelligent)
   // ═══════════════════════════════════════════════════════════════════════════
   if (
+    taskType === "html_design" ||
     taskType === "code_generation" ||
     taskType === "competitor_research"
   ) {
@@ -208,7 +194,7 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
     return {
       model,
       maxTokens: Math.floor(Math.min(estimatedOutputTokens * 1.5, 8000)), // Must be integer
-      temperature: 0.4,
+      temperature: taskType === "html_design" ? 0.7 : 0.4,
       reasoning: `${taskType} → Gemini 2.5 Flash (schnell + intelligent)`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
       tier: "balanced",
