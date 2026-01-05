@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { marked } from "https://esm.sh/marked@4.3.0"; // Markdown Parser
+import { marked } from "https://esm.sh/marked@4.3.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,7 +25,6 @@ const BRAND = {
 function convertMarkdownToStyledHtml(markdown: string): string {
   const renderer = new marked.Renderer();
 
-  // Wir definieren Styles für jedes Element hart im Code -> 100% Konsistent
   const styles = {
     h2: `font-family:${BRAND.typography.heading}; color:${BRAND.colors.primary}; margin-top:40px; margin-bottom:20px;`,
     h3: `font-family:${BRAND.typography.heading}; color:${BRAND.colors.primary}; margin-top:30px; margin-bottom:15px;`,
@@ -35,7 +34,6 @@ function convertMarkdownToStyledHtml(markdown: string): string {
     a: `color:${BRAND.colors.secondary}; text-decoration:underline;`,
   };
 
-  // Override Default Renderer
   renderer.heading = (text, level) => {
     const style = level === 2 ? styles.h2 : level === 3 ? styles.h3 : styles.h2;
     return `<h${level} style="${style}">${text}</h${level}>`;
@@ -45,16 +43,14 @@ function convertMarkdownToStyledHtml(markdown: string): string {
   renderer.strong = (text) => `<strong style="${styles.strong}">${text}</strong>`;
   renderer.link = (href, title, text) => `<a href="${href}" style="${styles.a}">${text}</a>`;
 
-  // Parsen
   return marked(markdown, { renderer });
 }
 
 // --- AI: Generiert nur den "Rahmen" (Hero, FAQ, CTA) ---
 async function generatePageShell(title: string, faqs: any[]): Promise<{ hero: string; faq: string; cta: string }> {
   const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-  const MODEL_NAME = "gemini-3-flash-preview"; // Hier reicht Flash, da wenig Text!
+  const MODEL_NAME = "gemini-3-flash-preview";
 
-  // Wir bitten die KI, nur JSON zurückzugeben mit den Design-Elementen
   const prompt = `
     Erstelle Design-Elemente für eine Landing Page für "NetCo Body-Cam".
     Titel: "${title}"
@@ -83,8 +79,15 @@ async function generatePageShell(title: string, faqs: any[]): Promise<{ hero: st
     },
   );
 
+  if (!response.ok) {
+    throw new Error(`Gemini Error: ${response.status} ${await response.text()}`);
+  }
+
   const data = await response.json();
-  const text = data.candidates[0].content.parts[0].text;
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!text) throw new Error("No content from Gemini");
+
   return JSON.parse(text);
 }
 
@@ -92,24 +95,80 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // 1. Auth & Setup (Wie gehabt)
+    // 1. Auth Headers Check
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Missing auth");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // 2. Validate User
+    const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const {
+      data: { user },
+      error: userError,
+    } = await authSupabase.auth.getUser();
+
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // 3. Get Payload
+    const { articleId } = await req.json();
+    if (!articleId) {
+      return new Response(JSON.stringify({ error: "articleId is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // 4. DB Operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Auth Check User... (Hier abgekürzt für Übersichtlichkeit, nimm deinen Auth Code)
-    const { articleId } = await req.json();
+    const { data: article, error: articleError } = await supabase
+      .from("articles")
+      .select("*")
+      .eq("id", articleId)
+      .single();
 
-    // 2. Fetch Data
-    const { data: article, error } = await supabase.from("articles").select("*").eq("id", articleId).single();
-    if (error) throw error;
+    if (articleError) throw new Error("Article not found");
 
-    console.log(`Processing: ${article.title}`);
+    // 5. Ownership Check
+    const { data: project } = await supabase
+      .from("projects")
+      .select("workspace_id")
+      .eq("id", article.project_id)
+      .single();
 
-    // 3. PARALLEL PROCESSING (Speed!)
+    if (project) {
+      const { data: workspace } = await supabase
+        .from("workspaces")
+        .select("owner_id")
+        .eq("id", project.workspace_id)
+        .single();
+
+      if (workspace && workspace.owner_id !== user.id) {
+        return new Response(JSON.stringify({ error: "Forbidden - not workspace owner" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    console.log(`Processing Hybrid Gen for: ${article.title}`);
+
+    // 6. PARALLEL PROCESSING
     // A: Konvertiere Markdown via Code (100% Sicher)
     const contentHtmlPromise = Promise.resolve(convertMarkdownToStyledHtml(article.content_markdown || ""));
 
@@ -118,7 +177,7 @@ serve(async (req) => {
 
     const [contentHtml, shell] = await Promise.all([contentHtmlPromise, shellPromise]);
 
-    // 4. Zusammenbauen (The Perfect Merge)
+    // 7. Zusammenbauen
     const finalHtml = `
       <div style="max-width:1200px; margin:0 auto; font-family:'PT Sans', sans-serif;">
         ${shell.hero}
@@ -132,7 +191,7 @@ serve(async (req) => {
       </div>
     `;
 
-    // 5. Speichern
+    // 8. Speichern
     const { data: exportData, error: saveError } = await supabase
       .from("html_exports")
       .insert({
@@ -146,10 +205,21 @@ serve(async (req) => {
 
     if (saveError) throw saveError;
 
-    return new Response(JSON.stringify({ success: true, id: exportData.id }), {
+    return new Response(
+      JSON.stringify({
+        success: true,
+        exportId: exportData.id,
+        htmlLength: finalHtml.length,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  } catch (err) {
+    console.error("Error:", err);
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
+      status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
 });
