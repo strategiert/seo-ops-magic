@@ -89,9 +89,12 @@ Gib NUR den HTML-Content zurück.
 - Beginnt direkt mit einem <div> Container`;
 
   // Intelligentes Model-Routing für HTML-Generierung
-  const modelConfig = routeToModel("html_design", designPrompt);
+  // HTML braucht mehr Tokens als normale Texte (10000+ für vollständige Seiten)
+  const modelConfig = routeToModel("html_design", designPrompt, {
+    targetLength: 10000, // HTML braucht viele Tokens
+  });
 
-  console.log(`wordpress-publish: Generating styled HTML with ${modelConfig.model}...`);
+  console.log(`wordpress-publish: Generating styled HTML with ${modelConfig.model}, maxTokens: ${modelConfig.maxTokens}...`);
 
   const response = await fetch(getGeminiEndpoint("/chat/completions"), {
     method: "POST",
@@ -102,7 +105,7 @@ Gib NUR den HTML-Content zurück.
     body: JSON.stringify({
       model: modelConfig.model,
       messages: [{ role: "user", content: designPrompt }],
-      max_tokens: modelConfig.maxTokens,
+      max_tokens: Math.max(modelConfig.maxTokens, 12000), // Mindestens 12000 für vollständiges HTML
       temperature: modelConfig.temperature,
     }),
   });
