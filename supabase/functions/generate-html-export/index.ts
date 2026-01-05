@@ -135,6 +135,10 @@ Erstelle visuell beeindruckenden Content mit perfekten inline styles!`;
         model: modelConfig.model,
         messages: [
           {
+            role: "system",
+            content: "Du bist ein HTML-Generator. Generiere IMMER den VOLLSTÄNDIGEN HTML-Content für den gesamten Artikel. Stoppe NIEMALS vorzeitig. Der Output muss alle Sections, FAQs und den CTA enthalten.",
+          },
+          {
             role: "user",
             content: designPrompt,
           },
