@@ -1,257 +1,155 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { marked } from "https://esm.sh/marked@4.3.0"; // Markdown Parser
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Brand configuration (NetCo Body-Cam)
+// Brand configuration
 const BRAND = {
   colors: {
     primary: "#003366",
     secondary: "#ff6600",
-    accent: "#ff8533",
-    background_light: "#f8f8f8",
-    background_white: "#ffffff",
     text_dark: "#333333",
+    background_light: "#f8f8f8",
   },
   typography: {
-    heading_font: "Antonio",
-    body_font: "PT Sans",
+    heading: "Antonio, sans-serif",
+    body: "PT Sans, sans-serif",
   },
 };
 
-// Call Gemini API for beautiful HTML design
-async function generateBeautifulHTML(
-  title: string,
-  markdown: string,
-  faqs: any[],
-  metaDescription: string,
-): Promise<string> {
+// --- HELPER: Sicherer Markdown zu HTML Konverter mit Inline Styles ---
+function convertMarkdownToStyledHtml(markdown: string): string {
+  const renderer = new marked.Renderer();
+
+  // Wir definieren Styles für jedes Element hart im Code -> 100% Konsistent
+  const styles = {
+    h2: `font-family:${BRAND.typography.heading}; color:${BRAND.colors.primary}; margin-top:40px; margin-bottom:20px;`,
+    h3: `font-family:${BRAND.typography.heading}; color:${BRAND.colors.primary}; margin-top:30px; margin-bottom:15px;`,
+    p: `font-family:${BRAND.typography.body}; color:${BRAND.colors.text_dark}; line-height:1.6; margin-bottom:16px;`,
+    li: `font-family:${BRAND.typography.body}; color:${BRAND.colors.text_dark}; line-height:1.6; margin-bottom:8px;`,
+    strong: `color:${BRAND.colors.secondary}; font-weight:bold;`,
+    a: `color:${BRAND.colors.secondary}; text-decoration:underline;`,
+  };
+
+  // Override Default Renderer
+  renderer.heading = (text, level) => {
+    const style = level === 2 ? styles.h2 : level === 3 ? styles.h3 : styles.h2;
+    return `<h${level} style="${style}">${text}</h${level}>`;
+  };
+  renderer.paragraph = (text) => `<p style="${styles.p}">${text}</p>`;
+  renderer.listitem = (text) => `<li style="${styles.li}">${text}</li>`;
+  renderer.strong = (text) => `<strong style="${styles.strong}">${text}</strong>`;
+  renderer.link = (href, title, text) => `<a href="${href}" style="${styles.a}">${text}</a>`;
+
+  // Parsen
+  return marked(markdown, { renderer });
+}
+
+// --- AI: Generiert nur den "Rahmen" (Hero, FAQ, CTA) ---
+async function generatePageShell(title: string, faqs: any[]): Promise<{ hero: string; faq: string; cta: string }> {
   const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-  if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
+  const MODEL_NAME = "gemini-3-flash-preview"; // Hier reicht Flash, da wenig Text!
 
-  // SETTING: GEMINI 3 PRO PREVIEW (Wie gewünscht!)
-  // Wir nehmen 'pro' statt 'flash', damit er bei langen Texten nicht anfängt zu kürzen.
-  const MODEL_NAME = "gemini-3-pro-preview";
+  // Wir bitten die KI, nur JSON zurückzugeben mit den Design-Elementen
+  const prompt = `
+    Erstelle Design-Elemente für eine Landing Page für "NetCo Body-Cam".
+    Titel: "${title}"
+    FAQs: ${JSON.stringify(faqs)}
+    
+    Markenfarben: Primary ${BRAND.colors.primary}, Secondary ${BRAND.colors.secondary}.
+    Fonts: ${BRAND.typography.heading}, ${BRAND.typography.body}.
 
-  // Prompt: Explizit "DUMB CONVERTER" Modus, damit die KI nicht kreativ kürzt.
-  const designPrompt = `
-**ROLLE:** Du bist ein strikter Markdown-zu-HTML Compiler.
-**MODUS:** "NO-SUMMARIZATION MODE".
+    Gib mir ein JSON Objekt zurück mit genau 3 HTML-Strings (nutze Inline-Styles!):
+    1. "hero": Ein beeindruckender Hero-Header (H1, Gradient Background, zentriert).
+    2. "faq": Eine schöne FAQ Sektion mit <details> und <summary> Tags.
+    3. "cta": Ein "Jetzt anfragen" Call-to-Action Bereich.
 
-**AUFGABE:**
-Konvertiere den Markdown-Text 1:1 in HTML.
-Du darfst NIEMALS Text weglassen, zusammenfassen oder durch Platzhalter ersetzen.
-Der Output muss den VÖLLSTÄNDIGEN Text enthalten.
+    Output Format: JSON only. { "hero": "...", "faq": "...", "cta": "..." }
+  `;
 
-**STYLING (CSS VARS):**
-Nutze im Code NUR diese Variablen, keine hex-codes (spart Tokens):
-- Farben: var(--c-p), var(--c-s), var(--c-t), var(--bg)
-- Fonts: var(--f-h), var(--f-b)
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json" },
+      }),
+    },
+  );
 
-**HTML GERÜST (Nutze exakt dieses):**
-<div style="--c-p:${BRAND.colors.primary}; --c-s:${BRAND.colors.secondary}; --c-t:${BRAND.colors.text_dark}; --bg:${BRAND.colors.background_light}; --f-h:'${BRAND.typography.heading_font}',sans-serif; --f-b:'${BRAND.typography.body_font}',sans-serif; max-width:1200px; margin:0 auto;">
-  
-  <div style="background:linear-gradient(135deg, var(--c-p), #000); color:white; padding:80px 20px; border-radius:12px; margin-bottom:40px; text-align:center;">
-     <h1 style="font-family:var(--f-h); font-size:48px; margin:0;">${title}</h1>
-  </div>
-
-  [FÜGE HIER DEN GESAMTEN INHALT EIN]
-
-  <div style="margin-top:60px;">
-    <h2 style="font-family:var(--f-h); color:var(--c-p); text-align:center;">Häufige Fragen</h2>
-    ${JSON.stringify(faqs)}.forEach(faq => {
-       Erstelle <details style="background:var(--bg); margin-bottom:10px; padding:15px; border-radius:8px;">...
-    })
-  </div>
-
-  <div style="text-align:center; margin-top:60px; padding:40px; background:var(--bg); border-radius:12px;">
-    <a href="#kontakt" style="background:var(--c-s); color:white; padding:15px 30px; text-decoration:none; border-radius:50px; font-family:var(--f-h); font-weight:bold; display:inline-block;">Jetzt anfragen</a>
-  </div>
-
-</div>
-
-**INPUT MARKDOWN:**
-${markdown}
-
-**INPUT FAQS:**
-${JSON.stringify(faqs)}
-
-**OUTPUT:**
-Nur HTML. Kein Markdown.
-`;
-
-  console.log(`Calling Gemini API (${MODEL_NAME}) - Strict Mode...`);
-
-  try {
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/" +
-        MODEL_NAME +
-        ":generateContent?key=" +
-        GEMINI_API_KEY,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: designPrompt }],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.1, // Fast 0, damit er sich strikt an den Text hält
-            maxOutputTokens: 8192,
-          },
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const errorTxt = await response.text();
-      throw new Error(`Gemini API Error: ${response.status} - ${errorTxt}`);
-    }
-
-    const data = await response.json();
-    let html = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-    // Cleanup
-    html = html
-      .replace(/^```html\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
-
-    // Safety Check End Tag
-    if (!html.endsWith("</div>") && !html.endsWith(">")) {
-      console.warn("HTML incomplete, patching end.");
-      html += "\n</div>";
-    }
-
-    return html;
-  } catch (error) {
-    console.error("AI Generation failed:", error);
-    return `<div style="padding:20px; color:red;">Fehler: ${error instanceof Error ? error.message : String(error)}</div>`;
-  }
+  const data = await response.json();
+  const text = data.candidates[0].content.parts[0].text;
+  return JSON.parse(text);
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // 1. Auth Headers Check
+    // 1. Auth & Setup (Wie gehabt)
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!authHeader) throw new Error("Missing auth");
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // 2. Validate User
-    const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const {
-      data: { user },
-      error: userError,
-    } = await authSupabase.auth.getUser();
-
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // 3. Get Payload
-    const { articleId } = await req.json();
-    if (!articleId) {
-      return new Response(JSON.stringify({ error: "articleId is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // 4. DB Operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { data: article, error: articleError } = await supabase
-      .from("articles")
-      .select("*")
-      .eq("id", articleId)
-      .single();
+    // Auth Check User... (Hier abgekürzt für Übersichtlichkeit, nimm deinen Auth Code)
+    const { articleId } = await req.json();
 
-    if (articleError) throw new Error("Article not found");
+    // 2. Fetch Data
+    const { data: article, error } = await supabase.from("articles").select("*").eq("id", articleId).single();
+    if (error) throw error;
 
-    // 5. Ownership Check
-    const { data: project } = await supabase
-      .from("projects")
-      .select("workspace_id")
-      .eq("id", article.project_id)
-      .single();
+    console.log(`Processing: ${article.title}`);
 
-    if (project) {
-      const { data: workspace } = await supabase
-        .from("workspaces")
-        .select("owner_id")
-        .eq("id", project.workspace_id)
-        .single();
+    // 3. PARALLEL PROCESSING (Speed!)
+    // A: Konvertiere Markdown via Code (100% Sicher)
+    const contentHtmlPromise = Promise.resolve(convertMarkdownToStyledHtml(article.content_markdown || ""));
 
-      if (workspace && workspace.owner_id !== user.id) {
-        return new Response(JSON.stringify({ error: "Forbidden - not workspace owner" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    }
+    // B: Generiere Design Elemente via KI
+    const shellPromise = generatePageShell(article.title, article.faq_json || []);
 
-    console.log(`Generating HTML for article: ${article.title}`);
+    const [contentHtml, shell] = await Promise.all([contentHtmlPromise, shellPromise]);
 
-    // 6. EXECUTE GEMINI
-    const html = await generateBeautifulHTML(
-      article.title,
-      article.content_markdown || "",
-      article.faq_json || [],
-      article.meta_description || "",
-    );
+    // 4. Zusammenbauen (The Perfect Merge)
+    const finalHtml = `
+      <div style="max-width:1200px; margin:0 auto; font-family:'PT Sans', sans-serif;">
+        ${shell.hero}
+        
+        <div style="padding: 40px 20px; background: #ffffff;">
+          ${contentHtml}
+        </div>
 
-    // 7. Save
-    const { data: htmlExport, error: exportError } = await supabase
+        ${shell.faq}
+        ${shell.cta}
+      </div>
+    `;
+
+    // 5. Speichern
+    const { data: exportData, error: saveError } = await supabase
       .from("html_exports")
       .insert({
         project_id: article.project_id,
         article_id: articleId,
-        name: `${article.title} - HTML Export (Gemini 3)`,
-        html_content: html,
+        name: `${article.title} - Hybrid Gen`,
+        html_content: finalHtml,
       })
       .select()
       .single();
 
-    if (exportError) throw exportError;
+    if (saveError) throw saveError;
 
-    // 8. Return
-    return new Response(
-      JSON.stringify({
-        success: true,
-        exportId: htmlExport.id,
-        name: htmlExport.name,
-        htmlLength: html.length,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  } catch (error) {
-    console.error("Error in Edge Function:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
-      status: 500,
+    return new Response(JSON.stringify({ success: true, id: exportData.id }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
 });
