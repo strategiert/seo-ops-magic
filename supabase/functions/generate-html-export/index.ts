@@ -117,64 +117,84 @@ Erstelle visuell beeindruckenden Content mit perfekten inline styles!`;
 
   console.log(`Calling Gemini API (${modelConfig.model}) for HTML design...`);
 
-  const response = await fetch(getGeminiEndpoint("/chat/completions"), {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${GEMINI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: modelConfig.model,
-      messages: [
-        {
-          role: "user",
-          content: designPrompt,
-        },
-      ],
-      max_tokens: 20000, // Große HTML-Seiten brauchen viele Tokens
-      temperature: modelConfig.temperature,
-    }),
-  });
+  // Retry-Logik: Manchmal generiert das Model zu wenig
+  const MAX_RETRIES = 3;
+  const MIN_HTML_LENGTH = 5000;
+  let lastHtml = "";
 
-  if (!response.ok) {
-    const error = await response.text();
-    console.error("Gemini API error:", response.status, error);
-    
-    if (response.status === 429) {
-      throw new Error("Rate limit exceeded. Please try again later.");
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    console.log(`Attempt ${attempt}/${MAX_RETRIES}...`);
+
+    const response = await fetch(getGeminiEndpoint("/chat/completions"), {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${GEMINI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: modelConfig.model,
+        messages: [
+          {
+            role: "user",
+            content: designPrompt,
+          },
+        ],
+        max_tokens: 20000,
+        temperature: modelConfig.temperature,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error("Gemini API error:", response.status, error);
+
+      if (response.status === 429) {
+        throw new Error("Rate limit exceeded. Please try again later.");
+      }
+      if (response.status === 402) {
+        throw new Error("Payment required. Please add credits to your workspace.");
+      }
+      throw new Error(`AI API error: ${response.status}`);
     }
-    if (response.status === 402) {
-      throw new Error("Payment required. Please add credits to your workspace.");
+
+    const data = await response.json();
+
+    const finishReason = data.choices?.[0]?.finish_reason;
+    const usage = data.usage;
+
+    console.log(`Gemini finish_reason: ${finishReason}`);
+    console.log(`Gemini usage:`, JSON.stringify(usage));
+
+    if (finishReason === "length") {
+      console.error("WARNING: Content was truncated due to token limit!");
     }
-    throw new Error(`AI API error: ${response.status}`);
+
+    let html = data.choices?.[0]?.message?.content || "";
+
+    // Clean up if wrapped in code blocks
+    html = html
+      .replace(/^```html\n?/i, "")
+      .replace(/^```\n?/, "")
+      .replace(/\n?```$/g, "")
+      .trim();
+
+    console.log(`Generated HTML: ${html.length} characters`);
+    console.log(`HTML ends with: ...${html.slice(-100)}`);
+
+    lastHtml = html;
+
+    // Check if HTML is long enough
+    if (html.length >= MIN_HTML_LENGTH) {
+      console.log(`HTML length OK (${html.length} >= ${MIN_HTML_LENGTH})`);
+      return html;
+    }
+
+    console.warn(`HTML too short (${html.length} < ${MIN_HTML_LENGTH}), retrying...`);
   }
 
-  const data = await response.json();
-
-  // Check if generation was completed or truncated
-  const finishReason = data.choices?.[0]?.finish_reason;
-  const usage = data.usage;
-
-  console.log(`Gemini finish_reason: ${finishReason}`);
-  console.log(`Gemini usage:`, JSON.stringify(usage));
-
-  if (finishReason === "length") {
-    console.error("WARNING: Content was truncated due to token limit!");
-  }
-
-  let html = data.choices?.[0]?.message?.content || "";
-
-  // Clean up if wrapped in code blocks
-  html = html
-    .replace(/^```html\n?/i, "")
-    .replace(/^```\n?/, "")
-    .replace(/\n?```$/g, "")
-    .trim();
-
-  console.log(`Generated HTML: ${html.length} characters`);
-  console.log(`HTML ends with: ...${html.slice(-100)}`);
-
-  return html;
+  // After all retries, return whatever we got (better than nothing)
+  console.error(`Failed to generate sufficient HTML after ${MAX_RETRIES} attempts, returning best attempt`);
+  return lastHtml;
 }
 
 serve(async (req) => {
