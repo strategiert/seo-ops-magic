@@ -32,31 +32,39 @@ async function generateBeautifulHTML(
   const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
   if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
 
-  // Modell Konfiguration (Gemini 3 Flash Preview)
-  const MODEL_NAME = "gemini-3-flash-preview";
+  // SETTING: GEMINI 3 PRO PREVIEW (Wie gewünscht!)
+  // Wir nehmen 'pro' statt 'flash', damit er bei langen Texten nicht anfängt zu kürzen.
+  const MODEL_NAME = "gemini-3-pro-preview";
 
-  const designPrompt = `Du bist ein erfahrener Web-Designer (Level: Senior Frontend Dev).
-**AUFGABE:** Generiere HTML für ein Elementor Custom HTML Widget.
+  // Prompt: Explizit "DUMB CONVERTER" Modus, damit die KI nicht kreativ kürzt.
+  const designPrompt = `
+**ROLLE:** Du bist ein strikter Markdown-zu-HTML Compiler.
+**MODUS:** "NO-SUMMARIZATION MODE".
 
-**WICHTIGSTE REGEL ZUR OPTIMIERUNG:**
-Nutze **CSS Custom Properties (Variablen)** im Style-Attribut des Haupt-Containers!
-Definiere Farben und Fonts oben einmal und nutze unten nur 'var(--x)'. Das spart Tokens und hält den Code sauber.
+**AUFGABE:**
+Konvertiere den Markdown-Text 1:1 in HTML.
+Du darfst NIEMALS Text weglassen, zusammenfassen oder durch Platzhalter ersetzen.
+Der Output muss den VÖLLSTÄNDIGEN Text enthalten.
 
-**Struktur-Vorgabe (strikt einhalten):**
+**STYLING (CSS VARS):**
+Nutze im Code NUR diese Variablen, keine hex-codes (spart Tokens):
+- Farben: var(--c-p), var(--c-s), var(--c-t), var(--bg)
+- Fonts: var(--f-h), var(--f-b)
+
+**HTML GERÜST (Nutze exakt dieses):**
 <div style="--c-p:${BRAND.colors.primary}; --c-s:${BRAND.colors.secondary}; --c-t:${BRAND.colors.text_dark}; --bg:${BRAND.colors.background_light}; --f-h:'${BRAND.typography.heading_font}',sans-serif; --f-b:'${BRAND.typography.body_font}',sans-serif; max-width:1200px; margin:0 auto;">
   
   <div style="background:linear-gradient(135deg, var(--c-p), #000); color:white; padding:80px 20px; border-radius:12px; margin-bottom:40px; text-align:center;">
      <h1 style="font-family:var(--f-h); font-size:48px; margin:0;">${title}</h1>
   </div>
 
-  [HIER DEN GANZEN ARTIKEL IN HTML KONVERTIEREN]
+  [FÜGE HIER DEN GESAMTEN INHALT EIN]
 
   <div style="margin-top:60px;">
     <h2 style="font-family:var(--f-h); color:var(--c-p); text-align:center;">Häufige Fragen</h2>
-    <details style="background:var(--bg); margin-bottom:10px; padding:15px; border-radius:8px; cursor:pointer;">
-      <summary style="font-family:var(--f-h); font-weight:bold; color:var(--c-p);">Frage...</summary>
-      <p style="font-family:var(--f-b); margin-top:10px;">Antwort...</p>
-    </details>
+    ${JSON.stringify(faqs)}.forEach(faq => {
+       Erstelle <details style="background:var(--bg); margin-bottom:10px; padding:15px; border-radius:8px;">...
+    })
   </div>
 
   <div style="text-align:center; margin-top:60px; padding:40px; background:var(--bg); border-radius:12px;">
@@ -65,20 +73,17 @@ Definiere Farben und Fonts oben einmal und nutze unten nur 'var(--x)'. Das spart
 
 </div>
 
-**INPUT DATEN:**
-Markdown Content: 
-${markdown.substring(0, 30000)}
+**INPUT MARKDOWN:**
+${markdown}
 
-FAQs: 
+**INPUT FAQS:**
 ${JSON.stringify(faqs)}
 
-**OUTPUT ANWEISUNG:**
-- Gib NUR den rohen HTML Code zurück.
-- KEIN Markdown Block (\`\`\`).
-- STELLE SICHER, dass du das schließende </div> am Ende generierst.
+**OUTPUT:**
+Nur HTML. Kein Markdown.
 `;
 
-  console.log(`Calling Gemini API (${MODEL_NAME}) for HTML design...`);
+  console.log(`Calling Gemini API (${MODEL_NAME}) - Strict Mode...`);
 
   try {
     const response = await fetch(
@@ -96,7 +101,7 @@ ${JSON.stringify(faqs)}
             },
           ],
           generationConfig: {
-            temperature: 0.3,
+            temperature: 0.1, // Fast 0, damit er sich strikt an den Text hält
             maxOutputTokens: 8192,
           },
         }),
@@ -111,14 +116,14 @@ ${JSON.stringify(faqs)}
     const data = await response.json();
     let html = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    // Cleanup Markdown code blocks
+    // Cleanup
     html = html
       .replace(/^```html\s*/i, "")
       .replace(/^```\s*/i, "")
       .replace(/\s*```$/i, "")
       .trim();
 
-    // Check completeness
+    // Safety Check End Tag
     if (!html.endsWith("</div>") && !html.endsWith(">")) {
       console.warn("HTML incomplete, patching end.");
       html += "\n</div>";
@@ -127,8 +132,7 @@ ${JSON.stringify(faqs)}
     return html;
   } catch (error) {
     console.error("AI Generation failed:", error);
-    // Fallback HTML um Frontend-Crash zu verhindern
-    return `<div style="padding:20px; color:red; border:1px solid red;">Fehler beim Generieren des Designs.<br><small>${error instanceof Error ? error.message : String(error)}</small></div>`;
+    return `<div style="padding:20px; color:red;">Fehler: ${error instanceof Error ? error.message : String(error)}</div>`;
   }
 }
 
@@ -138,7 +142,7 @@ serve(async (req) => {
   }
 
   try {
-    // 1. Verify Authorization
+    // 1. Auth Headers Check
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing authorization header" }), {
@@ -151,7 +155,7 @@ serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // 2. Auth Check
+    // 2. Validate User
     const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -167,7 +171,7 @@ serve(async (req) => {
       });
     }
 
-    // 3. Parse Request
+    // 3. Get Payload
     const { articleId } = await req.json();
     if (!articleId) {
       return new Response(JSON.stringify({ error: "articleId is required" }), {
@@ -176,10 +180,9 @@ serve(async (req) => {
       });
     }
 
-    // 4. Init Service Client (for Database Access)
+    // 4. DB Operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 5. Fetch Data
     const { data: article, error: articleError } = await supabase
       .from("articles")
       .select("*")
@@ -188,8 +191,7 @@ serve(async (req) => {
 
     if (articleError) throw new Error("Article not found");
 
-    // 6. Security Check: Workspace Ownership
-    // Check if the project belongs to a workspace owned by the user
+    // 5. Ownership Check
     const { data: project } = await supabase
       .from("projects")
       .select("workspace_id")
@@ -213,7 +215,7 @@ serve(async (req) => {
 
     console.log(`Generating HTML for article: ${article.title}`);
 
-    // 7. Generate HTML (The Main Task)
+    // 6. EXECUTE GEMINI
     const html = await generateBeautifulHTML(
       article.title,
       article.content_markdown || "",
@@ -221,13 +223,13 @@ serve(async (req) => {
       article.meta_description || "",
     );
 
-    // 8. Save Result
+    // 7. Save
     const { data: htmlExport, error: exportError } = await supabase
       .from("html_exports")
       .insert({
         project_id: article.project_id,
         article_id: articleId,
-        name: `${article.title} - HTML Export`,
+        name: `${article.title} - HTML Export (Gemini 3)`,
         html_content: html,
       })
       .select()
@@ -235,7 +237,7 @@ serve(async (req) => {
 
     if (exportError) throw exportError;
 
-    // 9. Success Response
+    // 8. Return
     return new Response(
       JSON.stringify({
         success: true,
