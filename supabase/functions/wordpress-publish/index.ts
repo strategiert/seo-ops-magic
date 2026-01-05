@@ -241,22 +241,49 @@ serve(async (req) => {
     const baseUrl = project.wp_url.replace(/\/$/, "").replace(/\/wp-json$/, "");
     const authString = btoa(`${integration.wp_username}:${integration.wp_app_password}`);
 
+    // Debug: Log article content status
+    console.log("wordpress-publish: Article content check:", {
+      hasContentHtml: !!article.content_html,
+      contentHtmlLength: article.content_html?.length || 0,
+      hasContentMarkdown: !!article.content_markdown,
+      contentMarkdownLength: article.content_markdown?.length || 0,
+      hasFaqJson: !!article.faq_json,
+      faqCount: article.faq_json?.length || 0,
+      useStyledHtml,
+    });
+
     // Generate styled HTML if enabled
     let content = article.content_html || article.content_markdown || "";
 
     if (useStyledHtml && article.content_markdown) {
       try {
+        console.log("wordpress-publish: Generating styled HTML...");
         content = await generateBeautifulHTML(
           article.title,
           article.content_markdown,
           article.faq_json || [],
           article.meta_description || ""
         );
+        console.log("wordpress-publish: HTML generated successfully, length:", content.length);
       } catch (htmlError) {
-        console.error("wordpress-publish: HTML generation failed, using raw content:", htmlError);
+        console.error("wordpress-publish: HTML generation failed:", htmlError);
         // Fall back to raw markdown if AI fails
+        content = article.content_markdown || article.content_html || "";
+        console.log("wordpress-publish: Using fallback content, length:", content.length);
       }
     }
+
+    // Warn if content is empty
+    if (!content || content.length === 0) {
+      console.error("wordpress-publish: WARNING - Content is empty!");
+      return new Response(
+        JSON.stringify({ error: "Article has no content to publish" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("wordpress-publish: Final content length:", content.length);
+    console.log("wordpress-publish: Content preview:", content.substring(0, 200));
 
     const wpPost = {
       title: article.title,
@@ -268,6 +295,13 @@ serve(async (req) => {
 
     const wpEndpoint = `${baseUrl}/wp-json/wp/v2/posts`;
 
+    console.log("wordpress-publish: Sending to WordPress:", {
+      endpoint: wpEndpoint,
+      titleLength: wpPost.title?.length,
+      contentLength: wpPost.content?.length,
+      status: wpPost.status,
+    });
+
     const wpResponse = await fetch(wpEndpoint, {
       method: "POST",
       headers: {
@@ -277,11 +311,14 @@ serve(async (req) => {
       body: JSON.stringify(wpPost),
     });
 
+    const wpResponseText = await wpResponse.text();
+    console.log("wordpress-publish: WordPress response status:", wpResponse.status);
+    console.log("wordpress-publish: WordPress response preview:", wpResponseText.substring(0, 500));
+
     if (!wpResponse.ok) {
-      const errorText = await wpResponse.text().catch(() => "");
-      console.error("wordpress-publish: WordPress API error", wpResponse.status, errorText);
+      console.error("wordpress-publish: WordPress API error", wpResponse.status, wpResponseText);
       return new Response(
-        JSON.stringify({ error: `WordPress error: ${wpResponse.status}`, details: errorText }),
+        JSON.stringify({ error: `WordPress error: ${wpResponse.status}`, details: wpResponseText }),
         {
           status: wpResponse.status,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -289,9 +326,16 @@ serve(async (req) => {
       );
     }
 
-    const wpData = await wpResponse.json();
+    let wpData;
+    try {
+      wpData = JSON.parse(wpResponseText);
+    } catch (e) {
+      console.error("wordpress-publish: Failed to parse WordPress response");
+      wpData = {};
+    }
 
     console.log(`wordpress-publish: published article=${articleId} wpPostId=${wpData?.id}`);
+    console.log("wordpress-publish: WordPress returned content length:", wpData?.content?.rendered?.length || 0);
 
     return new Response(
       JSON.stringify({
