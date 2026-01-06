@@ -102,6 +102,8 @@ serve(async (req) => {
       }
     }
 
+    console.log(`Processing HTML Export for: ${article.title}`);
+
     console.log("=== GENERATING HTML EXPORT ===");
     console.log("Article ID:", articleId);
     console.log("Title:", article.title);

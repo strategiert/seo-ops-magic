@@ -7,8 +7,6 @@ import { parseHTML } from "https://esm.sh/linkedom@0.18.5";
 import type { Block, HeadingBlock, ParagraphBlock, ListBlock, TableBlock, QuoteBlock, ImageBlock, CodeBlock, HrBlock } from "./types.ts";
 import { stripDangerous, escapeHtml } from "./sanitize.ts";
 
-let globalIdx = 0;
-
 /**
  * Check if content is Markdown (simple heuristic)
  */
@@ -166,56 +164,71 @@ function markdownToHtml(md: string): string {
 /**
  * Extract structured blocks from HTML content
  */
-export function extractBlocksFromHtml(inputHtml: string, isNested = false): Block[] {
-  if (!isNested) globalIdx = 0;
-
+export function extractBlocksFromHtml(inputHtml: string): Block[] {
   const sanitized = stripDangerous(inputHtml);
+<<<<<<< HEAD
+  const { document } = parseHTML(`<body>${sanitized}</body>`);
+  const body = document.querySelector("body");
+=======
   // We use childNodes to ensure we catch raw text between elements
   const parsed = parseHTML(`<body>${sanitized}</body>`);
   const doc = (parsed as any).document;
   const body = doc.querySelector("body");
+>>>>>>> origin/main
 
   if (!body) return [];
 
   const blocks: Block[] = [];
+<<<<<<< HEAD
+  let idx = 0;
+
+  function walk(node: any) {
+=======
   const nodes = Array.from(body.childNodes) as any[];
 
   for (const node of nodes) {
     const nodeAny = node as any;
+>>>>>>> origin/main
     // TEXT_NODE (3)
     if (nodeAny.nodeType === 3) {
       const text = (nodeAny.textContent || "").trim();
       if (text) {
         blocks.push({
-          id: `paragraph-${globalIdx++}`,
+          id: `paragraph-${idx++}`,
           type: "paragraph",
           text,
           html: `<p>${escapeHtml(text)}</p>`,
         } as ParagraphBlock);
       }
-      continue;
+      return;
     }
 
     // ELEMENT_NODE (1)
+<<<<<<< HEAD
+    if (node.nodeType !== 1) return;
+
+    const el = node;
+=======
     if (nodeAny.nodeType !== 1) continue;
 
     const el = nodeAny;
+>>>>>>> origin/main
     const tag = (el.tagName || "").toLowerCase();
 
     // Headings
     if (/^h[1-4]$/.test(tag)) {
-      const level = Number(tag[1]) as 1 | 2 | 3 | 4;
+      const levelNum = Number(tag[1]);
       const text = (el.textContent || "").trim();
-      if (text) {
+      if (text && (levelNum === 1 || levelNum === 2 || levelNum === 3 || levelNum === 4)) {
         blocks.push({
-          id: `heading-${globalIdx++}`,
+          id: `heading-${idx++}`,
           type: "heading",
-          level,
+          level: levelNum as 1 | 2 | 3 | 4,
           text,
           html: el.outerHTML,
         } as HeadingBlock);
       }
-      continue;
+      return;
     }
 
     // Paragraphs
@@ -223,31 +236,37 @@ export function extractBlocksFromHtml(inputHtml: string, isNested = false): Bloc
       const text = (el.textContent || "").trim();
       if (text) {
         blocks.push({
-          id: `paragraph-${globalIdx++}`,
+          id: `paragraph-${idx++}`,
           type: "paragraph",
           text,
           html: el.outerHTML,
         } as ParagraphBlock);
       }
-      continue;
+      return;
     }
 
     // Lists
     if (tag === "ul" || tag === "ol") {
+<<<<<<< HEAD
+      const liNodes = el.querySelectorAll("li");
+      const items = Array.from(liNodes)
+        .map((li: any) => (li.textContent || "").trim())
+=======
       const items = Array.from(el.querySelectorAll("li"))
         .map((li: any) => ((li as any).textContent || "").trim())
+>>>>>>> origin/main
         .filter(Boolean);
 
       if (items.length > 0) {
         blocks.push({
-          id: `list-${globalIdx++}`,
+          id: `list-${idx++}`,
           type: "list",
           ordered: tag === "ol",
           items,
           html: el.outerHTML,
         } as ListBlock);
       }
-      continue;
+      return;
     }
 
     // Blockquotes
@@ -255,33 +274,41 @@ export function extractBlocksFromHtml(inputHtml: string, isNested = false): Bloc
       const text = (el.textContent || "").trim();
       if (text) {
         blocks.push({
-          id: `quote-${globalIdx++}`,
+          id: `quote-${idx++}`,
           type: "quote",
           text,
           html: el.outerHTML,
         } as QuoteBlock);
       }
-      continue;
+      return;
     }
 
     // Tables
     if (tag === "table") {
       const headerCells = el.querySelectorAll("thead th, tr:first-child th, tr:first-child td");
+<<<<<<< HEAD
+      const headers = Array.from(headerCells).map((th: any) => (th.textContent || "").trim());
+
+      const bodyRows = el.querySelectorAll("tbody tr, tr:not(:first-child)");
+      const rows = Array.from(bodyRows).map((tr: any) =>
+        Array.from(tr.querySelectorAll("td")).map((td: any) => (td.textContent || "").trim())
+=======
       const headers = Array.from(headerCells).map((th: any) => ((th as any).textContent || "").trim());
 
       const bodyRows = el.querySelectorAll("tbody tr, tr:not(:first-child)");
       const rows = Array.from(bodyRows).map((tr: any) =>
         Array.from((tr as any).querySelectorAll("td")).map((td: any) => ((td as any).textContent || "").trim())
+>>>>>>> origin/main
       ).filter(row => row.length > 0);
 
       blocks.push({
-        id: `table-${globalIdx++}`,
+        id: `table-${idx++}`,
         type: "table",
         headers,
         rows,
         html: el.outerHTML,
       } as TableBlock);
-      continue;
+      return;
     }
 
     // Images
@@ -289,58 +316,65 @@ export function extractBlocksFromHtml(inputHtml: string, isNested = false): Bloc
       const src = el.getAttribute("src") || "";
       const alt = el.getAttribute("alt") || "";
       blocks.push({
-        id: `image-${globalIdx++}`,
+        id: `image-${idx++}`,
         type: "image",
         meta: { src, alt },
         html: el.outerHTML,
       } as ImageBlock);
-      continue;
+      return;
     }
 
     // Code blocks
     if (tag === "pre") {
       const codeEl = el.querySelector("code");
       const code = (codeEl?.textContent || el.textContent || "").trim();
-      const langClass = codeEl?.getAttribute("class") || "";
+      const langClass = (codeEl as any)?.getAttribute("class") || "";
       const langMatch = langClass.match(/language-(\w+)/);
 
       blocks.push({
-        id: `code-${globalIdx++}`,
+        id: `code-${idx++}`,
         type: "code",
         code,
         language: langMatch?.[1],
         html: el.outerHTML,
       } as CodeBlock);
-      continue;
+      return;
     }
 
     // Horizontal rules
     if (tag === "hr") {
       blocks.push({
-        id: `hr-${globalIdx++}`,
+        id: `hr-${idx++}`,
         type: "hr",
         html: el.outerHTML,
       } as HrBlock);
-      continue;
+      return;
     }
 
-    // Divs and other containers - recurse into children but keep globalIdx
+    // Containers (div, section, article)
     if (tag === "div" || tag === "section" || tag === "article") {
-      const innerBlocks = extractBlocksFromHtml(el.innerHTML || "", true);
-      blocks.push(...innerBlocks);
-      continue;
+      const childNodes = Array.from(el.childNodes);
+      for (const child of childNodes) {
+        walk(child);
+      }
+      return;
     }
 
-    // Fallback: treat as paragraph if has text content
+    // Fallback: treat as paragraph if has text content and no children
     const textContent = (el.textContent || "").trim();
     if (textContent) {
       blocks.push({
-        id: `paragraph-${globalIdx++}`,
+        id: `paragraph-${idx++}`,
         type: "paragraph",
         text: textContent,
         html: el.outerHTML,
       } as ParagraphBlock);
     }
+  }
+
+  const rootNodes = Array.from(body.childNodes);
+  for (const node of rootNodes) {
+    walk(node);
   }
 
   return blocks;
