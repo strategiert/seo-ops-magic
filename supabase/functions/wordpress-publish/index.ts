@@ -128,32 +128,42 @@ serve(async (req) => {
       .limit(1)
       .single();
 
-    let content: string;
-
+    // 4. Content Logic
+    let content = "";
     if (htmlExport?.html_content) {
-      // Use existing HTML export
       console.log("wordpress-publish: Using existing HTML export");
-      let htmlContent = htmlExport.html_content;
+      const htmlContent = htmlExport.html_content;
 
-      // If it's a full HTML document, extract just the body content
-      if (htmlContent.includes("<!DOCTYPE html>") || htmlContent.includes("<html")) {
-        // Extract content from <article class="article-container">...</article>
-        const articleMatch = htmlContent.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-        if (articleMatch) {
-          // Include the embedded CSS for styling to work
-          const styleMatch = htmlContent.match(/<style>([\s\S]*?)<\/style>/i);
-          const styles = styleMatch ? `<style>${styleMatch[1]}</style>` : "";
-          content = styles + articleMatch[0];
-          console.log("wordpress-publish: Extracted article content with styles");
+      // Robust extraction using Linkedom
+      // We look for our self-contained wrapper ID
+      try {
+        const { document } = parseHTML(htmlContent);
+        const wrapper = document.getElementById("seo-ops-content-wrapper");
+
+        if (wrapper) {
+          // Wrap in a clean div to avoid any double-wrapping issues, 
+          // but mostly just return the wrapper's outerHTML which contains 
+          // inline styles and the <style> block.
+          content = wrapper.outerHTML;
+          console.log("wordpress-publish: Extracted content via Linkedom (#seo-ops-content-wrapper)");
         } else {
-          // Fallback: extract body content
-          const bodyMatch = htmlContent.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-          content = bodyMatch ? bodyMatch[1] : htmlContent;
-          console.log("wordpress-publish: Extracted body content");
+          // Fallback: Try finding the class if ID is missing (legacy exports?)
+          const classWrapper = document.querySelector(".seo-ops-content");
+          if (classWrapper) {
+            content = classWrapper.outerHTML;
+            console.log("wordpress-publish: Extracted content via Linkedom (.seo-ops-content)");
+          } else {
+            // Last resort fallback (e.g. if it's a raw body)
+            const body = document.querySelector("body");
+            content = body ? body.innerHTML : htmlContent;
+            console.log("wordpress-publish: Fallback to body content");
+          }
         }
-      } else {
-        content = htmlContent;
+      } catch (e) {
+        console.error("wordpress-publish: Error parsing HTML with Linkedom", e);
+        content = htmlContent; // Absolute fallback
       }
+
     } else if (article.content_html) {
       // Fallback to content_html field
       console.log("wordpress-publish: Using article content_html");

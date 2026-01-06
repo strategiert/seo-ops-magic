@@ -368,6 +368,8 @@ export function generateHtmlDocument(options: HtmlDocOptions): string {
   const { title, theme, bodyHtml, metaDescription } = options;
 
   const themeVars = THEME_STYLES[theme] || THEME_STYLES["minimal-clean"];
+  // Clean up vars for inline usage
+  const inlineVars = themeVars.replace(/\s+/g, " ").trim();
 
   return `<!DOCTYPE html>
 <html lang="de">
@@ -376,17 +378,14 @@ export function generateHtmlDocument(options: HtmlDocOptions): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="${escapeAttr(metaDescription || "")}">
   <title>${escapeHtml(title)}</title>
-  <style>
-    :root {
-      ${themeVars}
-    }
-    ${BASE_CSS}
-  </style>
 </head>
 <body>
-  <article class="seo-ops-content">
+  <div id="seo-ops-content-wrapper" class="seo-ops-content" style="${inlineVars}">
+    <style>
+      ${BASE_CSS}
+    </style>
     ${bodyHtml}
-  </article>
+  </div>
 </body>
 </html>`;
 }
