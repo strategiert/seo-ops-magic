@@ -8,7 +8,7 @@ export function buildBrandContext(brandProfile: any): string {
   // Identity & Voice
   if (brandProfile.brand_name) sections.push(`**Marke:** ${brandProfile.brand_name}`);
   if (brandProfile.tagline) sections.push(`**Claim:** ${brandProfile.tagline}`);
-  
+
   const voice = brandProfile.brand_voice;
   if (voice) {
     const tone = voice.tone?.join(", ");
@@ -50,7 +50,7 @@ export function transformGuidelines(rawGuidelines: any) {
     const basic = rawGuidelines.terms?.content_basic?.map((t: any) => t.t) || [];
     const extended = rawGuidelines.terms?.content_extended?.map((t: any) => t.t) || [];
     terms = [...basic, ...extended];
-    
+
     questions = [
       ...(rawGuidelines.ideas?.suggest_questions?.map((q: any) => q.q) || []),
       ...(rawGuidelines.ideas?.people_also_ask?.map((q: any) => q.q) || [])
@@ -61,9 +61,17 @@ export function transformGuidelines(rawGuidelines: any) {
     questions = rawGuidelines.questions || [];
   }
 
+  // Internal Links Extraction (Custom or Standard NW field)
+  // Assuming they might be passed in a field called 'internal_links' or 'links' based on user description
+  const internalLinks = rawGuidelines.internal_links || rawGuidelines.links || [];
+  const formattedLinks = Array.isArray(internalLinks)
+    ? internalLinks.map((l: any) => `- [${l.anchor || l.title}](${l.url})`).join("\n")
+    : "";
+
   return {
-    terms: terms.slice(0, 30).join(", "),
+    terms: terms.slice(0, 50).join(", "),
     questions: questions.slice(0, 10).join("\n- "),
+    internalLinks: formattedLinks,
     targetWords
   };
 }
