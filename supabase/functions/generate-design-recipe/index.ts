@@ -1,26 +1,17 @@
 /**
- * Generate HTML Export Edge Function
+ * Generate Design Recipe Edge Function
  *
- * Uses the deterministic renderer to create HTML from article content.
- * LLM decisions are stored in article_design_recipes table.
- * This function ONLY renders - it never calls LLM.
- *
- * Flow:
- * 1. Load article content
- * 2. Load design recipe (or use fallback)
- * 3. Extract blocks from content
- * 4. Render HTML body using deterministic renderer
- * 5. Wrap in complete HTML document with embedded CSS
- * 6. Save to html_exports table
+ * Extracts blocks from article content and uses LLM to generate
+ * layout decisions (recipe). The recipe is stored for later use
+ * by the deterministic HTML renderer.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { extractBlocks } from "../_shared/blockExtractor.ts";
-import { renderBlocksWithFallback } from "../_shared/renderer.ts";
-import { generateHtmlDocument } from "../_shared/htmlDoc.ts";
-import { generateFallbackRecipe, validateRecipe } from "../_shared/recipeSchema.ts";
-import type { Recipe } from "../_shared/recipeSchema.ts";
+import { extractBlocks, summarizeBlocksForLlm } from "../_shared/blockExtractor.ts";
+import { generateRecipeWithLlm } from "../_shared/llmClient.ts";
+import { validateRecipe, generateFallbackRecipe } from "../_shared/recipeSchema.ts";
+import type { ArticleMeta } from "../_shared/types.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,7 +52,7 @@ serve(async (req) => {
       );
     }
 
-    const { articleId, format = "full" } = await req.json();
+    const { articleId, force = false } = await req.json();
 
     if (!articleId) {
       return new Response(
@@ -125,10 +116,30 @@ serve(async (req) => {
       );
     }
 
-    console.log("=== GENERATING HTML EXPORT ===");
+    console.log("=== GENERATING DESIGN RECIPE ===");
     console.log("Article ID:", articleId);
     console.log("Title:", article.title);
-    console.log("Format:", format);
+    console.log("Force regenerate:", force);
+
+    // Check for existing recipe
+    const { data: existingRecipe } = await supabase
+      .from("article_design_recipes")
+      .select("*")
+      .eq("article_id", articleId)
+      .single();
+
+    if (existingRecipe && !force) {
+      console.log("Returning existing recipe (created:", existingRecipe.created_at, ")");
+      return new Response(
+        JSON.stringify({
+          success: true,
+          recipe: existingRecipe.recipe_json,
+          provider: existingRecipe.provider,
+          cached: true,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Get article content
     const content = article.content_markdown || article.content || "";
@@ -154,122 +165,78 @@ serve(async (req) => {
       );
     }
 
-    // Load design recipe (or use fallback)
-    let recipe: Recipe | null = null;
-    let recipeSource = "fallback";
+    // Create compressed summary for LLM
+    const blocksSummary = summarizeBlocksForLlm(blocks);
 
-    const { data: storedRecipe } = await supabase
-      .from("article_design_recipes")
-      .select("recipe_json, provider")
-      .eq("article_id", articleId)
-      .single();
+    // Article metadata for LLM context
+    const articleMeta: ArticleMeta = {
+      id: articleId,
+      title: article.title,
+      metaDescription: article.meta_description,
+      primaryKeyword: article.primary_keyword,
+    };
 
-    if (storedRecipe?.recipe_json) {
-      const validation = validateRecipe(storedRecipe.recipe_json);
+    let recipe;
+    let provider = "fallback";
+
+    try {
+      // Call LLM to generate recipe
+      console.log("Calling LLM for recipe generation...");
+      const result = await generateRecipeWithLlm(articleMeta, blocksSummary);
+
+      // Validate the result
+      const validation = validateRecipe(result.json);
+
       if (validation.success && validation.recipe) {
         recipe = validation.recipe;
-        recipeSource = storedRecipe.provider || "stored";
-        console.log(`Loaded recipe from DB (provider: ${recipeSource}, theme: ${recipe.theme})`);
+        provider = result.provider;
+        console.log(`LLM recipe generated (provider: ${provider}, theme: ${recipe.theme})`);
+      } else {
+        console.warn("LLM output validation failed:", validation.errors?.format());
+        console.log("Using fallback recipe");
+        recipe = generateFallbackRecipe(articleId);
       }
-    }
-
-    if (!recipe) {
+    } catch (llmError) {
+      console.error("LLM error:", llmError);
+      console.log("Using fallback recipe due to LLM error");
       recipe = generateFallbackRecipe(articleId);
-      recipeSource = "fallback";
-      console.log(`Using fallback recipe (theme: ${recipe.theme})`);
     }
 
-    // Render HTML body using deterministic renderer
-    console.log("Rendering HTML body...");
-    const bodyHtml = renderBlocksWithFallback(blocks, recipe);
-    console.log(`Body HTML: ${bodyHtml.length} characters`);
-
-    // Generate final HTML based on format
-    let finalHtml: string;
-
-    if (format === "body-only") {
-      // Just the body content (for Elementor Custom HTML widget)
-      finalHtml = bodyHtml;
-    } else {
-      // Full HTML document with CSS
-      finalHtml = generateHtmlDocument({
-        title: article.title,
-        theme: recipe.theme,
-        bodyHtml,
-        metaDescription: article.meta_description,
-      });
-    }
-
-    console.log(`Final HTML: ${finalHtml.length} characters`);
-
-    // Save HTML export
-    // Check for existing export for this article
-    const { data: existingExport } = await supabase
-      .from("html_exports")
-      .select("id")
-      .eq("article_id", articleId)
-      .order("created_at", { ascending: false })
-      .limit(1)
+    // Upsert recipe to database
+    const { data: savedRecipe, error: saveError } = await supabase
+      .from("article_design_recipes")
+      .upsert({
+        article_id: articleId,
+        recipe_version: recipe.recipeVersion,
+        provider,
+        recipe_json: recipe,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: "article_id",
+      })
+      .select()
       .single();
 
-    let htmlExport;
-    let exportError;
-
-    if (existingExport) {
-      // Update existing export
-      const result = await supabase
-        .from("html_exports")
-        .update({
-          html_content: finalHtml,
-          recipe_version: recipe.recipeVersion,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existingExport.id)
-        .select()
-        .single();
-
-      htmlExport = result.data;
-      exportError = result.error;
-    } else {
-      // Create new export
-      const result = await supabase
-        .from("html_exports")
-        .insert({
-          article_id: articleId,
-          project_id: article.project_id,
-          name: `${article.title} - HTML Export`,
-          html_content: finalHtml,
-          recipe_version: recipe.recipeVersion,
-        })
-        .select()
-        .single();
-
-      htmlExport = result.data;
-      exportError = result.error;
-    }
-
-    if (exportError) {
-      console.error("Error saving HTML export:", exportError);
+    if (saveError) {
+      console.error("Error saving recipe:", saveError);
       return new Response(
-        JSON.stringify({ error: "Failed to save HTML export", details: exportError }),
+        JSON.stringify({ error: "Failed to save recipe", details: saveError }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     console.log("=== SUCCESS ===");
-    console.log("HTML Export ID:", htmlExport.id);
-    console.log("Recipe source:", recipeSource);
+    console.log("Recipe ID:", savedRecipe.id);
     console.log("Theme:", recipe.theme);
-    console.log("Blocks rendered:", blocks.length);
+    console.log("Layout items:", recipe.layout.length);
 
     return new Response(
       JSON.stringify({
         success: true,
-        exportId: htmlExport.id,
-        htmlLength: finalHtml.length,
-        blocksRendered: blocks.length,
-        recipeSource,
-        theme: recipe.theme,
+        recipe: recipe,
+        provider,
+        cached: false,
+        recipeId: savedRecipe.id,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

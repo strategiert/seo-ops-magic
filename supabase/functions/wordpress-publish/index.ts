@@ -133,7 +133,27 @@ serve(async (req) => {
     if (htmlExport?.html_content) {
       // Use existing HTML export
       console.log("wordpress-publish: Using existing HTML export");
-      content = htmlExport.html_content;
+      let htmlContent = htmlExport.html_content;
+
+      // If it's a full HTML document, extract just the body content
+      if (htmlContent.includes("<!DOCTYPE html>") || htmlContent.includes("<html")) {
+        // Extract content from <article class="article-container">...</article>
+        const articleMatch = htmlContent.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+        if (articleMatch) {
+          // Include the embedded CSS for styling to work
+          const styleMatch = htmlContent.match(/<style>([\s\S]*?)<\/style>/i);
+          const styles = styleMatch ? `<style>${styleMatch[1]}</style>` : "";
+          content = styles + articleMatch[0];
+          console.log("wordpress-publish: Extracted article content with styles");
+        } else {
+          // Fallback: extract body content
+          const bodyMatch = htmlContent.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+          content = bodyMatch ? bodyMatch[1] : htmlContent;
+          console.log("wordpress-publish: Extracted body content");
+        }
+      } else {
+        content = htmlContent;
+      }
     } else if (article.content_html) {
       // Fallback to content_html field
       console.log("wordpress-publish: Using article content_html");
