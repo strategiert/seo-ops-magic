@@ -367,9 +367,8 @@ export interface HtmlDocOptions {
 export function generateHtmlDocument(options: HtmlDocOptions): string {
   const { title, theme, bodyHtml, metaDescription } = options;
 
-  const themeVars = THEME_STYLES[theme] || THEME_STYLES["minimal-clean"];
-  // Clean up vars for inline usage
-  const inlineVars = themeVars.replace(/\s+/g, " ").trim();
+  // Inline wrapper style
+  const wrapperStyle = "font-family: 'PT Sans', sans-serif; color: #333333; line-height: 1.6; max-width: 900px; margin: 0 auto; padding: 20px; background-color: #f8f8f8; box-shadow: 0 0 15px rgba(0, 0, 0, 0.05); border-radius: 10px;";
 
   return `<!DOCTYPE html>
 <html lang="de">
@@ -378,12 +377,11 @@ export function generateHtmlDocument(options: HtmlDocOptions): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="${escapeAttr(metaDescription || "")}">
   <title>${escapeHtml(title)}</title>
+  <!-- Import Fonts for NetCo Design -->
+  <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@400;700&family=PT+Sans:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div id="seo-ops-content-wrapper" class="seo-ops-content" style="${inlineVars}">
-    <style>
-      ${BASE_CSS}
-    </style>
+  <div id="seo-ops-content-wrapper" style="${wrapperStyle}">
     ${bodyHtml}
   </div>
 </body>
