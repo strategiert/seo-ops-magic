@@ -1,9 +1,9 @@
-// supabase/functions/generate-article/index.ts
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { routeToModel, getGeminiEndpoint } from "../_shared/model-router.ts";
 import { buildBrandContext, transformGuidelines } from "./helpers.ts";
+import { scrapeUrls } from "../_shared/scrapeowl.ts";
+import { enrichKeyword } from "../_shared/keyword-research.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,7 +50,7 @@ serve(async (req) => {
       .single();
 
     if (dbError || !brief) throw new Error("Brief not found");
-    
+
     // Security Check: Gehört das Projekt dem User?
     if (brief.project?.workspace?.owner_id !== user.id) {
       throw new Error("Forbidden: You don't own this project");
@@ -61,6 +61,29 @@ serve(async (req) => {
     const brandContext = buildBrandContext(brief.project.brand);
     const targetWords = brief.target_length || guidelines.targetWords;
 
+    // === External Research (ZimmWriter Style) ===
+    console.log("[Research] Starting background research...");
+
+    // A. SERP / Keyword Research
+    const keywordData = await enrichKeyword(brief.primary_keyword, supabase);
+    console.log(`[Research] Keyword data found: ${!!keywordData.serp}`);
+
+    // B. Scrape Context (Internal Links)
+    // Extract raw URLs from the internal links string (simplified regex)
+    // Assuming internalLinks format is "- [Anchor](URL)" or similar
+    // We regex for https?://...
+    const urlMatches = guidelines.internalLinks.match(/\((https?:\/\/[^)]+)\)/g);
+    const urlsToScrape = urlMatches ? urlMatches.map((u: any) => u.slice(1, -1)).slice(0, 3) : []; // Limit to 3 to save time/tokens
+
+    console.log(`[Research] Scraping ${urlsToScrape.length} URLs...`);
+    // Pass supabase client for caching
+    const scrapedContent = await scrapeUrls(urlsToScrape, supabase);
+    const scrapedSummary = scrapedContent
+      .filter(s => !s.error && s.markdown.length > 100)
+      // Limit context size per source
+      .map(s => `SOURCE (${s.url}):\n${s.markdown.slice(0, 800)}...`)
+      .join("\n\n");
+
     // 4. Prompting Setup - Verstärkter System-Prompt für JSON
     const systemPrompt = `Du bist ein Elite SEO-Texter.
 WICHTIG: Deine Antwort muss ein valides JSON-Objekt sein.
@@ -69,24 +92,54 @@ WICHTIG: Deine Antwort muss ein valides JSON-Objekt sein.
 - Schreibe KEINEN Text vor oder nach dem JSON.
 - Keine Markdown-Codeblöcke (kein \`\`\`json).`;
 
-    const userPrompt = `Schreibe einen Artikel basierend auf:
+    const userPrompt = `Schreibe einen Artikel basierend auf folgenden Anweisungen.
 Titel: ${brief.title}
 Keyword: ${brief.primary_keyword}
 Ziel-Länge: ${targetWords} Wörter
 Intent: ${brief.search_intent || "informational"}
 
-NLP-Keywords (einbauen): ${guidelines.terms}
-Zu beantwortende Fragen:
+### SEO & Struktur
+- Das Hauptkeyword ("${brief.primary_keyword}") MUSS im H1, und in einigen H2/H3 Überschriften vorkommen.
+- Nutze semantische HTML-Struktur (h1, h2, h3, p, ul, table, blockquote).
+- Starte mit einer "Key Takeaways" Box (als Markdown Quote oder Liste).
+
+### Inhalt & Stil (ZimmWriter Style)
+- Nutze "Literary Devices" (Metaphern, Analogien, rhetorische Fragen), um den Text lebendig und engaging zu machen.
+- Vermeide "Skinny Paragraphs" (zu kurze Absätze). Schreibe substanzielle Absätze.
+- Nutze Listen und Tabellen wo immer es sinnvoll ist (für Daten, Vergleiche).
+- Tone of Voice: ${brief.project.brand?.brand_voice?.tone?.join(", ") || "Professionell, aber zugänglich"}.
+
+### Hintergrund-Recherche (Daten für besseren Kontext)
+${keywordData.serp ? `Aktuelle SERP-Situation (Top Ergebnisse):
+${keywordData.serp.topResults.map((r: any) => `- ${r.title}: ${r.snippet}`).join("\n")}
+Nutzer fragen auch:
+${keywordData.serp.peopleAlsoAsk.join(", ")}` : "(Keine Live-SERP Daten verfügbar)"}
+
+### Referenz-Inhalte (Aus internen Links gescraped)
+${scrapedSummary || "(Keine gescrapten Inhalte verfügbar - nutze dein Wissen)"}
+
+### Interne Verlinkung
+Bitte baue, wenn kontextuell passend, folgende interne Links ein:
+${guidelines.internalLinks || "(Keine spezifischen Links vorhanden - nutze allgemeine Best Practices)"}
+
+### NLP-Keywords (natürlich einbauen)
+${guidelines.terms}
+
+### Fragen (FAQ)
 - ${guidelines.questions}
+
+### Bilder / Medien
+- Generiere nach jedem H2 Abschnitt einen Bild-Prompt für ein passendes Bild.
+- Format: [IMAGE_PROMPT: Detaillierte Beschreibung für Midjourney]
 
 ${brandContext}
 
-Erwarte JSON Struktur:
+Erwarte valides JSON Format:
 {
   "title": "...",
   "meta_title": "...",
   "meta_description": "...",
-  "content_markdown": "# Titel...", 
+  "content_markdown": "# Titel\n\n> **Key Takeaways**\n> - Punkt 1\n\n...", 
   "outline": [{"level": 2, "text": "..."}],
   "faq": [{"question": "...", "answer": "..."}]
 }`;
@@ -121,27 +174,38 @@ Erwarte JSON Struktur:
 
     const aiData = await aiResponse.json();
     console.log("[AI Response Raw]", JSON.stringify(aiData).substring(0, 300) + "...");
-    
+
     let content = aiData.choices?.[0]?.message?.content;
-    
+
     if (!content) {
       console.error("[AI Empty] Full Response:", JSON.stringify(aiData));
       throw new Error("AI returned empty content. Check logs for details.");
     }
 
     // Markdown-Backticks entfernen, falls die KI sie trotz Anweisung sendet
-    content = content
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
+    // Markdown-Backticks entfernen, falls die KI sie trotz Anweisung sendet
+    // Wir suchen das erste '{' und das letzte '}', um robust gegen Einleitungen/Schlüsse zu sein.
+    const firstBrace = content.indexOf('{');
+    const lastBrace = content.lastIndexOf('}');
+
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      content = content.substring(firstBrace, lastBrace + 1);
+    } else {
+      // Fallback: Nur Markdown Stripping probieren
+      content = content
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .trim();
+    }
 
     let articleData;
     try {
       articleData = JSON.parse(content);
     } catch (e) {
       console.error("[JSON Parse Failed]", content.substring(0, 200));
-      throw new Error("AI did not return valid JSON");
+      console.error("[Full Content]", content); // Log full content for debug
+      throw new Error("AI did not return valid JSON. Content was logged.");
     }
 
     // 7. Speichern

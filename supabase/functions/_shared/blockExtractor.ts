@@ -167,184 +167,189 @@ function markdownToHtml(md: string): string {
  */
 export function extractBlocksFromHtml(inputHtml: string): Block[] {
   const sanitized = stripDangerous(inputHtml);
-  const parsed = parseHTML(`<body>${sanitized}</body>`);
-  // deno-lint-ignore no-explicit-any
-  const doc = (parsed as any).document;
-  const body = doc?.querySelector("body");
+  try {
+    const parsed = parseHTML(`<body>${sanitized}</body>`);
+    // deno-lint-ignore no-explicit-any
+    const doc = (parsed as any).document;
+    const body = doc?.querySelector("body");
 
-  if (!body) return [];
+    if (!body) return [];
 
-  const blocks: Block[] = [];
-  let idx = 0;
+    const blocks: Block[] = [];
+    let idx = 0;
 
-  function walk(node: any) {
-    // TEXT_NODE (3)
-    if (node.nodeType === 3) {
-      const text = (node.textContent || "").trim();
-      if (text) {
-        blocks.push({
-          id: `paragraph-${idx++}`,
-          type: "paragraph",
-          text,
-          html: `<p>${escapeHtml(text)}</p>`,
-        } as ParagraphBlock);
+    function walk(node: any) {
+      // TEXT_NODE (3)
+      if (node.nodeType === 3) {
+        const text = (node.textContent || "").trim();
+        if (text) {
+          blocks.push({
+            id: `paragraph-${idx++}`,
+            type: "paragraph",
+            text,
+            html: `<p>${escapeHtml(text)}</p>`,
+          } as ParagraphBlock);
+        }
+        return;
       }
-      return;
-    }
 
-    // ELEMENT_NODE (1)
-    if (node.nodeType !== 1) return;
+      // ELEMENT_NODE (1)
+      if (node.nodeType !== 1) return;
 
-    const el = node;
-    const tag = (el.tagName || "").toLowerCase();
+      const el = node;
+      const tag = (el.tagName || "").toLowerCase();
 
-    // Headings
-    if (/^h[1-4]$/.test(tag)) {
-      const level = Number(tag[1]) as 1 | 2 | 3 | 4;
-      const text = (el.textContent || "").trim();
-      if (text) {
-        blocks.push({
-          id: `heading-${idx++}`,
-          type: "heading",
-          level,
-          text,
-          html: el.outerHTML || "",
-        } as HeadingBlock);
+      // Headings
+      if (/^h[1-4]$/.test(tag)) {
+        const level = Number(tag[1]) as 1 | 2 | 3 | 4;
+        const text = (el.textContent || "").trim();
+        if (text) {
+          blocks.push({
+            id: `heading-${idx++}`,
+            type: "heading",
+            level,
+            text,
+            html: el.outerHTML || "",
+          } as HeadingBlock);
+        }
+        return;
       }
-      return;
-    }
 
-    // Paragraphs
-    if (tag === "p") {
-      const text = (el.textContent || "").trim();
-      if (text) {
-        blocks.push({
-          id: `paragraph-${idx++}`,
-          type: "paragraph",
-          text,
-          html: el.outerHTML || "",
-        } as ParagraphBlock);
+      // Paragraphs
+      if (tag === "p") {
+        const text = (el.textContent || "").trim();
+        if (text) {
+          blocks.push({
+            id: `paragraph-${idx++}`,
+            type: "paragraph",
+            text,
+            html: el.outerHTML || "",
+          } as ParagraphBlock);
+        }
+        return;
       }
-      return;
-    }
 
-    // Lists
-    if (tag === "ul" || tag === "ol") {
-      const listItems = el.querySelectorAll ? el.querySelectorAll("li") : [];
-      const items = Array.from(listItems)
+      // Lists
+      if (tag === "ul" || tag === "ol") {
+        const listItems = el.querySelectorAll ? el.querySelectorAll("li") : [];
+        const items = Array.from(listItems)
+          // deno-lint-ignore no-explicit-any
+          .map((li: any) => ((li as { textContent?: string }).textContent || "").trim())
+          .filter(Boolean);
+
+        if (items.length > 0) {
+          blocks.push({
+            id: `list-${idx++}`,
+            type: "list",
+            ordered: tag === "ol",
+            items,
+            html: el.outerHTML || "",
+          } as ListBlock);
+        }
+        return;
+      }
+
+      // Blockquotes
+      if (tag === "blockquote") {
+        const text = (el.textContent || "").trim();
+        if (text) {
+          blocks.push({
+            id: `quote-${idx++}`,
+            type: "quote",
+            text,
+            html: el.outerHTML || "",
+          } as QuoteBlock);
+        }
+        return;
+      }
+
+      // Tables
+      if (tag === "table") {
+        const headerCells = el.querySelectorAll ? el.querySelectorAll("thead th, tr:first-child th, tr:first-child td") : [];
         // deno-lint-ignore no-explicit-any
-        .map((li: any) => ((li as { textContent?: string }).textContent || "").trim())
-        .filter(Boolean);
+        const headers = Array.from(headerCells).map((th: any) => ((th as { textContent?: string }).textContent || "").trim());
 
-      if (items.length > 0) {
-        blocks.push({
-          id: `list-${idx++}`,
-          type: "list",
-          ordered: tag === "ol",
-          items,
-          html: el.outerHTML || "",
-        } as ListBlock);
-      }
-      return;
-    }
-
-    // Blockquotes
-    if (tag === "blockquote") {
-      const text = (el.textContent || "").trim();
-      if (text) {
-        blocks.push({
-          id: `quote-${idx++}`,
-          type: "quote",
-          text,
-          html: el.outerHTML || "",
-        } as QuoteBlock);
-      }
-      return;
-    }
-
-    // Tables
-    if (tag === "table") {
-      const headerCells = el.querySelectorAll ? el.querySelectorAll("thead th, tr:first-child th, tr:first-child td") : [];
-      // deno-lint-ignore no-explicit-any
-      const headers = Array.from(headerCells).map((th: any) => ((th as { textContent?: string }).textContent || "").trim());
-
-      const bodyRows = el.querySelectorAll ? el.querySelectorAll("tbody tr, tr:not(:first-child)") : [];
-      // deno-lint-ignore no-explicit-any
-      const rows = Array.from(bodyRows).map((tr: any) => {
-        const trEl = tr as { querySelectorAll?: (s: string) => unknown[] };
-        const cells = trEl.querySelectorAll ? trEl.querySelectorAll("td") : [];
+        const bodyRows = el.querySelectorAll ? el.querySelectorAll("tbody tr, tr:not(:first-child)") : [];
         // deno-lint-ignore no-explicit-any
-        return Array.from(cells).map((td: any) => ((td as { textContent?: string }).textContent || "").trim());
-      }).filter((row: any[]) => row.length > 0);
+        const rows = Array.from(bodyRows).map((tr: any) => {
+          const trEl = tr as { querySelectorAll?: (s: string) => unknown[] };
+          const cells = trEl.querySelectorAll ? trEl.querySelectorAll("td") : [];
+          // deno-lint-ignore no-explicit-any
+          return Array.from(cells).map((td: any) => ((td as { textContent?: string }).textContent || "").trim());
+        }).filter((row: any[]) => row.length > 0);
 
-      blocks.push({
-        id: `table-${idx++}`,
-        type: "table",
-        headers,
-        rows,
-        html: el.outerHTML || "",
-      } as TableBlock);
-      return;
-    }
-
-    // Images
-    if (tag === "img") {
-      const src = el.getAttribute ? el.getAttribute("src") || "" : "";
-      const alt = el.getAttribute ? el.getAttribute("alt") || "" : "";
-      blocks.push({
-        id: `image-${idx++}`,
-        type: "image",
-        meta: { src, alt },
-        html: el.outerHTML || "",
-      } as ImageBlock);
-      return;
-    }
-
-    // Code blocks
-    if (tag === "pre") {
-      // deno-lint-ignore no-explicit-any
-      const codeEl = el.querySelector ? el.querySelector("code") as any : null;
-      const code = (codeEl?.textContent || el.textContent || "").trim();
-      const langClass = codeEl?.getAttribute ? codeEl.getAttribute("class") || "" : "";
-      const langMatch = langClass.match(/language-(\w+)/);
-
-      blocks.push({
-        id: `code-${idx++}`,
-        type: "code",
-        code,
-        language: langMatch?.[1],
-        html: el.outerHTML || "",
-      } as CodeBlock);
-      return;
-    }
-
-    // Horizontal rules
-    if (tag === "hr") {
-      blocks.push({
-        id: `hr-${idx++}`,
-        type: "hr",
-        html: el.outerHTML || "",
-      } as HrBlock);
-      return;
-    }
-
-    // Containers (div, section, article) - RECURSE
-    if (tag === "div" || tag === "section" || tag === "article") {
-      const childNodes = Array.from(el.childNodes);
-      for (const child of childNodes) {
-        walk(child);
+        blocks.push({
+          id: `table-${idx++}`,
+          type: "table",
+          headers,
+          rows,
+          html: el.outerHTML || "",
+        } as TableBlock);
+        return;
       }
-      return;
+
+      // Images
+      if (tag === "img") {
+        const src = el.getAttribute ? el.getAttribute("src") || "" : "";
+        const alt = el.getAttribute ? el.getAttribute("alt") || "" : "";
+        blocks.push({
+          id: `image-${idx++}`,
+          type: "image",
+          meta: { src, alt },
+          html: el.outerHTML || "",
+        } as ImageBlock);
+        return;
+      }
+
+      // Code blocks
+      if (tag === "pre") {
+        // deno-lint-ignore no-explicit-any
+        const codeEl = el.querySelector ? el.querySelector("code") as any : null;
+        const code = (codeEl?.textContent || el.textContent || "").trim();
+        const langClass = codeEl?.getAttribute ? codeEl.getAttribute("class") || "" : "";
+        const langMatch = langClass.match(/language-(\w+)/);
+
+        blocks.push({
+          id: `code-${idx++}`,
+          type: "code",
+          code,
+          language: langMatch?.[1],
+          html: el.outerHTML || "",
+        } as CodeBlock);
+        return;
+      }
+
+      // Horizontal rules
+      if (tag === "hr") {
+        blocks.push({
+          id: `hr-${idx++}`,
+          type: "hr",
+          html: el.outerHTML || "",
+        } as HrBlock);
+        return;
+      }
+
+      // Containers (div, section, article) - RECURSE
+      if (tag === "div" || tag === "section" || tag === "article") {
+        const childNodes = Array.from(el.childNodes);
+        for (const child of childNodes) {
+          walk(child);
+        }
+        return;
+      }
     }
-  }
 
-  // Iterate over root nodes
-  const rootNodes = Array.from(body.childNodes);
-  for (const node of rootNodes) {
-    walk(node);
-  }
+    // Iterate over root nodes
+    const rootNodes = Array.from(body.childNodes);
+    for (const node of rootNodes) {
+      walk(node);
+    }
 
-  return blocks;
+    return blocks;
+  } catch (err) {
+    console.error("Error extracting blocks:", err);
+    return [];
+  }
 }
 
 /**
