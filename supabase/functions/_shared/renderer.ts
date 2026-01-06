@@ -44,7 +44,7 @@ function renderList(block: ListBlock, variant: string): string {
 
 function renderTable(block: TableBlock, variant: string): string {
   const tableClass = variant === "comparisonSticky" ? "table-comparison" :
-                     variant === "zebra" ? "table-zebra" : "";
+    variant === "zebra" ? "table-zebra" : "";
 
   const headerCells = block.headers.map(h => `<th>${escapeHtml(h)}</th>`).join("");
   const headerRow = block.headers.length > 0 ? `<thead><tr>${headerCells}</tr></thead>` : "";
@@ -203,9 +203,15 @@ export function renderBlocks(
             pair.labelLeft,
             pair.labelRight
           ));
+          continue; // Successfully rendered as pair
         }
+      } else {
+        // This is the right block of a pair, or the left block's pair was already rendered
+        continue;
       }
-      continue;
+
+      // If we fall through here, the block was marked as consumed but couldn't be rendered
+      // as part of a pair (e.g. missing partner). We continue to normal rendering.
     }
 
     // Get layout override
