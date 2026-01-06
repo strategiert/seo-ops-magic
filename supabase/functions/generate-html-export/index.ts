@@ -28,102 +28,88 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // Verify authorization
+    // 1. Auth Headers Check
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      console.error("Missing authorization header");
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Create auth client to verify user
+    // 2. Validate User
     const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
+      global: { headers: { Authorization: authHeader } },
     });
+    const {
+      data: { user },
+      error: userError,
+    } = await authSupabase.auth.getUser();
 
-    const { data: { user }, error: userError } = await authSupabase.auth.getUser();
     if (userError || !user) {
-      console.error("User authentication failed:", userError);
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const { articleId, format = "full" } = await req.json();
 
     if (!articleId) {
-      return new Response(
-        JSON.stringify({ error: "articleId is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "articleId is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Initialize Supabase client with service role for data operations
+    // 4. DB Operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch article
     const { data: article, error: articleError } = await supabase
       .from("articles")
       .select("*")
       .eq("id", articleId)
       .single();
 
-    if (articleError) {
-      console.error("Article error:", articleError);
-      return new Response(
-        JSON.stringify({ error: "Article not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    if (articleError) throw new Error("Article not found");
 
-    // Verify user owns the workspace that contains this article's project
-    const { data: project, error: projectError } = await supabase
+    // 5. Ownership Check
+    const { data: project } = await supabase
       .from("projects")
       .select("workspace_id")
       .eq("id", article.project_id)
       .single();
 
-    if (projectError || !project) {
-      console.error("Project not found:", projectError);
-      return new Response(
-        JSON.stringify({ error: "Project not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (project) {
+      const { data: workspace } = await supabase
+        .from("workspaces")
+        .select("owner_id")
+        .eq("id", project.workspace_id)
+        .single();
+
+      if (workspace && workspace.owner_id !== user.id) {
+        return new Response(JSON.stringify({ error: "Forbidden - not workspace owner" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
-    const { data: workspace, error: workspaceError } = await supabase
-      .from("workspaces")
-      .select("owner_id")
-      .eq("id", project.workspace_id)
-      .single();
+    console.log(`Processing Hybrid Gen for: ${article.title}`);
 
-    if (workspaceError || !workspace) {
-      console.error("Workspace not found:", workspaceError);
-      return new Response(
-        JSON.stringify({ error: "Workspace not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // 6. PARALLEL PROCESSING
+    // A: Konvertiere Markdown via Code (100% Sicher)
+    const contentHtmlPromise = Promise.resolve(convertMarkdownToStyledHtml(article.content_markdown || ""));
 
-    if (workspace.owner_id !== user.id) {
-      console.error("User does not own workspace");
-      return new Response(
-        JSON.stringify({ error: "Forbidden - not workspace owner" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // B: Generiere Design Elemente via KI
+    const shellPromise = generatePageShell(article.title, article.faq_json || []);
 
     console.log("=== GENERATING HTML EXPORT ===");
     console.log("Article ID:", articleId);
@@ -271,13 +257,15 @@ serve(async (req) => {
         recipeSource,
         theme: recipe.theme,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
-  } catch (error) {
-    console.error("Error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  } catch (err) {
+    console.error("Error:", err);
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
