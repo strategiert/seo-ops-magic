@@ -1,95 +1,31 @@
+/**
+ * Generate HTML Export Edge Function
+ *
+ * Uses the deterministic renderer to create HTML from article content.
+ * LLM decisions are stored in article_design_recipes table.
+ * This function ONLY renders - it never calls LLM.
+ *
+ * Flow:
+ * 1. Load article content
+ * 2. Load design recipe (or use fallback)
+ * 3. Extract blocks from content
+ * 4. Render HTML body using deterministic renderer
+ * 5. Wrap in complete HTML document with embedded CSS
+ * 6. Save to html_exports table
+ */
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { marked } from "https://esm.sh/marked@4.3.0";
+import { extractBlocks } from "../_shared/blockExtractor.ts";
+import { renderBlocksWithFallback } from "../_shared/renderer.ts";
+import { generateHtmlDocument } from "../_shared/htmlDoc.ts";
+import { generateFallbackRecipe, validateRecipe } from "../_shared/recipeSchema.ts";
+import type { Recipe } from "../_shared/recipeSchema.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// Brand configuration
-const BRAND = {
-  colors: {
-    primary: "#003366",
-    secondary: "#ff6600",
-    text_dark: "#333333",
-    background_light: "#f8f8f8",
-  },
-  typography: {
-    heading: "Antonio, sans-serif",
-    body: "PT Sans, sans-serif",
-  },
-};
-
-// --- HELPER: Sicherer Markdown zu HTML Konverter mit Inline Styles ---
-function convertMarkdownToStyledHtml(markdown: string): string {
-  const renderer = new marked.Renderer();
-
-  const styles = {
-    h2: `font-family:${BRAND.typography.heading}; color:${BRAND.colors.primary}; margin-top:40px; margin-bottom:20px;`,
-    h3: `font-family:${BRAND.typography.heading}; color:${BRAND.colors.primary}; margin-top:30px; margin-bottom:15px;`,
-    p: `font-family:${BRAND.typography.body}; color:${BRAND.colors.text_dark}; line-height:1.6; margin-bottom:16px;`,
-    li: `font-family:${BRAND.typography.body}; color:${BRAND.colors.text_dark}; line-height:1.6; margin-bottom:8px;`,
-    strong: `color:${BRAND.colors.secondary}; font-weight:bold;`,
-    a: `color:${BRAND.colors.secondary}; text-decoration:underline;`,
-  };
-
-  renderer.heading = (text, level) => {
-    const style = level === 2 ? styles.h2 : level === 3 ? styles.h3 : styles.h2;
-    return `<h${level} style="${style}">${text}</h${level}>`;
-  };
-  renderer.paragraph = (text) => `<p style="${styles.p}">${text}</p>`;
-  renderer.listitem = (text) => `<li style="${styles.li}">${text}</li>`;
-  renderer.strong = (text) => `<strong style="${styles.strong}">${text}</strong>`;
-  renderer.link = (href, title, text) => `<a href="${href}" style="${styles.a}">${text}</a>`;
-
-  return marked(markdown, { renderer });
-}
-
-// --- AI: Generiert nur den "Rahmen" (Hero, FAQ, CTA) ---
-async function generatePageShell(title: string, faqs: any[]): Promise<{ hero: string; faq: string; cta: string }> {
-  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-  const MODEL_NAME = "gemini-3-flash-preview";
-
-  const prompt = `
-    Erstelle Design-Elemente für eine Landing Page für "NetCo Body-Cam".
-    Titel: "${title}"
-    FAQs: ${JSON.stringify(faqs)}
-    
-    Markenfarben: Primary ${BRAND.colors.primary}, Secondary ${BRAND.colors.secondary}.
-    Fonts: ${BRAND.typography.heading}, ${BRAND.typography.body}.
-
-    Gib mir ein JSON Objekt zurück mit genau 3 HTML-Strings (nutze Inline-Styles!):
-    1. "hero": Ein beeindruckender Hero-Header (H1, Gradient Background, zentriert).
-    2. "faq": Eine schöne FAQ Sektion mit <details> und <summary> Tags.
-    3. "cta": Ein "Jetzt anfragen" Call-to-Action Bereich.
-
-    Output Format: JSON only. { "hero": "...", "faq": "...", "cta": "..." }
-  `;
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json" },
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`Gemini Error: ${response.status} ${await response.text()}`);
-  }
-
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (!text) throw new Error("No content from Gemini");
-
-  return JSON.parse(text);
-}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -124,8 +60,8 @@ serve(async (req) => {
       });
     }
 
-    // 3. Get Payload
-    const { articleId } = await req.json();
+    const { articleId, format = "full" } = await req.json();
+
     if (!articleId) {
       return new Response(JSON.stringify({ error: "articleId is required" }), {
         status: 400,
@@ -175,41 +111,151 @@ serve(async (req) => {
     // B: Generiere Design Elemente via KI
     const shellPromise = generatePageShell(article.title, article.faq_json || []);
 
-    const [contentHtml, shell] = await Promise.all([contentHtmlPromise, shellPromise]);
+    console.log("=== GENERATING HTML EXPORT ===");
+    console.log("Article ID:", articleId);
+    console.log("Title:", article.title);
+    console.log("Format:", format);
 
-    // 7. Zusammenbauen
-    const finalHtml = `
-      <div style="max-width:1200px; margin:0 auto; font-family:'PT Sans', sans-serif;">
-        ${shell.hero}
-        
-        <div style="padding: 40px 20px; background: #ffffff;">
-          ${contentHtml}
-        </div>
+    // Get article content
+    const content = article.content_markdown || article.content || "";
 
-        ${shell.faq}
-        ${shell.cta}
-      </div>
-    `;
+    if (!content.trim()) {
+      console.error("Article has no content");
+      return new Response(
+        JSON.stringify({ error: "Article has no content" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    // 8. Speichern
-    const { data: exportData, error: saveError } = await supabase
-      .from("html_exports")
-      .insert({
-        project_id: article.project_id,
-        article_id: articleId,
-        name: `${article.title} - Hybrid Gen`,
-        html_content: finalHtml,
-      })
-      .select()
+    // Extract blocks from content
+    console.log("Extracting blocks from content...");
+    const blocks = extractBlocks(content);
+    console.log(`Extracted ${blocks.length} blocks`);
+
+    if (blocks.length === 0) {
+      console.error("No blocks extracted from content");
+      return new Response(
+        JSON.stringify({ error: "Could not extract content blocks" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Load design recipe (or use fallback)
+    let recipe: Recipe | null = null;
+    let recipeSource = "fallback";
+
+    const { data: storedRecipe } = await supabase
+      .from("article_design_recipes")
+      .select("recipe_json, provider")
+      .eq("article_id", articleId)
       .single();
 
-    if (saveError) throw saveError;
+    if (storedRecipe?.recipe_json) {
+      const validation = validateRecipe(storedRecipe.recipe_json);
+      if (validation.success && validation.recipe) {
+        recipe = validation.recipe;
+        recipeSource = storedRecipe.provider || "stored";
+        console.log(`Loaded recipe from DB (provider: ${recipeSource}, theme: ${recipe.theme})`);
+      }
+    }
+
+    if (!recipe) {
+      recipe = generateFallbackRecipe(articleId);
+      recipeSource = "fallback";
+      console.log(`Using fallback recipe (theme: ${recipe.theme})`);
+    }
+
+    // Render HTML body using deterministic renderer
+    console.log("Rendering HTML body...");
+    const bodyHtml = renderBlocksWithFallback(blocks, recipe);
+    console.log(`Body HTML: ${bodyHtml.length} characters`);
+
+    // Generate final HTML based on format
+    let finalHtml: string;
+
+    if (format === "body-only") {
+      // Just the body content (for Elementor Custom HTML widget)
+      finalHtml = bodyHtml;
+    } else {
+      // Full HTML document with CSS
+      finalHtml = generateHtmlDocument({
+        title: article.title,
+        theme: recipe.theme,
+        bodyHtml,
+        metaDescription: article.meta_description,
+      });
+    }
+
+    console.log(`Final HTML: ${finalHtml.length} characters`);
+
+    // Save HTML export
+    // Check for existing export for this article
+    const { data: existingExport } = await supabase
+      .from("html_exports")
+      .select("id")
+      .eq("article_id", articleId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    let htmlExport;
+    let exportError;
+
+    if (existingExport) {
+      // Update existing export
+      const result = await supabase
+        .from("html_exports")
+        .update({
+          html_content: finalHtml,
+          recipe_version: recipe.recipeVersion,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingExport.id)
+        .select()
+        .single();
+
+      htmlExport = result.data;
+      exportError = result.error;
+    } else {
+      // Create new export
+      const result = await supabase
+        .from("html_exports")
+        .insert({
+          article_id: articleId,
+          project_id: article.project_id,
+          name: `${article.title} - HTML Export`,
+          html_content: finalHtml,
+          recipe_version: recipe.recipeVersion,
+        })
+        .select()
+        .single();
+
+      htmlExport = result.data;
+      exportError = result.error;
+    }
+
+    if (exportError) {
+      console.error("Error saving HTML export:", exportError);
+      return new Response(
+        JSON.stringify({ error: "Failed to save HTML export", details: exportError }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("=== SUCCESS ===");
+    console.log("HTML Export ID:", htmlExport.id);
+    console.log("Recipe source:", recipeSource);
+    console.log("Theme:", recipe.theme);
+    console.log("Blocks rendered:", blocks.length);
 
     return new Response(
       JSON.stringify({
         success: true,
-        exportId: exportData.id,
+        exportId: htmlExport.id,
         htmlLength: finalHtml.length,
+        blocksRendered: blocks.length,
+        recipeSource,
+        theme: recipe.theme,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

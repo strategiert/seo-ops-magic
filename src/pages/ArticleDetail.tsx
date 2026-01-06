@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Save, Loader2, FileJson, Code, Globe } from "lucide-react";
+import { ArrowLeft, Save, Loader2, FileJson, Code, Globe, Wand2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,8 @@ export default function ArticleDetail() {
   const [saving, setSaving] = useState(false);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
   const [generatingHtml, setGeneratingHtml] = useState(false);
+  const [generatingRecipe, setGeneratingRecipe] = useState(false);
+  const [hasRecipe, setHasRecipe] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -94,6 +96,15 @@ export default function ArticleDetail() {
         meta_description: data.meta_description || "",
         status: data.status || "draft",
       });
+
+      // Check if article has a design recipe
+      const { data: recipeData } = await supabase
+        .from("article_design_recipes")
+        .select("id")
+        .eq("article_id", id)
+        .single();
+
+      setHasRecipe(!!recipeData);
     } catch (error) {
       console.error("Error loading article:", error);
       toast({
@@ -139,6 +150,34 @@ export default function ArticleDetail() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const generateDesignRecipe = async (force = false) => {
+    if (!id || !article) return;
+
+    setGeneratingRecipe(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-design-recipe", {
+        body: { articleId: id, force },
+      });
+
+      if (error) throw error;
+
+      setHasRecipe(true);
+      toast({
+        title: data.cached ? "Design Recipe geladen" : "Design Recipe generiert",
+        description: `Theme: ${data.recipe?.theme || "minimal-clean"}`,
+      });
+    } catch (error) {
+      console.error("Error generating recipe:", error);
+      toast({
+        title: "Fehler",
+        description: "Design Recipe konnte nicht generiert werden.",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingRecipe(false);
     }
   };
 
@@ -258,6 +297,19 @@ export default function ArticleDetail() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => generateDesignRecipe(false)}
+              disabled={generatingRecipe || !formData.content_markdown}
+              title={hasRecipe ? "Recipe existiert - Klicke erneut zum Aktualisieren" : "Design Recipe generieren"}
+            >
+              {generatingRecipe ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4 mr-2" />
+              )}
+              {hasRecipe ? "Recipe" : "Design Recipe"}
+            </Button>
             <Button
               variant="outline"
               onClick={generateHtmlExport}
