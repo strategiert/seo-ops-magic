@@ -102,15 +102,6 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Processing Hybrid Gen for: ${article.title}`);
-
-    // 6. PARALLEL PROCESSING
-    // A: Konvertiere Markdown via Code (100% Sicher)
-    const contentHtmlPromise = Promise.resolve(convertMarkdownToStyledHtml(article.content_markdown || ""));
-
-    // B: Generiere Design Elemente via KI
-    const shellPromise = generatePageShell(article.title, article.faq_json || []);
-
     console.log("=== GENERATING HTML EXPORT ===");
     console.log("Article ID:", articleId);
     console.log("Title:", article.title);

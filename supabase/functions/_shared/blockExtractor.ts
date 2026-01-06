@@ -171,18 +171,20 @@ export function extractBlocksFromHtml(inputHtml: string, isNested = false): Bloc
 
   const sanitized = stripDangerous(inputHtml);
   // We use childNodes to ensure we catch raw text between elements
-  const { document } = parseHTML(`<body>${sanitized}</body>`);
-  const body = document.querySelector("body");
+  const parsed = parseHTML(`<body>${sanitized}</body>`);
+  const doc = (parsed as any).document;
+  const body = doc.querySelector("body");
 
   if (!body) return [];
 
   const blocks: Block[] = [];
-  const nodes = Array.from(body.childNodes);
+  const nodes = Array.from(body.childNodes) as any[];
 
   for (const node of nodes) {
+    const nodeAny = node as any;
     // TEXT_NODE (3)
-    if (node.nodeType === 3) {
-      const text = (node.textContent || "").trim();
+    if (nodeAny.nodeType === 3) {
+      const text = (nodeAny.textContent || "").trim();
       if (text) {
         blocks.push({
           id: `paragraph-${globalIdx++}`,
@@ -195,9 +197,9 @@ export function extractBlocksFromHtml(inputHtml: string, isNested = false): Bloc
     }
 
     // ELEMENT_NODE (1)
-    if (node.nodeType !== 1) continue;
+    if (nodeAny.nodeType !== 1) continue;
 
-    const el = node as any;
+    const el = nodeAny;
     const tag = (el.tagName || "").toLowerCase();
 
     // Headings
@@ -233,7 +235,7 @@ export function extractBlocksFromHtml(inputHtml: string, isNested = false): Bloc
     // Lists
     if (tag === "ul" || tag === "ol") {
       const items = Array.from(el.querySelectorAll("li"))
-        .map(li => (li.textContent || "").trim())
+        .map((li: any) => ((li as any).textContent || "").trim())
         .filter(Boolean);
 
       if (items.length > 0) {
@@ -265,11 +267,11 @@ export function extractBlocksFromHtml(inputHtml: string, isNested = false): Bloc
     // Tables
     if (tag === "table") {
       const headerCells = el.querySelectorAll("thead th, tr:first-child th, tr:first-child td");
-      const headers = Array.from(headerCells).map(th => (th.textContent || "").trim());
+      const headers = Array.from(headerCells).map((th: any) => ((th as any).textContent || "").trim());
 
       const bodyRows = el.querySelectorAll("tbody tr, tr:not(:first-child)");
-      const rows = Array.from(bodyRows).map(tr =>
-        Array.from(tr.querySelectorAll("td")).map(td => (td.textContent || "").trim())
+      const rows = Array.from(bodyRows).map((tr: any) =>
+        Array.from((tr as any).querySelectorAll("td")).map((td: any) => ((td as any).textContent || "").trim())
       ).filter(row => row.length > 0);
 
       blocks.push({
