@@ -33,23 +33,23 @@ serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify user from the incoming JWT
+    // Verify user from the incoming JWT using getClaims
     const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const {
-      data: { user },
-      error: userError,
-    } = await authSupabase.auth.getUser();
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await authSupabase.auth.getClaims(token);
 
-    if (userError || !user) {
-      console.log("wordpress-taxonomies: auth failed", userError?.message);
+    if (claimsError || !claimsData?.claims) {
+      console.log("wordpress-taxonomies: auth failed", claimsError?.message);
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const user = { id: claimsData.claims.sub as string };
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
