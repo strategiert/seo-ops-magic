@@ -166,18 +166,32 @@ function markdownToHtml(md: string): string {
  */
 export function extractBlocksFromHtml(inputHtml: string): Block[] {
   const sanitized = stripDangerous(inputHtml);
+<<<<<<< HEAD
   const { document } = parseHTML(`<body>${sanitized}</body>`);
   const body = document.querySelector("body");
+=======
+  // We use childNodes to ensure we catch raw text between elements
+  const parsed = parseHTML(`<body>${sanitized}</body>`);
+  const doc = (parsed as any).document;
+  const body = doc.querySelector("body");
+>>>>>>> origin/main
 
   if (!body) return [];
 
   const blocks: Block[] = [];
+<<<<<<< HEAD
   let idx = 0;
 
   function walk(node: any) {
+=======
+  const nodes = Array.from(body.childNodes) as any[];
+
+  for (const node of nodes) {
+    const nodeAny = node as any;
+>>>>>>> origin/main
     // TEXT_NODE (3)
-    if (node.nodeType === 3) {
-      const text = (node.textContent || "").trim();
+    if (nodeAny.nodeType === 3) {
+      const text = (nodeAny.textContent || "").trim();
       if (text) {
         blocks.push({
           id: `paragraph-${idx++}`,
@@ -190,9 +204,15 @@ export function extractBlocksFromHtml(inputHtml: string): Block[] {
     }
 
     // ELEMENT_NODE (1)
+<<<<<<< HEAD
     if (node.nodeType !== 1) return;
 
     const el = node;
+=======
+    if (nodeAny.nodeType !== 1) continue;
+
+    const el = nodeAny;
+>>>>>>> origin/main
     const tag = (el.tagName || "").toLowerCase();
 
     // Headings
@@ -227,9 +247,14 @@ export function extractBlocksFromHtml(inputHtml: string): Block[] {
 
     // Lists
     if (tag === "ul" || tag === "ol") {
+<<<<<<< HEAD
       const liNodes = el.querySelectorAll("li");
       const items = Array.from(liNodes)
         .map((li: any) => (li.textContent || "").trim())
+=======
+      const items = Array.from(el.querySelectorAll("li"))
+        .map((li: any) => ((li as any).textContent || "").trim())
+>>>>>>> origin/main
         .filter(Boolean);
 
       if (items.length > 0) {
@@ -261,11 +286,19 @@ export function extractBlocksFromHtml(inputHtml: string): Block[] {
     // Tables
     if (tag === "table") {
       const headerCells = el.querySelectorAll("thead th, tr:first-child th, tr:first-child td");
+<<<<<<< HEAD
       const headers = Array.from(headerCells).map((th: any) => (th.textContent || "").trim());
 
       const bodyRows = el.querySelectorAll("tbody tr, tr:not(:first-child)");
       const rows = Array.from(bodyRows).map((tr: any) =>
         Array.from(tr.querySelectorAll("td")).map((td: any) => (td.textContent || "").trim())
+=======
+      const headers = Array.from(headerCells).map((th: any) => ((th as any).textContent || "").trim());
+
+      const bodyRows = el.querySelectorAll("tbody tr, tr:not(:first-child)");
+      const rows = Array.from(bodyRows).map((tr: any) =>
+        Array.from((tr as any).querySelectorAll("td")).map((td: any) => ((td as any).textContent || "").trim())
+>>>>>>> origin/main
       ).filter(row => row.length > 0);
 
       blocks.push({

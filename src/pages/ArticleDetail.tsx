@@ -102,7 +102,7 @@ export default function ArticleDetail() {
         .from("article_design_recipes")
         .select("id")
         .eq("article_id", id)
-        .single();
+        .maybeSingle();
 
       setHasRecipe(!!recipeData);
     } catch (error) {
