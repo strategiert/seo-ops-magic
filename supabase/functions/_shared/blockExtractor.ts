@@ -5,7 +5,9 @@
 
 import { parseHTML } from "https://esm.sh/linkedom@0.18.5";
 import type { Block, HeadingBlock, ParagraphBlock, ListBlock, TableBlock, QuoteBlock, ImageBlock, CodeBlock, HrBlock } from "./types.ts";
-import { stripDangerous } from "./sanitize.ts";
+import { stripDangerous, escapeHtml } from "./sanitize.ts";
+
+let globalIdx = 0;
 
 /**
  * Check if content is Markdown (simple heuristic)
@@ -25,21 +27,22 @@ function isMarkdown(content: string): boolean {
 
 /**
  * Convert basic Markdown to HTML
+ * Improved for robustness and table support
  */
 function markdownToHtml(md: string): string {
-  let html = md;
+  let html = md.trim();
 
   // Code blocks first (preserve content)
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
+  html = html.replace(/```(\w*)\n([\s\S]*?)\n```/g, '<pre><code class="language-$1">$2</code></pre>');
 
   // Inline code
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
 
-  // Headers
-  html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
-  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  // Headers (multi-line to handle trailing spaces)
+  html = html.replace(/^####\s+(.+)$/gm, '<h4>$1</h4>');
+  html = html.replace(/^###\s+(.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^##\s+(.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^#\s+(.+)$/gm, '<h1>$1</h1>');
 
   // Bold and italic
   html = html.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>');
@@ -59,48 +62,81 @@ function markdownToHtml(md: string): string {
   html = html.replace(/^---+$/gm, '<hr>');
   html = html.replace(/^\*\*\*+$/gm, '<hr>');
 
-  // Unordered lists
-  const ulRegex = /^[-*+]\s+(.+)$/gm;
-  let match;
-  let inList = false;
+  // Tables (Basic support)
   const lines = html.split('\n');
   const processedLines: string[] = [];
+  let inTable = false;
+  let tableHeaderFound = false;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const isListItem = /^[-*+]\s+(.+)$/.test(line);
+    const line = lines[i].trim();
+    const isTableRow = line.startsWith('|') && line.endsWith('|');
+    const isTableDivider = isTableRow && line.includes('---');
 
-    if (isListItem) {
-      if (!inList) {
-        processedLines.push('<ul>');
-        inList = true;
+    if (isTableRow) {
+      if (!inTable) {
+        processedLines.push('<table>');
+        inTable = true;
+        tableHeaderFound = false;
       }
-      processedLines.push(line.replace(/^[-*+]\s+(.+)$/, '<li>$1</li>'));
+
+      if (isTableDivider) {
+        tableHeaderFound = true;
+        continue;
+      }
+
+      const cells = line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+      const cellTag = tableHeaderFound ? 'td' : 'th';
+      const rowContent = cells.map(c => `<${cellTag}>${c.trim()}</${cellTag}>`).join('');
+      processedLines.push(`<tr>${rowContent}</tr>`);
     } else {
-      if (inList) {
-        processedLines.push('</ul>');
-        inList = false;
+      if (inTable) {
+        processedLines.push('</table>');
+        inTable = false;
       }
-      processedLines.push(line);
+      processedLines.push(lines[i]);
     }
   }
-  if (inList) processedLines.push('</ul>');
+  if (inTable) processedLines.push('</table>');
   html = processedLines.join('\n');
 
-  // Ordered lists
+  // Lists (Unordered)
+  const ulLines = html.split('\n');
+  const ulProcessed: string[] = [];
+  let inUl = false;
+
+  for (const line of ulLines) {
+    const isUlItem = /^[-*+]\s+(.+)$/.test(line.trim());
+    if (isUlItem) {
+      if (!inUl) {
+        ulProcessed.push('<ul>');
+        inUl = true;
+      }
+      ulProcessed.push(line.trim().replace(/^[-*+]\s+(.+)$/, '<li>$1</li>'));
+    } else {
+      if (inUl) {
+        ulProcessed.push('</ul>');
+        inUl = false;
+      }
+      ulProcessed.push(line);
+    }
+  }
+  if (inUl) ulProcessed.push('</ul>');
+  html = ulProcessed.join('\n');
+
+  // Lists (Ordered)
   const olLines = html.split('\n');
   const olProcessed: string[] = [];
   let inOl = false;
 
   for (const line of olLines) {
-    const isOlItem = /^\d+\.\s+(.+)$/.test(line);
-
+    const isOlItem = /^\d+\.\s+(.+)$/.test(line.trim());
     if (isOlItem) {
       if (!inOl) {
         olProcessed.push('<ol>');
         inOl = true;
       }
-      olProcessed.push(line.replace(/^\d+\.\s+(.+)$/, '<li>$1</li>'));
+      olProcessed.push(line.trim().replace(/^\d+\.\s+(.+)$/, '<li>$1</li>'));
     } else {
       if (inOl) {
         olProcessed.push('</ol>');
@@ -112,10 +148,16 @@ function markdownToHtml(md: string): string {
   if (inOl) olProcessed.push('</ol>');
   html = olProcessed.join('\n');
 
-  // Paragraphs (lines not wrapped in tags)
-  html = html.replace(/^(?!<[a-z])(.*[^\s].*)$/gm, '<p>$1</p>');
+  // Paragraphs (lines not wrapped in tags, and not empty)
+  // Improved to be more robust
+  html = html.split('\n').map(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('<')) return line;
+    return `<p>${line}</p>`;
+  }).join('\n');
 
-  // Clean up empty paragraphs
+  // Clean up empty lines/paragraphs
   html = html.replace(/<p>\s*<\/p>/g, '');
 
   return html;
@@ -124,19 +166,38 @@ function markdownToHtml(md: string): string {
 /**
  * Extract structured blocks from HTML content
  */
-export function extractBlocksFromHtml(inputHtml: string): Block[] {
+export function extractBlocksFromHtml(inputHtml: string, isNested = false): Block[] {
+  if (!isNested) globalIdx = 0;
+
   const sanitized = stripDangerous(inputHtml);
+  // We use childNodes to ensure we catch raw text between elements
   const { document } = parseHTML(`<body>${sanitized}</body>`);
   const body = document.querySelector("body");
 
   if (!body) return [];
 
   const blocks: Block[] = [];
-  let idx = 0;
+  const nodes = Array.from(body.childNodes);
 
-  const children = Array.from(body.children);
+  for (const node of nodes) {
+    // TEXT_NODE (3)
+    if (node.nodeType === 3) {
+      const text = (node.textContent || "").trim();
+      if (text) {
+        blocks.push({
+          id: `paragraph-${globalIdx++}`,
+          type: "paragraph",
+          text,
+          html: `<p>${escapeHtml(text)}</p>`,
+        } as ParagraphBlock);
+      }
+      continue;
+    }
 
-  for (const el of children) {
+    // ELEMENT_NODE (1)
+    if (node.nodeType !== 1) continue;
+
+    const el = node as any;
     const tag = (el.tagName || "").toLowerCase();
 
     // Headings
@@ -145,7 +206,7 @@ export function extractBlocksFromHtml(inputHtml: string): Block[] {
       const text = (el.textContent || "").trim();
       if (text) {
         blocks.push({
-          id: `heading-${idx++}`,
+          id: `heading-${globalIdx++}`,
           type: "heading",
           level,
           text,
@@ -160,7 +221,7 @@ export function extractBlocksFromHtml(inputHtml: string): Block[] {
       const text = (el.textContent || "").trim();
       if (text) {
         blocks.push({
-          id: `paragraph-${idx++}`,
+          id: `paragraph-${globalIdx++}`,
           type: "paragraph",
           text,
           html: el.outerHTML,
@@ -177,7 +238,7 @@ export function extractBlocksFromHtml(inputHtml: string): Block[] {
 
       if (items.length > 0) {
         blocks.push({
-          id: `list-${idx++}`,
+          id: `list-${globalIdx++}`,
           type: "list",
           ordered: tag === "ol",
           items,
@@ -192,7 +253,7 @@ export function extractBlocksFromHtml(inputHtml: string): Block[] {
       const text = (el.textContent || "").trim();
       if (text) {
         blocks.push({
-          id: `quote-${idx++}`,
+          id: `quote-${globalIdx++}`,
           type: "quote",
           text,
           html: el.outerHTML,
@@ -203,7 +264,7 @@ export function extractBlocksFromHtml(inputHtml: string): Block[] {
 
     // Tables
     if (tag === "table") {
-      const headerCells = el.querySelectorAll("thead th, tr:first-child th");
+      const headerCells = el.querySelectorAll("thead th, tr:first-child th, tr:first-child td");
       const headers = Array.from(headerCells).map(th => (th.textContent || "").trim());
 
       const bodyRows = el.querySelectorAll("tbody tr, tr:not(:first-child)");
@@ -212,7 +273,7 @@ export function extractBlocksFromHtml(inputHtml: string): Block[] {
       ).filter(row => row.length > 0);
 
       blocks.push({
-        id: `table-${idx++}`,
+        id: `table-${globalIdx++}`,
         type: "table",
         headers,
         rows,
@@ -226,7 +287,7 @@ export function extractBlocksFromHtml(inputHtml: string): Block[] {
       const src = el.getAttribute("src") || "";
       const alt = el.getAttribute("alt") || "";
       blocks.push({
-        id: `image-${idx++}`,
+        id: `image-${globalIdx++}`,
         type: "image",
         meta: { src, alt },
         html: el.outerHTML,
@@ -242,7 +303,7 @@ export function extractBlocksFromHtml(inputHtml: string): Block[] {
       const langMatch = langClass.match(/language-(\w+)/);
 
       blocks.push({
-        id: `code-${idx++}`,
+        id: `code-${globalIdx++}`,
         type: "code",
         code,
         language: langMatch?.[1],
@@ -254,27 +315,27 @@ export function extractBlocksFromHtml(inputHtml: string): Block[] {
     // Horizontal rules
     if (tag === "hr") {
       blocks.push({
-        id: `hr-${idx++}`,
+        id: `hr-${globalIdx++}`,
         type: "hr",
         html: el.outerHTML,
       } as HrBlock);
       continue;
     }
 
-    // Divs and other containers - recurse into children
+    // Divs and other containers - recurse into children but keep globalIdx
     if (tag === "div" || tag === "section" || tag === "article") {
-      const innerBlocks = extractBlocksFromHtml(el.innerHTML || "");
+      const innerBlocks = extractBlocksFromHtml(el.innerHTML || "", true);
       blocks.push(...innerBlocks);
       continue;
     }
 
     // Fallback: treat as paragraph if has text content
-    const text = (el.textContent || "").trim();
-    if (text) {
+    const textContent = (el.textContent || "").trim();
+    if (textContent) {
       blocks.push({
-        id: `paragraph-${idx++}`,
+        id: `paragraph-${globalIdx++}`,
         type: "paragraph",
-        text,
+        text: textContent,
         html: el.outerHTML,
       } as ParagraphBlock);
     }

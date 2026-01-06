@@ -154,9 +154,9 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
 
     // Articles frequently exceed smaller output windows; ensure a safe minimum to avoid
     // truncated JSON (finish_reason="length"), while still respecting the hard cap.
-    const rawMax = Math.min(estimatedOutputTokens * 1.5, 20000);
+    const rawMax = Math.min(estimatedOutputTokens * 2, 32000);
     const maxTokens = taskType === "article_generation"
-      ? Math.min(Math.max(rawMax, 12000), 20000)
+      ? Math.min(Math.max(rawMax, 16000), 32000)
       : rawMax;
 
     return {
@@ -250,8 +250,8 @@ export function routeToModel(
 ): ModelConfig {
   if (options?.forceModel) {
     const tier = options.forceModel.includes("3-pro") && !options.forceModel.includes("image") ? "premium" :
-                 options.forceModel.includes("lite") ? "budget" :
-                 options.forceModel.includes("image") ? "image" : "balanced";
+      options.forceModel.includes("lite") ? "budget" :
+        options.forceModel.includes("image") ? "image" : "balanced";
     return {
       model: options.forceModel,
       maxTokens: 8000,
