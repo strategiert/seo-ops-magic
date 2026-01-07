@@ -72,7 +72,7 @@ export default function BriefDetail() {
   }, [id]);
 
   const loadBrief = async () => {
-    if (!id) return;
+    if (!id || id === "new") return;
 
     setLoading(true);
     try {
@@ -108,7 +108,7 @@ export default function BriefDetail() {
         .select("id")
         .eq("brief_id", id)
         .maybeSingle();
-      
+
       if (article) {
         setArticleId(article.id);
         // Load related template (use maybeSingle to avoid 406 error)
@@ -117,7 +117,7 @@ export default function BriefDetail() {
           .select("id")
           .eq("article_id", article.id)
           .maybeSingle();
-        
+
         if (template) setTemplateId(template.id);
       }
     } catch (error) {
