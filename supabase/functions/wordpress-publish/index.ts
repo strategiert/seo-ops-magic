@@ -138,8 +138,9 @@ serve(async (req) => {
       // Robust extraction using Linkedom
       // We look for our self-contained wrapper ID
       try {
-        const { document } = parseHTML(htmlContent);
-        const wrapper = document.getElementById("seo-ops-content-wrapper");
+        const parsed = parseHTML(htmlContent);
+        const doc = (parsed as any).document;
+        const wrapper = doc.getElementById("seo-ops-content-wrapper");
 
         if (wrapper) {
           // Wrap in a clean div to avoid any double-wrapping issues, 
@@ -149,13 +150,13 @@ serve(async (req) => {
           console.log("wordpress-publish: Extracted content via Linkedom (#seo-ops-content-wrapper)");
         } else {
           // Fallback: Try finding the class if ID is missing (legacy exports?)
-          const classWrapper = document.querySelector(".seo-ops-content");
+          const classWrapper = doc.querySelector(".seo-ops-content");
           if (classWrapper) {
             content = classWrapper.outerHTML;
             console.log("wordpress-publish: Extracted content via Linkedom (.seo-ops-content)");
           } else {
             // Last resort fallback (e.g. if it's a raw body)
-            const body = document.querySelector("body");
+            const body = doc.querySelector("body");
             content = body ? body.innerHTML : htmlContent;
             console.log("wordpress-publish: Fallback to body content");
           }
