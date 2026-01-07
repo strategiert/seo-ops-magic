@@ -38,7 +38,7 @@ export function buildBrandContext(brandProfile: any): string {
 
 export function transformGuidelines(rawGuidelines: any) {
   // Fallback für leere Guidelines
-  if (!rawGuidelines) return { terms: "", questions: "", targetWords: 1500 };
+  if (!rawGuidelines) return { terms: "", questions: "", targetWords: 1500, internalLinks: "" };
 
   let terms: string[] = [];
   let questions: string[] = [];
