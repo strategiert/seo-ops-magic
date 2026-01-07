@@ -21,7 +21,7 @@ export class LLMService {
   }
 
   /**
-   * Convert markdown content to beautiful HTML with Tailwind CSS
+   * Convert markdown content to beautiful HTML with inline styles
    */
   async wrapInTailwindDesign(
     title: string,
@@ -39,88 +39,69 @@ export class LLMService {
 
     const prompt = `Du bist ein erfahrener Web-Designer mit exzellentem Geschmack für moderne, elegante Landing Pages.
 
-**AUFGABE:** Erstelle wunderschönen HTML-Content mit **Tailwind CSS** für eine WordPress Custom HTML Sektion.
+**AUFGABE:** Erstelle wunderschönen HTML-Content mit **INLINE STYLES** für WordPress.
 
-**WICHTIG - FORMAT:**
+**KRITISCH WICHTIG - FORMAT:**
 - NUR Body-Content (keine <!DOCTYPE>, <html>, <head>, <body> Tags)
-- Verwende Tailwind CSS Klassen (keine inline styles, kein <style> Tag)
+- **ALLE STYLES MÜSSEN INLINE SEIN** (style="..." direkt in den HTML-Elementen)
+- **KEIN <style> TAG erlaubt**
+- **KEINE CSS-Klassen** (außer für WordPress-Kompatibilität)
 - Kein externes JavaScript
-- Direkter HTML-Content mit Tailwind-Klassen
-- Responsive Design mit Tailwind-Breakpoints (sm:, md:, lg:, xl:)
+- Direkter HTML-Content mit inline style Attributen
+- Responsive Design durch Media Queries in inline styles ODER durch kluge Layout-Entscheidungen
 
-**BRAND GUIDELINES - NetCo Body-Cam:**
-- Primary Color: ${brand.primaryColor} (nutze bg-[${brand.primaryColor}], text-[${brand.primaryColor}])
+**BRAND GUIDELINES:**
+- Primary Color: ${brand.primaryColor}
 - Secondary Color: ${brand.secondaryColor}
 - Accent Color: ${brand.accentColor}
-- Headings: font-['${brand.headingFont}'] oder font-bold
-- Body: font-['${brand.bodyFont}'] oder font-sans
+- Headings: font-family: '${brand.headingFont}', sans-serif
+- Body: font-family: '${brand.bodyFont}', sans-serif
 
-**DESIGN ANFORDERUNGEN:**
-1. Modern und professionell mit Tailwind CSS
-2. Vollständig responsive (mobile-first)
-3. Schöne Gradient-Hintergründe für Hero (bg-gradient-to-r from-[...] to-[...])
-4. Klare Typografie-Hierarchie (text-4xl, text-2xl, text-xl, text-lg)
-5. Ausreichend Weißraum (p-8, py-12, my-8, space-y-6)
-6. Icon-Listen mit Unicode-Icons oder Tailwind Icons
-7. Accordion für FAQs mit Tailwind-Styling
-8. Call-to-Action Buttons mit Hover-Effekten (hover:bg-..., transition-all)
-9. Schatten und abgerundete Ecken (shadow-lg, rounded-xl)
-10. Grid/Flexbox Layouts (grid grid-cols-1 md:grid-cols-2, flex flex-col)
+**DESIGN ANFORDERUNGEN (alles inline):**
+1. Modern und professionell mit inline styles
+2. Schöne Gradient-Hintergründe für Hero (background: linear-gradient(135deg, ...))
+3. Klare Typografie-Hierarchie (font-size: 2.5em für H1, 2em für H2, etc.)
+4. Ausreichend Weißraum (padding, margin in px oder rem)
+5. Listen mit Unicode-Icons (✓, •, →)
+6. Call-to-Action Buttons mit hover-Effekten
+7. Schatten und abgerundete Ecken (box-shadow, border-radius)
+8. Responsive durch max-width und flexible Layouts
 
-**STRUKTUR:**
+**BEISPIEL-STRUKTUR:**
 \`\`\`html
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+<div style="font-family: '${brand.bodyFont}', sans-serif; color: #333333; line-height: 1.6; max-width: 900px; margin: 0 auto; padding: 20px; background-color: #f8f8f8; box-shadow: 0 0 15px rgba(0, 0, 0, 0.05); border-radius: 10px;">
 
   <!-- Hero Section ${options.includeHero !== false ? '' : '(SKIP THIS)'} -->
-  <div class="bg-gradient-to-r from-[${brand.primaryColor}] to-blue-900 text-white rounded-2xl shadow-2xl p-12 md:p-20 text-center mb-16">
-    <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">${title}</h1>
-    <p class="text-xl md:text-2xl text-blue-100 max-w-3xl mx-auto">Einleitungstext</p>
+  <div style="background: linear-gradient(135deg, ${brand.primaryColor} 0%, ${brand.secondaryColor} 100%); color: #ffffff; padding: 40px; border-radius: 8px; margin-bottom: 30px; text-align: center; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);">
+    <h1 style="font-family: '${brand.headingFont}', sans-serif; font-weight: bold; font-size: 2.8em; margin-top: 0; margin-bottom: 15px; line-height: 1.2; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);">${title}</h1>
+    <p style="font-family: '${brand.bodyFont}', sans-serif; font-size: 1.1em; line-height: 1.6; max-width: 700px; margin: 0 auto;">Lead paragraph...</p>
   </div>
 
   <!-- Content Sections -->
-  <div class="space-y-16">
-    <!-- Für jede H2 im Markdown -->
-    <section class="bg-white rounded-xl shadow-lg p-8 md:p-12">
-      <h2 class="text-3xl md:text-4xl font-bold text-[${brand.primaryColor}] mb-6">Überschrift</h2>
-      <div class="prose prose-lg max-w-none text-gray-700 leading-relaxed space-y-4">
-        <p>Inhalt...</p>
-      </div>
-    </section>
+  <h2 style="font-family: '${brand.headingFont}', sans-serif; font-weight: bold; color: ${brand.primaryColor}; font-size: 2em; margin-top: 40px; margin-bottom: 20px; border-bottom: 2px solid ${brand.secondaryColor}; padding-bottom: 10px;">Section Title</h2>
+  <p style="font-family: '${brand.bodyFont}', sans-serif; color: #333333; margin-bottom: 15px;">Content paragraph...</p>
 
-    <!-- Für H3 Subsections -->
-    <div class="bg-gray-50 rounded-xl p-8 md:p-10">
-      <h3 class="text-2xl md:text-3xl font-bold text-[${brand.primaryColor}] mb-4">Unterüberschrift</h3>
-      <p class="text-gray-700 leading-relaxed">Inhalt...</p>
-    </div>
-  </div>
+  <!-- Lists with icons -->
+  <ul style="list-style: none; padding: 0; margin-top: 15px;">
+    <li style="font-family: '${brand.bodyFont}', sans-serif; color: #333333; margin-bottom: 10px;"><span style="color: ${brand.secondaryColor}; font-weight: bold; margin-right: 8px;">✓</span> List item</li>
+  </ul>
 
   <!-- FAQ Section -->
   ${faqs.length > 0 ? `
-  <div class="mt-16 bg-white rounded-xl shadow-lg p-8 md:p-12">
-    <h2 class="text-3xl md:text-4xl font-bold text-[${brand.primaryColor}] mb-8 text-center">Häufig gestellte Fragen</h2>
-    <div class="space-y-4 max-w-4xl mx-auto">
-      ${faqs.map(faq => `
-      <details class="group bg-gray-50 rounded-lg overflow-hidden">
-        <summary class="cursor-pointer p-6 font-semibold text-lg text-gray-800 hover:bg-gray-100 transition-colors flex justify-between items-center">
-          ${faq.question}
-          <span class="transform group-open:rotate-180 transition-transform">▼</span>
-        </summary>
-        <div class="px-6 pb-6 pt-2 text-gray-700 leading-relaxed">
-          ${faq.answer}
-        </div>
-      </details>
-      `).join('')}
-    </div>
-  </div>
+  <h2 style="font-family: '${brand.headingFont}', sans-serif; font-weight: bold; color: ${brand.primaryColor}; font-size: 2em; margin-top: 40px; margin-bottom: 20px; border-bottom: 2px solid ${brand.secondaryColor}; padding-bottom: 10px;">Häufig gestellte Fragen</h2>
+  ${faqs.map(faq => `
+  <details style="background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+    <summary style="cursor: pointer; font-family: '${brand.headingFont}', sans-serif; font-weight: bold; font-size: 1.1em; color: ${brand.primaryColor};">${faq.question}</summary>
+    <div style="font-family: '${brand.bodyFont}', sans-serif; color: #555555; margin-top: 10px; line-height: 1.6;">${faq.answer}</div>
+  </details>
+  `).join('')}
   ` : ''}
 
   <!-- CTA Section ${options.includeCTA !== false ? '' : '(SKIP THIS)'} -->
-  <div class="mt-16 bg-gradient-to-r from-[${brand.secondaryColor}] to-[${brand.accentColor}] text-white rounded-2xl shadow-2xl p-12 md:p-16 text-center">
-    <h2 class="text-3xl md:text-4xl font-bold mb-6">Jetzt starten</h2>
-    <p class="text-xl mb-8 text-orange-100">Kontaktieren Sie uns für ein unverbindliches Angebot</p>
-    <a href="${options.ctaLink || '#kontakt'}" class="inline-block bg-white text-[${brand.secondaryColor}] font-bold text-lg px-10 py-4 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300">
-      ${options.ctaText || 'Jetzt anfragen'}
-    </a>
+  <div style="margin-top: 40px; background: linear-gradient(135deg, ${brand.secondaryColor} 0%, ${brand.accentColor} 100%); color: #ffffff; padding: 40px; border-radius: 8px; text-align: center; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);">
+    <h2 style="font-family: '${brand.headingFont}', sans-serif; font-size: 2em; margin-top: 0; margin-bottom: 15px;">Jetzt starten</h2>
+    <p style="font-family: '${brand.bodyFont}', sans-serif; font-size: 1.1em; margin-bottom: 20px;">CTA description</p>
+    <a href="${options.ctaLink || '#kontakt'}" style="display: inline-block; background: #ffffff; color: ${brand.secondaryColor}; font-family: '${brand.headingFont}', sans-serif; font-weight: bold; font-size: 1.1em; padding: 15px 40px; border-radius: 50px; text-decoration: none; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); transition: transform 0.2s;">${options.ctaText || 'Jetzt anfragen'}</a>
   </div>
 
 </div>
@@ -129,16 +110,27 @@ export class LLMService {
 **ARTIKEL INHALT (Markdown):**
 ${markdown.substring(0, 12000)}
 
-**OUTPUT FORMAT:**
-Gib NUR den HTML-Content mit Tailwind CSS Klassen zurück.
+**OUTPUT FORMAT - KRITISCH:**
+- Gib NUR den HTML-Content zurück
+- ALLE Styles müssen inline sein (style="...")
+- KEIN <style> Tag
+- KEINE CSS-Klassen (außer semantische wie <strong>, <em>)
 - Keine Erklärungen
 - Keine Markdown-Codeblöcke (kein \`\`\`html)
-- Beginnt direkt mit <div class="max-w-6xl...">
-- Verwende moderne Tailwind-Patterns
+- Beginnt direkt mit <div style="...">
 
-Erstelle visuell beeindruckenden Content!`;
+**INLINE STYLE BEISPIELE:**
+- Padding: style="padding: 20px;"
+- Colors: style="color: #333333; background-color: #f8f8f8;"
+- Fonts: style="font-family: 'Antonio', sans-serif; font-size: 2em; font-weight: bold;"
+- Margins: style="margin-top: 40px; margin-bottom: 20px;"
+- Borders: style="border: 2px solid #ff6600; border-radius: 8px;"
+- Shadows: style="box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);"
+- Gradients: style="background: linear-gradient(135deg, #003366 0%, #ff6600 100%);"
 
-    console.log('Calling LLM for Tailwind design wrapper...');
+Erstelle visuell beeindruckenden Content mit ausschließlich inline styles!`;
+
+    console.log('Calling LLM for inline styled HTML wrapper...');
 
     if (this.provider === 'anthropic') {
       const response = await this.anthropic!.messages.create({
@@ -148,7 +140,7 @@ Erstelle visuell beeindruckenden Content!`;
       });
 
       const html = response.content[0].type === 'text' ? response.content[0].text : '';
-      console.log(`✓ Generated Tailwind HTML: ${html.length} characters`);
+      console.log(`✓ Generated inline styled HTML: ${html.length} characters`);
       return html;
     } else {
       const response = await this.openai!.chat.completions.create({
@@ -158,7 +150,7 @@ Erstelle visuell beeindruckenden Content!`;
       });
 
       const html = response.choices[0]?.message?.content || '';
-      console.log(`✓ Generated Tailwind HTML: ${html.length} characters`);
+      console.log(`✓ Generated inline styled HTML: ${html.length} characters`);
       return html;
     }
   }
