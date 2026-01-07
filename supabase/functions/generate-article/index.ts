@@ -72,7 +72,7 @@ serve(async (req) => {
     // Extract raw URLs from the internal links string (simplified regex)
     // Assuming internalLinks format is "- [Anchor](URL)" or similar
     // We regex for https?://...
-    const urlMatches = guidelines.internalLinks.match(/\((https?:\/\/[^)]+)\)/g);
+    const urlMatches = guidelines.internalLinks?.match(/\((https?:\/\/[^)]+)\)/g);
     const urlsToScrape = urlMatches ? urlMatches.map((u: any) => u.slice(1, -1)).slice(0, 3) : []; // Limit to 3 to save time/tokens
 
     console.log(`[Research] Scraping ${urlsToScrape.length} URLs...`);

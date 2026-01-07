@@ -23,6 +23,7 @@ import { GuidelinesDisplay } from "@/components/briefs/GuidelinesDisplay";
 import { WorkflowActions } from "@/components/briefs/WorkflowActions";
 import type { NWGuidelines } from "@/lib/api/neuronwriter";
 import { transformNWGuidelines } from "@/lib/api/neuronwriter";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 interface ContentBrief {
   id: string;
@@ -45,6 +46,7 @@ export default function BriefDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { currentProject } = useWorkspace(); // Add useWorkspace
 
   const [brief, setBrief] = useState<ContentBrief | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,10 +68,41 @@ export default function BriefDetail() {
   });
 
   useEffect(() => {
-    if (id) {
+    if (id && id !== "new") {
       loadBrief();
+    } else if (id === "new") {
+      // Initialize for new brief
+      setLoading(false);
+      // We set a 'fake' brief object so the UI renders
+      setBrief({
+        id: "new",
+        project_id: currentProject?.id || "",
+        title: "",
+        primary_keyword: "",
+        search_intent: "informational",
+        target_audience: null,
+        tonality: null,
+        target_length: 1500,
+        notes: null,
+        status: "draft",
+        priority_score: 0,
+        nw_guidelines: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      // Reset form data for new brief
+      setFormData({
+        title: "",
+        primary_keyword: "",
+        search_intent: "informational",
+        target_audience: "",
+        tonality: "",
+        target_length: 1500,
+        notes: "",
+        status: "draft",
+      });
     }
-  }, [id]);
+  }, [id, currentProject]);
 
   const loadBrief = async () => {
     if (!id || id === "new") return;
@@ -134,30 +167,57 @@ export default function BriefDetail() {
   };
 
   const saveBrief = async () => {
-    if (!id) return;
-
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("content_briefs")
-        .update({
-          title: formData.title,
-          primary_keyword: formData.primary_keyword,
-          search_intent: formData.search_intent,
-          target_audience: formData.target_audience || null,
-          tonality: formData.tonality || null,
-          target_length: formData.target_length || null,
-          notes: formData.notes || null,
-          status: formData.status,
-        })
-        .eq("id", id);
+      if (id === "new") {
+        if (!currentProject?.id) {
+          toast({ title: "Fehler", description: "Kein Projekt ausgewählt", variant: "destructive" });
+          return;
+        }
+        // CREATE
+        const { data, error } = await supabase
+          .from("content_briefs")
+          .insert({
+            project_id: currentProject.id,
+            title: formData.title,
+            primary_keyword: formData.primary_keyword,
+            search_intent: formData.search_intent,
+            target_audience: formData.target_audience || null,
+            tonality: formData.tonality || null,
+            target_length: formData.target_length || null,
+            notes: formData.notes || null,
+            status: formData.status,
+          })
+          .select()
+          .single();
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: "Gespeichert",
-        description: "Brief wurde aktualisiert.",
-      });
+        toast({ title: "Erstellt", description: "Brief wurde angelegt." });
+        navigate(`/briefs/${data.id}`);
+      } else {
+        // UPDATE
+        const { error } = await supabase
+          .from("content_briefs")
+          .update({
+            title: formData.title,
+            primary_keyword: formData.primary_keyword,
+            search_intent: formData.search_intent,
+            target_audience: formData.target_audience || null,
+            tonality: formData.tonality || null,
+            target_length: formData.target_length || null,
+            notes: formData.notes || null,
+            status: formData.status,
+          })
+          .eq("id", id!);
+
+        if (error) throw error;
+
+        toast({
+          title: "Gespeichert",
+          description: "Brief wurde aktualisiert.",
+        });
+      }
     } catch (error) {
       console.error("Error saving brief:", error);
       toast({
