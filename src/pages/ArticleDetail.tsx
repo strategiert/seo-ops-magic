@@ -79,32 +79,33 @@ export default function ArticleDetail() {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("articles")
-        .select("*")
-        .eq("id", id)
-        .single();
+      // Load article and design recipe in parallel to reduce latency
+      const [articleResult, recipeResult] = await Promise.all([
+        supabase
+          .from("articles")
+          .select("*")
+          .eq("id", id)
+          .single(),
+        supabase
+          .from("article_design_recipes")
+          .select("id")
+          .eq("article_id", id)
+          .maybeSingle(),
+      ]);
 
-      if (error) throw error;
+      if (articleResult.error) throw articleResult.error;
 
-      setArticle(data as Article);
+      setArticle(articleResult.data as Article);
       setFormData({
-        title: data.title || "",
-        primary_keyword: data.primary_keyword || "",
-        content_markdown: data.content_markdown || "",
-        meta_title: data.meta_title || "",
-        meta_description: data.meta_description || "",
-        status: data.status || "draft",
+        title: articleResult.data.title || "",
+        primary_keyword: articleResult.data.primary_keyword || "",
+        content_markdown: articleResult.data.content_markdown || "",
+        meta_title: articleResult.data.meta_title || "",
+        meta_description: articleResult.data.meta_description || "",
+        status: articleResult.data.status || "draft",
       });
 
-      // Check if article has a design recipe
-      const { data: recipeData } = await supabase
-        .from("article_design_recipes")
-        .select("id")
-        .eq("article_id", id)
-        .maybeSingle();
-
-      setHasRecipe(!!recipeData);
+      setHasRecipe(!!recipeResult.data);
     } catch (error) {
       console.error("Error loading article:", error);
       toast({

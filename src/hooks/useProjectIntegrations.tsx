@@ -47,39 +47,48 @@ export function useProjectIntegrations(): ProjectIntegrations {
     setError(null);
 
     try {
-      // Fetch all integrations for this project
-      const { data, error: fetchError } = await supabase
-        .from("integrations")
-        .select("*")
-        .eq("project_id", currentProject.id);
+      // Fetch integrations in parallel with database-level filtering instead of client-side
+      const [nwResult, wpResult] = await Promise.all([
+        supabase
+          .from("integrations")
+          .select("*")
+          .eq("project_id", currentProject.id)
+          .eq("type", "neuronwriter")
+          .maybeSingle(),
+        supabase
+          .from("integrations")
+          .select("*")
+          .eq("project_id", currentProject.id)
+          .eq("type", "wordpress")
+          .maybeSingle(),
+      ]);
 
-      if (fetchError) throw fetchError;
+      if (nwResult.error && nwResult.error.code !== 'PGRST116') throw nwResult.error;
+      if (wpResult.error && wpResult.error.code !== 'PGRST116') throw wpResult.error;
 
       // Process NeuronWriter integration
-      const nwData = data?.find((i) => i.type === "neuronwriter");
-      if (nwData) {
+      if (nwResult.data) {
         setNeuronwriter({
-          id: nwData.id,
-          isConnected: nwData.is_connected ?? false,
-          nwProjectId: nwData.nw_project_id,
-          nwProjectName: nwData.nw_project_name,
-          nwLanguage: nwData.nw_language ?? "de",
-          nwEngine: nwData.nw_engine ?? "google.de",
-          lastSyncAt: nwData.last_sync_at,
+          id: nwResult.data.id,
+          isConnected: nwResult.data.is_connected ?? false,
+          nwProjectId: nwResult.data.nw_project_id,
+          nwProjectName: nwResult.data.nw_project_name,
+          nwLanguage: nwResult.data.nw_language ?? "de",
+          nwEngine: nwResult.data.nw_engine ?? "google.de",
+          lastSyncAt: nwResult.data.last_sync_at,
         });
       } else {
         setNeuronwriter(null);
       }
 
       // Process WordPress integration
-      const wpData = data?.find((i) => i.type === "wordpress");
-      if (wpData) {
+      if (wpResult.data) {
         setWordpress({
-          id: wpData.id,
-          isConnected: wpData.is_connected ?? false,
-          wpUsername: (wpData as any).wp_username ?? null,
-          wpSiteName: (wpData as any).wp_site_name ?? null,
-          wpIsVerified: (wpData as any).wp_is_verified ?? false,
+          id: wpResult.data.id,
+          isConnected: wpResult.data.is_connected ?? false,
+          wpUsername: (wpResult.data as any).wp_username ?? null,
+          wpSiteName: (wpResult.data as any).wp_site_name ?? null,
+          wpIsVerified: (wpResult.data as any).wp_is_verified ?? false,
         });
       } else {
         setWordpress(null);

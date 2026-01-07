@@ -415,17 +415,38 @@ export function useBrandProfile(): UseBrandProfileReturn {
     loadProfile();
   }, [loadProfile]);
 
-  // Poll for status updates when crawling/analyzing
+  // Poll for status updates when crawling/analyzing with exponential backoff
   useEffect(() => {
     if (
       brandProfile?.crawl_status === "crawling" ||
       brandProfile?.crawl_status === "analyzing"
     ) {
-      const interval = setInterval(() => {
-        loadProfile();
-      }, 5000); // Poll every 5 seconds
+      let pollCount = 0;
+      const maxPolls = 60; // Maximum 60 polls (up to ~5 minutes total)
+      let currentDelay = 2000; // Start with 2 seconds
+      const maxDelay = 30000; // Cap at 30 seconds
+      let timeoutId: NodeJS.Timeout;
 
-      return () => clearInterval(interval);
+      const pollWithBackoff = () => {
+        if (pollCount >= maxPolls) {
+          console.warn("Max polling attempts reached for brand profile status");
+          return;
+        }
+
+        loadProfile();
+        pollCount++;
+
+        // Exponential backoff: double the delay each time, up to maxDelay
+        currentDelay = Math.min(currentDelay * 1.5, maxDelay);
+        timeoutId = setTimeout(pollWithBackoff, currentDelay);
+      };
+
+      // Start polling
+      timeoutId = setTimeout(pollWithBackoff, currentDelay);
+
+      return () => {
+        if (timeoutId) clearTimeout(timeoutId);
+      };
     }
   }, [brandProfile?.crawl_status, loadProfile]);
 

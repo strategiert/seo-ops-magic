@@ -109,46 +109,48 @@ export default function BriefDetail() {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("content_briefs")
-        .select("*")
-        .eq("id", id)
-        .single();
+      // Load brief and article in parallel to reduce latency
+      const [briefResult, articleResult] = await Promise.all([
+        supabase
+          .from("content_briefs")
+          .select("*")
+          .eq("id", id)
+          .single(),
+        supabase
+          .from("articles")
+          .select("id")
+          .eq("brief_id", id)
+          .maybeSingle(),
+      ]);
 
-      if (error) throw error;
+      if (briefResult.error) throw briefResult.error;
 
       // Transform nw_guidelines if they exist (handles old stored data format)
       const transformedData = {
-        ...data,
-        nw_guidelines: data.nw_guidelines ? transformNWGuidelines(data.nw_guidelines) : null
+        ...briefResult.data,
+        nw_guidelines: briefResult.data.nw_guidelines ? transformNWGuidelines(briefResult.data.nw_guidelines) : null
       };
 
       setBrief(transformedData as unknown as ContentBrief);
       setFormData({
-        title: data.title || "",
-        primary_keyword: data.primary_keyword || "",
-        search_intent: data.search_intent || "informational",
-        target_audience: data.target_audience || "",
-        tonality: data.tonality || "",
-        target_length: data.target_length || 1500,
-        notes: data.notes || "",
-        status: data.status || "draft",
+        title: briefResult.data.title || "",
+        primary_keyword: briefResult.data.primary_keyword || "",
+        search_intent: briefResult.data.search_intent || "informational",
+        target_audience: briefResult.data.target_audience || "",
+        tonality: briefResult.data.tonality || "",
+        target_length: briefResult.data.target_length || 1500,
+        notes: briefResult.data.notes || "",
+        status: briefResult.data.status || "draft",
       });
 
-      // Load related article (use maybeSingle to avoid 406 error)
-      const { data: article } = await supabase
-        .from("articles")
-        .select("id")
-        .eq("brief_id", id)
-        .maybeSingle();
+      // If article exists, load related template
+      if (articleResult.data) {
+        setArticleId(articleResult.data.id);
 
-      if (article) {
-        setArticleId(article.id);
-        // Load related template (use maybeSingle to avoid 406 error)
         const { data: template } = await supabase
           .from("elementor_templates")
           .select("id")
-          .eq("article_id", article.id)
+          .eq("article_id", articleResult.data.id)
           .maybeSingle();
 
         if (template) setTemplateId(template.id);

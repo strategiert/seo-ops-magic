@@ -149,7 +149,8 @@ export function useWordPressBulkPublish() {
       setPublishing(true);
       const newResults = new Map<string, PublishResult>();
 
-      for (const articleId of articleIds) {
+      // Publish all articles in parallel using Promise.allSettled for better error handling
+      const publishPromises = articleIds.map(async (articleId) => {
         try {
           const response = await supabase.functions.invoke("wordpress-publish", {
             body: {
@@ -162,29 +163,58 @@ export function useWordPressBulkPublish() {
           });
 
           if (response.error) {
-            newResults.set(articleId, {
-              success: false,
-              error: response.error.message,
-            });
+            return {
+              articleId,
+              result: {
+                success: false,
+                error: response.error.message,
+              } as PublishResult,
+            };
           } else if (!response.data.success) {
-            newResults.set(articleId, {
-              success: false,
-              error: response.data.error || "Publishing failed",
-            });
+            return {
+              articleId,
+              result: {
+                success: false,
+                error: response.data.error || "Publishing failed",
+              } as PublishResult,
+            };
           } else {
-            newResults.set(articleId, {
-              success: true,
-              wpPostId: response.data.wpPostId,
-              wpUrl: response.data.wpUrl,
-            });
+            return {
+              articleId,
+              result: {
+                success: true,
+                wpPostId: response.data.wpPostId,
+                wpUrl: response.data.wpUrl,
+              } as PublishResult,
+            };
           }
         } catch (error) {
+          return {
+            articleId,
+            result: {
+              success: false,
+              error: error instanceof Error ? error.message : "Unknown error",
+            } as PublishResult,
+          };
+        }
+      });
+
+      // Wait for all promises to settle (either resolve or reject)
+      const settledResults = await Promise.allSettled(publishPromises);
+
+      // Process results
+      settledResults.forEach((settled, index) => {
+        const articleId = articleIds[index];
+        if (settled.status === "fulfilled") {
+          newResults.set(settled.value.articleId, settled.value.result);
+        } else {
+          // If the promise itself was rejected (shouldn't happen with our try/catch, but just in case)
           newResults.set(articleId, {
             success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
+            error: "Unexpected error during publishing",
           });
         }
-      }
+      });
 
       setResults(newResults);
       setPublishing(false);

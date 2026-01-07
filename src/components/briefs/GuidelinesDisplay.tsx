@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, memo } from "react";
 import { ChevronDown, ChevronUp, ExternalLink, HelpCircle, BarChart3, Users } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +46,7 @@ function TermBadge({ term }: { term: NWTerm }) {
   );
 }
 
-export function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
+export const GuidelinesDisplay = memo(function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
   const [termsExpanded, setTermsExpanded] = useState(true);
   const [questionsExpanded, setQuestionsExpanded] = useState(true);
   const [competitorsExpanded, setCompetitorsExpanded] = useState(false);
@@ -57,9 +57,26 @@ export function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
   const ideasArray = Array.isArray(guidelines.ideas) ? guidelines.ideas : [];
   const competitorsArray = Array.isArray(guidelines.competitors) ? guidelines.competitors : [];
 
-  const highPriorityTerms = termsArray.filter((t) => t.sugg_usage >= 3);
-  const mediumPriorityTerms = termsArray.filter((t) => t.sugg_usage === 2);
-  const lowPriorityTerms = termsArray.filter((t) => t.sugg_usage === 1);
+  // Optimize: Single-pass categorization instead of three filter passes
+  const categorizedTerms = useMemo(() => {
+    return termsArray.reduce(
+      (acc, term) => {
+        if (term.sugg_usage >= 3) {
+          acc.high.push(term);
+        } else if (term.sugg_usage === 2) {
+          acc.medium.push(term);
+        } else if (term.sugg_usage === 1) {
+          acc.low.push(term);
+        }
+        return acc;
+      },
+      { high: [] as typeof termsArray, medium: [] as typeof termsArray, low: [] as typeof termsArray }
+    );
+  }, [termsArray]);
+
+  const highPriorityTerms = categorizedTerms.high;
+  const mediumPriorityTerms = categorizedTerms.medium;
+  const lowPriorityTerms = categorizedTerms.low;
 
   return (
     <div className="space-y-6">
@@ -337,4 +354,4 @@ export function GuidelinesDisplay({ guidelines }: GuidelinesDisplayProps) {
       )}
     </div>
   );
-}
+});

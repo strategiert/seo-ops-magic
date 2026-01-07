@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sparkles, FileText, FileJson, Download, Loader2, CheckCircle2, Circle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +15,7 @@ interface WorkflowActionsProps {
   onArticleGenerated?: (articleId: string) => void;
 }
 
-export function WorkflowActions({
+export const WorkflowActions = memo(function WorkflowActions({
   briefId,
   hasGuidelines,
   articleId,
@@ -235,4 +235,4 @@ export function WorkflowActions({
       </CardContent>
     </Card>
   );
-}
+});
