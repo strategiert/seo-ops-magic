@@ -174,9 +174,9 @@ export class WordPressPublisher {
       // Process results
       batchResults.forEach((result) => {
         if (result.status === 'fulfilled') {
-          if (result.value.success) {
+          if (result.value.success && result.value.postId) {
             postIds.push(result.value.postId);
-          } else {
+          } else if (!result.value.success) {
             errors.push({ article: result.value.article, error: result.value.error });
           }
         } else {
