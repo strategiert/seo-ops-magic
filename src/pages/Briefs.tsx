@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, FileText, Search, Loader2 } from "lucide-react";
+import { Plus, FileText, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,23 +46,39 @@ export default function Briefs() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 50;
 
   useEffect(() => {
     if (currentProject?.id) {
       loadBriefs();
     }
-  }, [currentProject?.id]);
+  }, [currentProject?.id, page]);
 
   const loadBriefs = async () => {
     if (!currentProject?.id) return;
-    
+
     setLoading(true);
     try {
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      // Get count
+      const { count } = await supabase
+        .from("content_briefs")
+        .select("*", { count: "exact", head: true })
+        .eq("project_id", currentProject.id);
+
+      setTotalCount(count || 0);
+
+      // Get paginated data
       const { data, error } = await supabase
         .from("content_briefs")
         .select("*")
         .eq("project_id", currentProject.id)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(from, to);
 
       if (error) throw error;
       setBriefs(data || []);
@@ -203,6 +219,38 @@ export default function Briefs() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {!loading && filteredBriefs.length > 0 && totalCount > PAGE_SIZE && (
+          <div className="flex items-center justify-between px-4 py-3 border rounded-lg">
+            <div className="text-sm text-muted-foreground">
+              Zeige {page * PAGE_SIZE + 1} bis {Math.min((page + 1) * PAGE_SIZE, totalCount)} von {totalCount} Briefs
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Zurück
+              </Button>
+              <div className="text-sm text-muted-foreground">
+                Seite {page + 1} von {Math.ceil(totalCount / PAGE_SIZE)}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={(page + 1) * PAGE_SIZE >= totalCount}
+              >
+                Weiter
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         )}
       </div>

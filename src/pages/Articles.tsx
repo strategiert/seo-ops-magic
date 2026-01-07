@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Plus, Loader2, Globe, CheckCircle2, XCircle, Palette } from "lucide-react";
+import { FileText, Plus, Loader2, Globe, CheckCircle2, XCircle, Palette, ChevronLeft, ChevronRight } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -72,6 +72,9 @@ export default function Articles() {
   const [bulkPublishOpen, setBulkPublishOpen] = useState(false);
   const [bulkStatus, setBulkStatus] = useState<"publish" | "draft">("draft");
   const [bulkUseStyledHtml, setBulkUseStyledHtml] = useState(true);
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 50;
 
   const toggleSelect = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -125,18 +128,31 @@ export default function Articles() {
     if (currentProject?.id) {
       loadArticles();
     }
-  }, [currentProject?.id]);
+  }, [currentProject?.id, page]);
 
   const loadArticles = async () => {
     if (!currentProject?.id) return;
 
     setLoading(true);
     try {
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      // Get count
+      const { count } = await supabase
+        .from("articles")
+        .select("*", { count: "exact", head: true })
+        .eq("project_id", currentProject.id);
+
+      setTotalCount(count || 0);
+
+      // Get paginated data
       const { data, error } = await supabase
         .from("articles")
         .select("*")
         .eq("project_id", currentProject.id)
-        .order("updated_at", { ascending: false });
+        .order("updated_at", { ascending: false })
+        .range(from, to);
 
       if (error) throw error;
       setArticles(data || []);
@@ -151,6 +167,18 @@ export default function Articles() {
       setLoading(false);
     }
   };
+
+  // Memoize article map for O(1) lookup in bulk publish dialog
+  const articleMap = useMemo(() => {
+    return new Map(articles.map((a) => [a.id, a]));
+  }, [articles]);
+
+  // Memoize formatted dates to avoid creating Date objects on every render
+  const formattedDates = useMemo(() => {
+    return new Map(
+      articles.map((a) => [a.id, new Date(a.updated_at).toLocaleDateString("de-DE")])
+    );
+  }, [articles]);
 
   return (
     <AppLayout>
@@ -241,12 +269,43 @@ export default function Articles() {
                     </TableCell>
                     <TableCell>v{article.version || 1}</TableCell>
                     <TableCell className="text-right text-muted-foreground">
-                      {new Date(article.updated_at).toLocaleDateString("de-DE")}
+                      {formattedDates.get(article.id)}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            {/* Pagination Controls */}
+            {totalCount > PAGE_SIZE && (
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <div className="text-sm text-muted-foreground">
+                  Zeige {page * PAGE_SIZE + 1} bis {Math.min((page + 1) * PAGE_SIZE, totalCount)} von {totalCount} Artikeln
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={page === 0}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Zurück
+                  </Button>
+                  <div className="text-sm text-muted-foreground">
+                    Seite {page + 1} von {Math.ceil(totalCount / PAGE_SIZE)}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={(page + 1) * PAGE_SIZE >= totalCount}
+                  >
+                    Weiter
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -301,7 +360,7 @@ export default function Articles() {
                 <p className="text-sm text-muted-foreground">Übertrage Artikel...</p>
                 <div className="space-y-1">
                   {Array.from(selectedIds).map((id) => {
-                    const article = articles.find((a) => a.id === id);
+                    const article = articleMap.get(id);
                     const result = results.get(id);
                     return (
                       <div key={id} className="flex items-center gap-2 text-sm">

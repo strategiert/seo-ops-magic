@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, Check, AlertCircle, Sparkles } from "lucide-react";
 import {
@@ -33,7 +33,7 @@ interface BriefCreationWizardProps {
 
 type WizardStep = "keyword" | "analyzing" | "done" | "error" | "not-configured";
 
-export function BriefCreationWizard({
+export const BriefCreationWizard = memo(function BriefCreationWizard({
   open,
   onOpenChange,
 }: BriefCreationWizardProps) {
@@ -404,4 +404,4 @@ export function BriefCreationWizard({
       </DialogContent>
     </Dialog>
   );
-}
+});

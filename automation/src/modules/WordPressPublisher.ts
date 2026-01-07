@@ -141,28 +141,64 @@ export class WordPressPublisher {
   }
 
   /**
-   * Batch publish multiple articles
+   * Batch publish multiple articles with parallel processing and concurrency control
    */
   async publishBatch(articles: Article[], options: PublishOptions = {}): Promise<number[]> {
-    console.log(`\n=== BATCH PUBLISHING ${articles.length} ARTICLES ===\n`);
+    console.log(`\n=== BATCH PUBLISHING ${articles.length} ARTICLES (PARALLEL) ===\n`);
 
+    const concurrencyLimit = 3; // Process 3 articles at a time to avoid overwhelming the server
     const postIds: number[] = [];
-    for (let i = 0; i < articles.length; i++) {
-      console.log(`\n--- Article ${i + 1}/${articles.length} ---`);
-      try {
-        const postId = await this.publishArticle(articles[i], options);
-        postIds.push(postId);
+    const errors: Array<{ article: Article; error: any }> = [];
 
-        // Small delay to avoid rate limiting
-        if (i < articles.length - 1) {
-          await this.delay(1000);
+    // Process articles in batches with concurrency limit
+    for (let i = 0; i < articles.length; i += concurrencyLimit) {
+      const batch = articles.slice(i, i + concurrencyLimit);
+      console.log(`\n--- Processing batch ${Math.floor(i / concurrencyLimit) + 1} (articles ${i + 1}-${Math.min(i + concurrencyLimit, articles.length)}) ---`);
+
+      const batchPromises = batch.map(async (article, batchIndex) => {
+        const articleNumber = i + batchIndex + 1;
+        try {
+          console.log(`  [${articleNumber}/${articles.length}] Publishing: ${article.title}`);
+          const postId = await this.publishArticle(article, options);
+          console.log(`  [${articleNumber}/${articles.length}] ✓ Success: Post ID ${postId}`);
+          return { success: true, postId, article };
+        } catch (error) {
+          console.error(`  [${articleNumber}/${articles.length}] ✗ Failed: ${article.title}`, error);
+          return { success: false, error, article };
         }
-      } catch (error) {
-        console.error(`✗ Failed to publish article ${articles[i].id}:`, error);
+      });
+
+      // Wait for all promises in this batch to complete
+      const batchResults = await Promise.allSettled(batchPromises);
+
+      // Process results
+      batchResults.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          if (result.value.success) {
+            postIds.push(result.value.postId);
+          } else {
+            errors.push({ article: result.value.article, error: result.value.error });
+          }
+        } else {
+          // Promise was rejected (shouldn't happen with our try/catch, but handle anyway)
+          console.error('  ✗ Unexpected batch promise rejection:', result.reason);
+        }
+      });
+
+      // Small delay between batches to avoid rate limiting
+      if (i + concurrencyLimit < articles.length) {
+        await this.delay(500);
       }
     }
 
-    console.log(`\n✓ BATCH COMPLETE: ${postIds.length}/${articles.length} published`);
+    console.log(`\n✓ BATCH COMPLETE: ${postIds.length}/${articles.length} published successfully`);
+    if (errors.length > 0) {
+      console.log(`✗ ${errors.length} articles failed to publish`);
+      errors.forEach(({ article, error }) => {
+        console.log(`  - ${article.title}: ${error.message || error}`);
+      });
+    }
+
     return postIds;
   }
 
