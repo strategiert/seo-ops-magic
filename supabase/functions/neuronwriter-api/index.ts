@@ -15,7 +15,10 @@ interface NWRequestBody {
   keyword?: string;
   language?: string;
   engine?: string;
-  content?: string;
+  content?: string;      // Legacy - wird auf html gemappt für evaluate-content
+  html?: string;         // HTML content für evaluate-content
+  title?: string;        // Meta title für evaluate-content
+  description?: string;  // Meta description für evaluate-content
   status?: string;
   tags?: string[];
 }
@@ -71,7 +74,7 @@ serve(async (req) => {
 
     // Parse request body
     const body: NWRequestBody = await req.json();
-    const { action, projectId, queryId, keyword, language, engine, content, status, tags } = body;
+    const { action, projectId, queryId, keyword, language, engine, content, html, title, description, status, tags } = body;
 
     console.log(`NeuronWriter API call: ${action}`, { projectId, queryId, keyword, language, engine });
 
@@ -91,7 +94,7 @@ serve(async (req) => {
           });
         }
         endpoint = "/list-queries";
-        requestBody = { 
+        requestBody = {
           project: projectId,
           ...(status && { status }),
           ...(tags && { tags }),
@@ -112,7 +115,6 @@ serve(async (req) => {
           });
         }
         endpoint = "/new-query";
-        // NeuronWriter API expects 'keyword', 'language', and 'engine'
         requestBody = {
           project: projectId,
           keyword: keyword,
@@ -144,16 +146,25 @@ serve(async (req) => {
         requestBody = { query: queryId };
         break;
 
-      case "evaluate-content":
-        if (!queryId || !content) {
-          return new Response(JSON.stringify({ error: "queryId and content required for evaluate-content" }), {
+      case "evaluate-content": {
+        // NeuronWriter API erwartet: query, html, title (optional), description (optional)
+        const htmlContent = html || content; // Fallback auf content für Backwards-Compat
+        if (!queryId || !htmlContent) {
+          return new Response(JSON.stringify({ error: "queryId and html (or content) required for evaluate-content" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
         endpoint = "/evaluate-content";
-        requestBody = { query: queryId, content };
+        requestBody = {
+          query: queryId,
+          html: htmlContent,
+          ...(title && { title }),
+          ...(description && { description }),
+        };
+        console.log("[evaluate-content] Evaluating content for query:", queryId);
         break;
+      }
 
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
@@ -164,7 +175,7 @@ serve(async (req) => {
 
     // Call NeuronWriter API
     console.log(`Calling NeuronWriter: ${NW_BASE_URL}${endpoint}`);
-    console.log("Request body:", JSON.stringify(requestBody));
+    console.log("Request body:", JSON.stringify(requestBody).substring(0, 500));
 
     const nwResponse = await fetch(`${NW_BASE_URL}${endpoint}`, {
       method: "POST",
@@ -198,7 +209,6 @@ serve(async (req) => {
         status: nwResponse.status,
         statusText: nwResponse.statusText,
         endpoint: `${NW_BASE_URL}${endpoint}`,
-        requestBody,
         responseData: nwData
       });
 
@@ -215,15 +225,15 @@ serve(async (req) => {
       });
     }
 
-    console.log(`NeuronWriter ${action} success`);
+    console.log(`NeuronWriter ${action} success`, action === "evaluate-content" ? { score: nwData.content_score } : {});
     return new Response(JSON.stringify(nwData), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
   } catch (error) {
     console.error("Error in neuronwriter-api function:", error);
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : "Unknown error" 
+    return new Response(JSON.stringify({
+      error: error instanceof Error ? error.message : "Unknown error"
     }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
