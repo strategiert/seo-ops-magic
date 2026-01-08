@@ -4,7 +4,7 @@
  *
  * STRATEGIE:
  * - Gemini 3 Pro Preview für Content-Erstellung & Brand-Analyse (beste Qualität)
- * - Gemini 3 Flash Preview für HTML, Code, Recherche (Pro-Level, schnell)
+ * - Gemini 3 Flash Preview für HTML, Code, Recherche, Outline, Sections (Pro-Level, schnell)
  * - Gemini 2.5 Flash-Lite für einfache Tasks (Kosten sparen)
  * - Gemini 3 Pro Image Preview für Bildgenerierung
  */
@@ -15,9 +15,11 @@
 
 export type TaskType =
   // PREMIUM → Gemini 3 Pro Preview
-  | "article_generation"      // Lange Artikel schreiben
+  | "article_generation"      // Lange Artikel schreiben (ganzer Artikel auf einmal)
   | "brand_analysis"          // Brand-Daten extrahieren
-  // BALANCED → Gemini 2.5 Flash
+  // BALANCED → Gemini 3 Flash Preview
+  | "outline_generation"      // Artikel-Struktur erstellen
+  | "section_writing"         // Einzelne Section schreiben
   | "html_design"             // HTML/CSS generieren
   | "code_generation"         // Code schreiben
   | "competitor_research"     // Recherche
@@ -26,6 +28,7 @@ export type TaskType =
   | "summarization"           // Zusammenfassungen
   | "simple_completion"       // Kurze, einfache Aufgaben
   | "validation"              // Daten validieren
+  | "section_review"          // Section Quality Check (schnell)
   // IMAGE → Gemini 3 Pro Image Preview
   | "image_generation";       // Bilder erstellen
 
@@ -117,7 +120,9 @@ export function analyzeTask(
     // Premium → Gemini 3 Pro Preview
     article_generation: "high",
     brand_analysis: "high",
-    // Balanced → Gemini 2.5 Flash
+    // Balanced → Gemini 3 Flash Preview
+    outline_generation: "medium",
+    section_writing: "medium",
     html_design: "medium",
     code_generation: "medium",
     competitor_research: "medium",
@@ -126,6 +131,7 @@ export function analyzeTask(
     summarization: "low",
     simple_completion: "low",
     validation: "low",
+    section_review: "low",
     // Image → Gemini 3 Pro Image Preview
     image_generation: "medium",
   };
@@ -183,18 +189,25 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // GEMINI 3 FLASH PREVIEW: HTML, Code, Recherche (Pro-Level, schnell)
+  // GEMINI 3 FLASH PREVIEW: Outline, Sections, HTML, Code, Recherche
   // ═══════════════════════════════════════════════════════════════════════════
   if (
+    taskType === "outline_generation" ||
+    taskType === "section_writing" ||
     taskType === "html_design" ||
     taskType === "code_generation" ||
     taskType === "competitor_research"
   ) {
     const model: ModelId = "gemini-3-flash-preview";
+
+    // Section Writing braucht mehr Tokens als Outline
+    const maxTokensBase = taskType === "section_writing" ? 4000 :
+                          taskType === "outline_generation" ? 4000 : 8000;
+
     return {
       model,
-      maxTokens: Math.floor(Math.min(estimatedOutputTokens * 1.5, 8000)), // Must be integer
-      temperature: 0.4, // Niedrigere Temp für konsistentere Ausgabe
+      maxTokens: Math.floor(Math.min(estimatedOutputTokens * 1.5, maxTokensBase)),
+      temperature: taskType === "section_writing" ? 0.7 : 0.5,
       reasoning: `${taskType} → Gemini 3 Flash Preview (Pro-Level, schnell)`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
       tier: "balanced",
@@ -208,12 +221,13 @@ export function selectModel(analysis: TaskAnalysis): ModelConfig {
     taskType === "translation" ||
     taskType === "summarization" ||
     taskType === "simple_completion" ||
-    taskType === "validation"
+    taskType === "validation" ||
+    taskType === "section_review"
   ) {
     const model: ModelId = "gemini-2.5-flash-lite";
     return {
       model,
-      maxTokens: Math.floor(Math.min(estimatedOutputTokens * 2, 4000)), // Must be integer
+      maxTokens: Math.floor(Math.min(estimatedOutputTokens * 2, 4000)),
       temperature: 0.3,
       reasoning: `${taskType} → Gemini 2.5 Flash-Lite (30x günstiger!)`,
       estimatedCost: calculateCost(model, estimatedInputTokens, estimatedOutputTokens),
