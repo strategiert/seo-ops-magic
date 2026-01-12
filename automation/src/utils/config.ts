@@ -15,6 +15,32 @@ export function loadConfig(): AutomationConfig {
 
   const missing = requiredEnvVars.filter((varName) => !process.env[varName]);
   if (missing.length > 0) {
+    console.error(`
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    ⚠️  KONFIGURATIONSFEHLER                                  ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  Fehlende Environment Variables:                                             ║
+║  ${missing.map(v => `• ${v}`).join('\n║  ').padEnd(74)}║
+║                                                                              ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  📋 SO BEHEBST DU DEN FEHLER:                                                ║
+║                                                                              ║
+║  1. Gehe zu: GitHub → Repository → Settings → Secrets and variables         ║
+║     → Actions → New repository secret                                        ║
+║                                                                              ║
+║  2. Füge diese Secrets hinzu:                                                ║
+║     • WORDPRESS_URL         → z.B. https://deine-seite.de                   ║
+║     • WORDPRESS_USERNAME    → Dein WordPress Benutzername                   ║
+║     • WORDPRESS_APP_PASSWORD→ App-Passwort (nicht Login-Passwort!)          ║
+║     • SUPABASE_URL          → Aus Supabase Dashboard → Settings → API       ║
+║     • SUPABASE_SERVICE_ROLE_KEY → Aus Supabase Dashboard (service_role)     ║
+║                                                                              ║
+║  💡 WordPress App-Passwort erstellen:                                        ║
+║     WordPress Admin → Benutzer → Profil → App-Passwörter                    ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+`);
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
 
