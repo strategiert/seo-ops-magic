@@ -29,13 +29,13 @@ describe('loadConfig', () => {
       process.env.SUPABASE_SERVICE_ROLE_KEY = 'key';
       process.env.ANTHROPIC_API_KEY = 'key';
 
-      expect(() => loadConfig()).toThrow('Missing required environment variables: WORDPRESS_URL');
+      expect(() => loadConfig()).toThrow('WordPress nicht konfiguriert. Fehlend: WORDPRESS_URL');
     });
 
     it('should throw error when multiple vars are missing', () => {
       process.env.ANTHROPIC_API_KEY = 'key';
 
-      expect(() => loadConfig()).toThrow('Missing required environment variables');
+      expect(() => loadConfig()).toThrow('WordPress nicht konfiguriert');
     });
 
     it('should throw error when no LLM API key is set', () => {

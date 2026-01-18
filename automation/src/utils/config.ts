@@ -5,17 +5,53 @@ import { AutomationConfig } from '../types';
 dotenv.config();
 
 export function loadConfig(): AutomationConfig {
-  const requiredEnvVars = [
+  // WordPress credentials must be configured by the user
+  const userConfiguredVars = [
     'WORDPRESS_URL',
     'WORDPRESS_USERNAME',
     'WORDPRESS_APP_PASSWORD',
+  ];
+
+  // System variables (globally available)
+  const systemVars = [
     'SUPABASE_URL',
     'SUPABASE_SERVICE_ROLE_KEY',
   ];
 
-  const missing = requiredEnvVars.filter((varName) => !process.env[varName]);
-  if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  const missingUserVars = userConfiguredVars.filter((varName) => !process.env[varName]);
+  const missingSystemVars = systemVars.filter((varName) => !process.env[varName]);
+
+  if (missingUserVars.length > 0) {
+    console.error(`
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    ⚠️  WORDPRESS NICHT KONFIGURIERT                          ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  Fehlende WordPress-Einstellungen:                                           ║
+║  ${missingUserVars.map(v => `• ${v}`).join('\n║  ').padEnd(74)}║
+║                                                                              ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  📋 SO BEHEBST DU DEN FEHLER:                                                ║
+║                                                                              ║
+║  1. Gehe zu: GitHub → Repository → Settings → Secrets and variables         ║
+║     → Actions → New repository secret                                        ║
+║                                                                              ║
+║  2. Füge diese Secrets hinzu:                                                ║
+║     • WORDPRESS_URL          → z.B. https://deine-seite.de                  ║
+║     • WORDPRESS_USERNAME     → Dein WordPress Benutzername                  ║
+║     • WORDPRESS_APP_PASSWORD → App-Passwort (nicht Login-Passwort!)         ║
+║                                                                              ║
+║  💡 WordPress App-Passwort erstellen:                                        ║
+║     WordPress Admin → Benutzer → Profil → App-Passwörter                    ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+`);
+    throw new Error(`WordPress nicht konfiguriert. Fehlend: ${missingUserVars.join(', ')}`);
+  }
+
+  if (missingSystemVars.length > 0) {
+    // This should not happen in production - system error
+    throw new Error(`System configuration error: ${missingSystemVars.join(', ')}`);
   }
 
   // Determine LLM provider
