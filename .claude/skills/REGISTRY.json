@@ -1,0 +1,169 @@
+{
+  "version": "1.0.0",
+  "description": "Skill Registry für Lazy Loading - nur Summary laden, Details bei Bedarf",
+  "skills": {
+    "social-post-creator": {
+      "summary": "Erstellt plattformspezifische Social Media Posts (LinkedIn, Instagram, TikTok, Twitter, Facebook)",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["PLATFORM_SPECS.md", "TONE_GUIDELINES.md", "HASHTAG_STRATEGIES.md", "CTA_LIBRARY.md"],
+      "category": "content-transformation",
+      "estimatedTokens": 8000
+    },
+    "ad-copy-writer": {
+      "summary": "Erstellt Werbetexte für Google, Meta, LinkedIn, TikTok, Pinterest Ads",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["PLATFORM_REQUIREMENTS.md", "COPYWRITING_FORMULAS.md", "AUDIENCE_PERSONAS.md", "COMPLIANCE_RULES.md", "CTA_LIBRARY.md"],
+      "category": "content-transformation",
+      "estimatedTokens": 12000
+    },
+    "press-release-writer": {
+      "summary": "Erstellt Pressemeldungen nach AP Style mit Zitaten und Boilerplate",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["AP_STYLE_GUIDE.md", "QUOTE_GUIDELINES.md", "PRESS_RELEASE_TYPES.md", "BOILERPLATE_TEMPLATES.md"],
+      "category": "content-transformation",
+      "estimatedTokens": 10000
+    },
+    "newsletter-composer": {
+      "summary": "Erstellt Newsletter mit optimierten Betreffzeilen und Email-Struktur",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["SUBJECT_LINE_FORMULAS.md", "EMAIL_STRUCTURE.md", "SPAM_TRIGGER_WORDS.md"],
+      "category": "content-transformation",
+      "estimatedTokens": 6000
+    },
+    "linkbait-creator": {
+      "summary": "Erstellt virale Inhalte für Backlink-Akquisition (Data Studies, Tools, Infografiken)",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["LINKBAIT_TYPES.md", "PROMOTION_PLAYBOOK.md"],
+      "category": "content-transformation",
+      "estimatedTokens": 7000
+    },
+    "content-translator": {
+      "summary": "Übersetzt Marketing-Content DE↔EN mit SEO-Keywords und kultureller Anpassung",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["CULTURAL_ADAPTATIONS.md", "CTA_TRANSLATIONS.md", "TECHNICAL_GLOSSARY.md"],
+      "category": "content-transformation",
+      "estimatedTokens": 9000
+    },
+    "seo-content-writer": {
+      "summary": "Erstellt SEO-optimierte Pillar-Artikel basierend auf NeuronWriter Briefs",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["CONTENT_TYPES.md", "CONTENT_STRUCTURE.md", "TOPIC_CLUSTERS.md"],
+      "category": "content-creation",
+      "estimatedTokens": 10000
+    },
+    "html-designer": {
+      "summary": "Wandelt Markdown in gestyltes HTML mit Tailwind CSS um",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["TYPOGRAPHY.md", "COMPONENTS.md", "PAGE_LAYOUTS.md"],
+      "category": "content-creation",
+      "estimatedTokens": 12000
+    },
+    "wordpress-publisher": {
+      "summary": "Veröffentlicht Content auf WordPress via REST API mit ACF und SEO Meta",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["API_REFERENCE.md"],
+      "category": "content-creation",
+      "estimatedTokens": 6000
+    },
+    "image-generator": {
+      "summary": "Erstellt AI-Bild-Prompts für DALL-E, Midjourney, Stable Diffusion",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["PLATFORM_IMAGE_SPECS.md", "AI_PROMPT_PATTERNS.md", "BRAND_VISUAL_GUIDELINES.md"],
+      "category": "visual-assets",
+      "estimatedTokens": 8000
+    },
+    "video-creator": {
+      "summary": "Erstellt Video-Scripts und Storyboards für Reels, TikTok, YouTube",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": [],
+      "category": "visual-assets",
+      "estimatedTokens": 5000
+    },
+    "carousel-designer": {
+      "summary": "Erstellt Multi-Slide Carousel Content für Instagram und LinkedIn",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": [],
+      "category": "visual-assets",
+      "estimatedTokens": 4000
+    },
+    "internal-linker": {
+      "summary": "Analysiert Artikel und schlägt interne Verlinkungen vor",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["SEMANTIC_ANALYSIS.md", "ANCHOR_TEXT_STRATEGIES.md", "STRATEGIES.md"],
+      "category": "seo",
+      "estimatedTokens": 8000
+    },
+    "press-outreach-bot": {
+      "summary": "Automatisiert Journalisten-Recherche und personalisierte PR-Pitches",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["RESEARCH_METHODS.md", "PITCH_TEMPLATES.md", "FOLLOW_UP_TEMPLATES.md"],
+      "category": "outreach",
+      "estimatedTokens": 9000
+    },
+    "link-building-agent": {
+      "summary": "Strategischer Backlink-Aufbau durch Competitor-Analyse und Outreach",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": ["LINK_BUILDING_METHODS.md", "COMPETITOR_ANALYSIS.md", "OUTREACH_TEMPLATES.md"],
+      "category": "outreach",
+      "estimatedTokens": 10000
+    },
+    "editorial-researcher": {
+      "summary": "Recherchiert und pflegt Journalisten-Datenbanken",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": [],
+      "category": "outreach",
+      "estimatedTokens": 4000
+    },
+    "company-social-manager": {
+      "summary": "Verwaltet Company Social Media über alle Plattformen",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": [],
+      "category": "social-management",
+      "estimatedTokens": 5000
+    },
+    "employee-advocacy-manager": {
+      "summary": "Erstellt Employee-Advocacy-Content für persönliche Profile",
+      "entryPoint": "SKILL.md",
+      "supportingDocs": [],
+      "category": "social-management",
+      "estimatedTokens": 5000
+    }
+  },
+  "categories": {
+    "content-transformation": {
+      "description": "Transformiert Pillar-Content in verschiedene Formate",
+      "skills": ["social-post-creator", "ad-copy-writer", "press-release-writer", "newsletter-composer", "linkbait-creator", "content-translator"]
+    },
+    "content-creation": {
+      "description": "Erstellt und publiziert neuen Content",
+      "skills": ["seo-content-writer", "html-designer", "wordpress-publisher"]
+    },
+    "visual-assets": {
+      "description": "Erstellt visuelle Inhalte",
+      "skills": ["image-generator", "video-creator", "carousel-designer"]
+    },
+    "seo": {
+      "description": "SEO-Optimierung und Linking",
+      "skills": ["internal-linker"]
+    },
+    "outreach": {
+      "description": "PR und Link-Building Outreach",
+      "skills": ["press-outreach-bot", "link-building-agent", "editorial-researcher"]
+    },
+    "social-management": {
+      "description": "Social Media Management",
+      "skills": ["company-social-manager", "employee-advocacy-manager"]
+    }
+  },
+  "loadingStrategy": {
+    "router": {
+      "loadsOnInit": [],
+      "accessibleData": ["skill summaries", "article metadata", "asset IDs"]
+    },
+    "specialist": {
+      "loadsOnInit": ["relevant SKILL.md only"],
+      "loadsOnDemand": ["supporting docs when needed"],
+      "accessibleData": ["article chunks", "previous outputs"]
+    }
+  }
+}
