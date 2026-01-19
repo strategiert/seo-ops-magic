@@ -12,10 +12,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import {
   useProjectIntegrations,
-  saveNeuronWriterIntegration,
+  useSaveNeuronWriterIntegration,
 } from "@/hooks/useProjectIntegrations";
 import { listNWProjects, type NWProject } from "@/lib/api/neuronwriter";
 
@@ -40,8 +40,9 @@ const ENGINES = [
 
 export function NeuronWriterSetup() {
   const { toast } = useToast();
-  const { currentProject } = useWorkspace();
-  const { neuronwriter, loading: intLoading, refetch } = useProjectIntegrations();
+  const { currentProject } = useWorkspaceConvex();
+  const { neuronwriter, loading: intLoading } = useProjectIntegrations();
+  const saveNeuronWriter = useSaveNeuronWriterIntegration();
 
   const [nwProjects, setNwProjects] = useState<NWProject[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
@@ -61,13 +62,18 @@ export function NeuronWriterSetup() {
   const [saving, setSaving] = useState(false);
 
   // Get the effective API key (user input or stored)
-  const getEffectiveApiKey = () => apiKey || neuronwriter?.nwApiKey || undefined;
+  const getEffectiveApiKey = () => apiKey || neuronwriter?.nwApiKey || "";
 
   // Test API connection and load projects
   const testConnection = async (testApiKey?: string) => {
+    const keyToUse = testApiKey || getEffectiveApiKey();
+    if (!keyToUse) {
+      setApiConnected(false);
+      return [];
+    }
+
     setTesting(true);
     try {
-      const keyToUse = testApiKey || getEffectiveApiKey();
       const projects = await listNWProjects(keyToUse);
       setNwProjects(projects);
       setApiConnected(true);
@@ -88,7 +94,7 @@ export function NeuronWriterSetup() {
 
   // Save API Key
   const handleSaveApiKey = async () => {
-    if (!currentProject?.id || !apiKey.trim()) {
+    if (!currentProject?._id || !apiKey.trim()) {
       toast({
         title: "API Key erforderlich",
         description: "Bitte gib einen gültigen API Key ein.",
@@ -99,20 +105,20 @@ export function NeuronWriterSetup() {
 
     setSavingApiKey(true);
     try {
-      await saveNeuronWriterIntegration(currentProject.id, {
-        nwApiKey: apiKey.trim(),
-      });
-
-      // Test the new key
+      // Test the key first
       const projects = await testConnection(apiKey.trim());
 
       if (projects.length > 0) {
+        // Key works, save it
+        await saveNeuronWriter(currentProject._id, {
+          nwApiKey: apiKey.trim(),
+        });
+
         toast({
           title: "API Key gespeichert",
           description: "NeuronWriter Verbindung erfolgreich.",
         });
         setApiKey(""); // Clear input after successful save
-        await refetch();
       }
     } catch (error) {
       console.error("Error saving API key:", error);
@@ -129,7 +135,7 @@ export function NeuronWriterSetup() {
   // Initial check on mount (only if API key is configured)
   useEffect(() => {
     if (neuronwriter?.nwApiKey) {
-      testConnection();
+      testConnection(neuronwriter.nwApiKey);
     }
   }, [neuronwriter?.nwApiKey]);
 
@@ -146,7 +152,7 @@ export function NeuronWriterSetup() {
     setLoadingProjects(true);
     const projects = await testConnection();
     setLoadingProjects(false);
-    
+
     if (projects.length > 0) {
       setIsConfiguring(true);
       // Pre-fill with existing values if any
@@ -159,7 +165,7 @@ export function NeuronWriterSetup() {
   };
 
   const handleSave = async () => {
-    if (!currentProject?.id || !selectedProject) {
+    if (!currentProject?._id || !selectedProject) {
       toast({
         title: "Fehler",
         description: "Bitte wähle ein NeuronWriter Projekt aus.",
@@ -173,7 +179,7 @@ export function NeuronWriterSetup() {
 
     setSaving(true);
     try {
-      await saveNeuronWriterIntegration(currentProject.id, {
+      await saveNeuronWriter(currentProject._id, {
         nwProjectId: selectedProject,
         nwProjectName: selectedNWProject.name,
         nwLanguage: selectedLanguage,
@@ -186,7 +192,6 @@ export function NeuronWriterSetup() {
       });
 
       setIsConfiguring(false);
-      await refetch();
     } catch (error) {
       console.error("Error saving NW integration:", error);
       toast({
@@ -204,9 +209,7 @@ export function NeuronWriterSetup() {
       <Card>
         <CardHeader>
           <CardTitle className="text-muted-foreground">NeuronWriter</CardTitle>
-          <CardDescription>
-            Bitte wähle zuerst ein Projekt aus.
-          </CardDescription>
+          <CardDescription>Bitte wähle zuerst ein Projekt aus.</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -224,13 +227,9 @@ export function NeuronWriterSetup() {
               {apiConnected === true && isConnected && (
                 <CheckCircle2 className="h-5 w-5 text-green-500" />
               )}
-              {apiConnected === false && (
-                <XCircle className="h-5 w-5 text-destructive" />
-              )}
+              {apiConnected === false && <XCircle className="h-5 w-5 text-destructive" />}
             </CardTitle>
-            <CardDescription>
-              SEO Content-Optimierung und NLP-Keyword Analyse
-            </CardDescription>
+            <CardDescription>SEO Content-Optimierung und NLP-Keyword Analyse</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -318,10 +317,22 @@ export function NeuronWriterSetup() {
                 ✓ NeuronWriter ist verbunden
               </p>
               <div className="text-sm text-muted-foreground space-y-1">
-                <p><strong>Projekt:</strong> {neuronwriter.nwProjectName}</p>
-                <p><strong>Sprache:</strong> {LANGUAGES.find(l => l.value === neuronwriter.nwLanguage)?.label || neuronwriter.nwLanguage}</p>
-                <p><strong>Engine:</strong> {ENGINES.find(e => e.value === neuronwriter.nwEngine)?.label || neuronwriter.nwEngine}</p>
-                <p><strong>API Key:</strong> ••••••••{neuronwriter.nwApiKey?.slice(-4) || "****"}</p>
+                <p>
+                  <strong>Projekt:</strong> {neuronwriter.nwProjectName}
+                </p>
+                <p>
+                  <strong>Sprache:</strong>{" "}
+                  {LANGUAGES.find((l) => l.value === neuronwriter.nwLanguage)?.label ||
+                    neuronwriter.nwLanguage}
+                </p>
+                <p>
+                  <strong>Engine:</strong>{" "}
+                  {ENGINES.find((e) => e.value === neuronwriter.nwEngine)?.label ||
+                    neuronwriter.nwEngine}
+                </p>
+                <p>
+                  <strong>API Key:</strong> ••••••••{neuronwriter.nwApiKey?.slice(-4) || "****"}
+                </p>
                 {neuronwriter.lastSyncAt && (
                   <p className="text-xs">
                     Letzter Sync: {new Date(neuronwriter.lastSyncAt).toLocaleString("de-DE")}
@@ -377,7 +388,8 @@ export function NeuronWriterSetup() {
               ) : (
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">
-                    Gib deinen NeuronWriter API Key ein. Du findest ihn in deinem NeuronWriter Account unter Settings → API.
+                    Gib deinen NeuronWriter API Key ein. Du findest ihn in deinem NeuronWriter
+                    Account unter Settings → API.
                   </p>
                   <div className="flex gap-2">
                     <div className="relative flex-1">
@@ -413,11 +425,10 @@ export function NeuronWriterSetup() {
                 <p className="text-sm text-muted-foreground">
                   Verknüpfe ein NeuronWriter Projekt, um SEO Guidelines automatisch zu importieren.
                 </p>
-                <Button
-                  onClick={startConfiguring}
-                  disabled={testing || loadingProjects}
-                >
-                  {(testing || loadingProjects) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <Button onClick={startConfiguring} disabled={testing || loadingProjects}>
+                  {(testing || loadingProjects) && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
                   NeuronWriter Projekt verbinden
                 </Button>
               </>

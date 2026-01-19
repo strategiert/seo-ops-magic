@@ -12,12 +12,11 @@ import { v } from "convex/values";
 const NW_BASE_URL = "https://app.neuronwriter.com/neuron-api/0.5/writer";
 
 /**
- * Get NeuronWriter API key from environment
+ * Validate that an API key was provided (must come from project settings)
  */
-function getNWApiKey(): string {
-  const apiKey = process.env.NEURONWRITER_API_KEY;
+function requireApiKey(apiKey: string | undefined): string {
   if (!apiKey) {
-    throw new Error("NEURONWRITER_API_KEY not configured");
+    throw new Error("NeuronWriter API Key nicht konfiguriert. Bitte in den Projekt-Einstellungen eingeben.");
   }
   return apiKey;
 }
@@ -26,20 +25,22 @@ function getNWApiKey(): string {
  * List all NeuronWriter projects
  */
 export const listProjects = action({
-  args: {},
-  handler: async (ctx): Promise<any> => {
+  args: {
+    apiKey: v.string(),
+  },
+  handler: async (ctx, { apiKey }): Promise<any> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Unauthorized");
     }
 
-    const apiKey = getNWApiKey();
+    const validApiKey = requireApiKey(apiKey);
 
     const response = await fetch(`${NW_BASE_URL}/list-projects`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-KEY": apiKey,
+        "X-API-KEY": validApiKey,
       },
       body: JSON.stringify({}),
     });
@@ -58,17 +59,18 @@ export const listProjects = action({
  */
 export const listQueries = action({
   args: {
+    apiKey: v.string(),
     projectId: v.string(),
     status: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, { projectId, status, tags }): Promise<any> => {
+  handler: async (ctx, { apiKey, projectId, status, tags }): Promise<any> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Unauthorized");
     }
 
-    const apiKey = getNWApiKey();
+    const validApiKey = requireApiKey(apiKey);
 
     const requestBody: Record<string, any> = {
       project: projectId,
@@ -80,7 +82,7 @@ export const listQueries = action({
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-KEY": apiKey,
+        "X-API-KEY": validApiKey,
       },
       body: JSON.stringify(requestBody),
     });
@@ -99,24 +101,25 @@ export const listQueries = action({
  */
 export const newQuery = action({
   args: {
+    apiKey: v.string(),
     projectId: v.string(),
     keyword: v.string(),
     language: v.string(),
     engine: v.string(),
   },
-  handler: async (ctx, { projectId, keyword, language, engine }): Promise<any> => {
+  handler: async (ctx, { apiKey, projectId, keyword, language, engine }): Promise<any> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Unauthorized");
     }
 
-    const apiKey = getNWApiKey();
+    const validApiKey = requireApiKey(apiKey);
 
     const response = await fetch(`${NW_BASE_URL}/new-query`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-KEY": apiKey,
+        "X-API-KEY": validApiKey,
       },
       body: JSON.stringify({
         project: projectId,
@@ -140,21 +143,22 @@ export const newQuery = action({
  */
 export const getQuery = action({
   args: {
+    apiKey: v.string(),
     queryId: v.string(),
   },
-  handler: async (ctx, { queryId }): Promise<any> => {
+  handler: async (ctx, { apiKey, queryId }): Promise<any> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Unauthorized");
     }
 
-    const apiKey = getNWApiKey();
+    const validApiKey = requireApiKey(apiKey);
 
     const response = await fetch(`${NW_BASE_URL}/get-query`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-KEY": apiKey,
+        "X-API-KEY": validApiKey,
       },
       body: JSON.stringify({ query: queryId }),
     });
@@ -173,21 +177,22 @@ export const getQuery = action({
  */
 export const getContent = action({
   args: {
+    apiKey: v.string(),
     queryId: v.string(),
   },
-  handler: async (ctx, { queryId }): Promise<any> => {
+  handler: async (ctx, { apiKey, queryId }): Promise<any> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Unauthorized");
     }
 
-    const apiKey = getNWApiKey();
+    const validApiKey = requireApiKey(apiKey);
 
     const response = await fetch(`${NW_BASE_URL}/get-content`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-KEY": apiKey,
+        "X-API-KEY": validApiKey,
       },
       body: JSON.stringify({ query: queryId }),
     });
@@ -207,18 +212,19 @@ export const getContent = action({
  */
 export const evaluateContent = action({
   args: {
+    apiKey: v.string(),
     queryId: v.string(),
     html: v.string(),
     title: v.optional(v.string()),
     description: v.optional(v.string()),
   },
-  handler: async (ctx, { queryId, html, title, description }): Promise<any> => {
+  handler: async (ctx, { apiKey, queryId, html, title, description }): Promise<any> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Unauthorized");
     }
 
-    const apiKey = getNWApiKey();
+    const validApiKey = requireApiKey(apiKey);
 
     const requestBody: Record<string, any> = {
       query: queryId,
@@ -231,7 +237,7 @@ export const evaluateContent = action({
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-KEY": apiKey,
+        "X-API-KEY": validApiKey,
       },
       body: JSON.stringify(requestBody),
     });
@@ -251,6 +257,7 @@ export const evaluateContent = action({
  */
 export const call = action({
   args: {
+    apiKey: v.string(),
     action: v.string(),
     projectId: v.optional(v.string()),
     queryId: v.optional(v.string()),
@@ -270,7 +277,7 @@ export const call = action({
       throw new Error("Unauthorized");
     }
 
-    const apiKey = getNWApiKey();
+    const validApiKey = requireApiKey(args.apiKey);
 
     let endpoint: string;
     let requestBody: Record<string, any> = {};
@@ -343,7 +350,7 @@ export const call = action({
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-API-KEY": apiKey,
+        "X-API-KEY": validApiKey,
       },
       body: JSON.stringify(requestBody),
     });

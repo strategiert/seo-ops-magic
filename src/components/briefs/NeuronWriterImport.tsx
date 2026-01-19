@@ -10,10 +10,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import {
   useProjectIntegrations,
-  updateNeuronWriterSyncTime,
+  useUpdateNeuronWriterSyncTime,
 } from "@/hooks/useProjectIntegrations";
 import {
   startNewQuery,
@@ -37,8 +37,9 @@ export function NeuronWriterImport({
   onImport,
 }: NeuronWriterImportProps) {
   const { toast } = useToast();
-  const { currentProject } = useWorkspace();
+  const { currentProject } = useWorkspaceConvex();
   const { neuronwriter, loading: intLoading, refetch } = useProjectIntegrations();
+  const updateSyncTime = useUpdateNeuronWriterSyncTime();
 
   const [step, setStep] = useState<ImportStep>("confirm");
   const [importing, setImporting] = useState(false);
@@ -79,6 +80,15 @@ export function NeuronWriterImport({
       return;
     }
 
+    if (!neuronwriter.nwApiKey) {
+      toast({
+        title: "API Key fehlt",
+        description: "Bitte konfiguriere den NeuronWriter API Key in den Einstellungen.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setImporting(true);
     setStep("loading");
     setImportProgress("Starte Keyword-Analyse...");
@@ -90,17 +100,17 @@ export function NeuronWriterImport({
         keyword.trim(),
         neuronwriter.nwLanguage || "de",
         neuronwriter.nwEngine || "google.de",
-        neuronwriter.nwApiKey || undefined
+        neuronwriter.nwApiKey
       );
 
       setImportProgress("Analysiere Keyword (ca. 60 Sekunden)...");
 
-      // Poll until ready
-      const guidelines = await pollQueryUntilReady(queryId, 20, 5000, neuronwriter.nwApiKey || undefined);
+      // Poll until ready (note: apiKey is now second parameter)
+      const guidelines = await pollQueryUntilReady(queryId, neuronwriter.nwApiKey, 20, 5000);
 
       // Update sync time
       if (neuronwriter.id) {
-        await updateNeuronWriterSyncTime(neuronwriter.id);
+        await updateSyncTime(neuronwriter.id);
         await refetch();
       }
 
