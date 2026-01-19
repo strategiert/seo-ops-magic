@@ -89,13 +89,14 @@ export function NeuronWriterImport({
         neuronwriter.nwProjectId,
         keyword.trim(),
         neuronwriter.nwLanguage || "de",
-        neuronwriter.nwEngine || "google.de"
+        neuronwriter.nwEngine || "google.de",
+        neuronwriter.nwApiKey || undefined
       );
 
       setImportProgress("Analysiere Keyword (ca. 60 Sekunden)...");
 
       // Poll until ready
-      const guidelines = await pollQueryUntilReady(queryId);
+      const guidelines = await pollQueryUntilReady(queryId, 20, 5000, neuronwriter.nwApiKey || undefined);
 
       // Update sync time
       if (neuronwriter.id) {
