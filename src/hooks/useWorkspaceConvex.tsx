@@ -7,6 +7,7 @@ import {
   useCallback,
 } from "react";
 import { useQuery, useMutation } from "convex/react";
+import { useAuth } from "@clerk/clerk-react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 
@@ -76,6 +77,9 @@ const STORAGE_KEYS = {
 };
 
 export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
+  // Check if Clerk auth is available
+  const { isSignedIn, isLoaded: clerkLoaded } = useAuth();
+
   // State
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<
     Id<"workspaces"> | null
@@ -91,12 +95,18 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
     return stored ? (stored as Id<"projects">) : null;
   });
 
-  // Convex queries - real-time subscriptions!
-  const workspaces = useQuery(api.tables.workspaces.list) ?? [];
+  // Convex queries - only run if Clerk is signed in
+  // Skip queries if not authenticated to avoid server errors
+  const workspaces = useQuery(
+    api.tables.workspaces.list,
+    clerkLoaded && isSignedIn ? {} : "skip"
+  ) ?? [];
 
   const projects = useQuery(
     api.tables.projects.listByWorkspace,
-    currentWorkspaceId ? { workspaceId: currentWorkspaceId } : "skip"
+    clerkLoaded && isSignedIn && currentWorkspaceId
+      ? { workspaceId: currentWorkspaceId }
+      : "skip"
   ) ?? [];
 
   // Mutations
@@ -197,8 +207,8 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
     projects,
     currentProject,
     setCurrentProject,
-    isLoading: workspaces === undefined,
-    isLoadingProjects: projects === undefined,
+    isLoading: !clerkLoaded || (isSignedIn && workspaces === undefined),
+    isLoadingProjects: !clerkLoaded || (isSignedIn && currentWorkspaceId && projects === undefined),
     createWorkspace,
     createProject,
     updateProject,
