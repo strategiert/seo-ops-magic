@@ -10,6 +10,7 @@ const NW_BASE_URL = "https://app.neuronwriter.com/neuron-api/0.5/writer";
 
 interface NWRequestBody {
   action: "list-projects" | "list-queries" | "new-query" | "get-query" | "get-content" | "evaluate-content";
+  apiKey?: string;       // Optional: User-provided API key (overrides env var)
   projectId?: string;
   queryId?: string;
   keyword?: string;
@@ -57,24 +58,24 @@ serve(async (req) => {
       });
     }
 
-    // Get NeuronWriter API key from secrets
-    const nwApiKey = Deno.env.get("NEURONWRITER_API_KEY");
+    // Parse request body
+    const body: NWRequestBody = await req.json();
+    const { action, apiKey, projectId, queryId, keyword, language, engine, content, html, title, description, status, tags } = body;
+
+    // Get NeuronWriter API key: prefer user-provided, fallback to env var
+    const nwApiKey = apiKey || Deno.env.get("NEURONWRITER_API_KEY");
     if (!nwApiKey) {
-      console.error("NEURONWRITER_API_KEY not configured");
+      console.error("No NeuronWriter API key available");
       return new Response(JSON.stringify({
         error: "NeuronWriter API key not configured",
-        message: "Please set NEURONWRITER_API_KEY in Supabase secrets"
+        message: "Bitte gib deinen NeuronWriter API Key in den Einstellungen ein."
       }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("API Key present:", nwApiKey.substring(0, 10) + "...");
-
-    // Parse request body
-    const body: NWRequestBody = await req.json();
-    const { action, projectId, queryId, keyword, language, engine, content, html, title, description, status, tags } = body;
+    console.log("API Key source:", apiKey ? "user-provided" : "env-var");
 
     console.log(`NeuronWriter API call: ${action}`, { projectId, queryId, keyword, language, engine });
 

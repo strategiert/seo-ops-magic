@@ -49,9 +49,9 @@ export interface NWGuidelines {
   status?: string;
 }
 
-export async function listNWProjects(): Promise<NWProject[]> {
+export async function listNWProjects(apiKey?: string): Promise<NWProject[]> {
   const { data, error } = await supabase.functions.invoke("neuronwriter-api", {
-    body: { action: "list-projects" },
+    body: { action: "list-projects", apiKey },
   });
 
   if (error) {
@@ -69,14 +69,14 @@ export async function listNWProjects(): Promise<NWProject[]> {
   return data.projects || data || [];
 }
 
-export async function listNWQueries(projectId: string, status?: string): Promise<NWQuery[]> {
+export async function listNWQueries(projectId: string, status?: string, apiKey?: string): Promise<NWQuery[]> {
   const { data, error } = await supabase.functions.invoke("neuronwriter-api", {
-    body: { action: "list-queries", projectId, status },
+    body: { action: "list-queries", projectId, status, apiKey },
   });
 
   if (error) throw new Error(error.message);
   if (data.error) throw new Error(data.error);
-  
+
   return data.queries || data || [];
 }
 
@@ -94,7 +94,8 @@ export async function startNewQuery(
   projectId: string,
   keyword: string,
   language: string,
-  engine: string
+  engine: string,
+  apiKey?: string
 ): Promise<{ queryId: string; status: string }> {
   // Map language code to full name if needed
   const mappedLanguage = LANGUAGE_MAP[language] || language;
@@ -107,7 +108,8 @@ export async function startNewQuery(
       projectId,
       keyword,
       language: mappedLanguage,
-      engine
+      engine,
+      apiKey
     },
   });
 
@@ -126,9 +128,9 @@ export async function startNewQuery(
   return { queryId: data.query || data.id, status: data.status || "pending" };
 }
 
-export async function getQueryGuidelines(queryId: string): Promise<NWGuidelines> {
+export async function getQueryGuidelines(queryId: string, apiKey?: string): Promise<NWGuidelines> {
   const { data, error } = await supabase.functions.invoke("neuronwriter-api", {
-    body: { action: "get-query", queryId },
+    body: { action: "get-query", queryId, apiKey },
   });
 
   if (error) throw new Error(error.message);
@@ -201,9 +203,9 @@ export function transformNWGuidelines(data: any): NWGuidelines {
   };
 }
 
-export async function evaluateContent(queryId: string, content: string): Promise<{ score: number; details: unknown }> {
+export async function evaluateContent(queryId: string, content: string, apiKey?: string): Promise<{ score: number; details: unknown }> {
   const { data, error } = await supabase.functions.invoke("neuronwriter-api", {
-    body: { action: "evaluate-content", queryId, content },
+    body: { action: "evaluate-content", queryId, content, apiKey },
   });
 
   if (error) throw new Error(error.message);
@@ -214,24 +216,25 @@ export async function evaluateContent(queryId: string, content: string): Promise
 
 // Poll for query completion (after new-query, it takes ~60s)
 export async function pollQueryUntilReady(
-  queryId: string, 
-  maxAttempts = 20, 
-  intervalMs = 5000
+  queryId: string,
+  maxAttempts = 20,
+  intervalMs = 5000,
+  apiKey?: string
 ): Promise<NWGuidelines> {
   for (let i = 0; i < maxAttempts; i++) {
-    const guidelines = await getQueryGuidelines(queryId);
-    
+    const guidelines = await getQueryGuidelines(queryId, apiKey);
+
     if (guidelines.status === "ready" || (guidelines.terms && guidelines.terms.length > 0)) {
       return guidelines;
     }
-    
+
     if (guidelines.status === "error") {
       throw new Error("Query analysis failed");
     }
-    
+
     // Wait before next poll
     await new Promise(resolve => setTimeout(resolve, intervalMs));
   }
-  
+
   throw new Error("Query analysis timed out");
 }

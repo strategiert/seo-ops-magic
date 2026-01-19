@@ -5,6 +5,7 @@ import { useWorkspace } from "./useWorkspace";
 export interface NeuronWriterIntegration {
   id: string;
   isConnected: boolean;
+  nwApiKey: string | null;
   nwProjectId: string | null;
   nwProjectName: string | null;
   nwLanguage: string;
@@ -71,6 +72,7 @@ export function useProjectIntegrations(): ProjectIntegrations {
         setNeuronwriter({
           id: nwResult.data.id,
           isConnected: nwResult.data.is_connected ?? false,
+          nwApiKey: nwResult.data.credentials_encrypted,
           nwProjectId: nwResult.data.nw_project_id,
           nwProjectName: nwResult.data.nw_project_name,
           nwLanguage: nwResult.data.nw_language ?? "de",
@@ -119,10 +121,11 @@ export function useProjectIntegrations(): ProjectIntegrations {
 export async function saveNeuronWriterIntegration(
   projectId: string,
   config: {
-    nwProjectId: string;
-    nwProjectName: string;
-    nwLanguage: string;
-    nwEngine: string;
+    nwApiKey?: string;
+    nwProjectId?: string;
+    nwProjectName?: string;
+    nwLanguage?: string;
+    nwEngine?: string;
   }
 ): Promise<void> {
   // Check if integration already exists
@@ -133,18 +136,23 @@ export async function saveNeuronWriterIntegration(
     .eq("type", "neuronwriter")
     .maybeSingle();
 
+  // Build update data - only include fields that are provided
+  const updateData: Record<string, unknown> = {
+    is_connected: true,
+    last_sync_at: new Date().toISOString(),
+  };
+
+  if (config.nwApiKey !== undefined) updateData.credentials_encrypted = config.nwApiKey;
+  if (config.nwProjectId !== undefined) updateData.nw_project_id = config.nwProjectId;
+  if (config.nwProjectName !== undefined) updateData.nw_project_name = config.nwProjectName;
+  if (config.nwLanguage !== undefined) updateData.nw_language = config.nwLanguage;
+  if (config.nwEngine !== undefined) updateData.nw_engine = config.nwEngine;
+
   if (existing) {
     // Update existing
     const { error } = await supabase
       .from("integrations")
-      .update({
-        nw_project_id: config.nwProjectId,
-        nw_project_name: config.nwProjectName,
-        nw_language: config.nwLanguage,
-        nw_engine: config.nwEngine,
-        is_connected: true,
-        last_sync_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq("id", existing.id);
 
     if (error) throw error;
@@ -155,12 +163,7 @@ export async function saveNeuronWriterIntegration(
       .insert({
         project_id: projectId,
         type: "neuronwriter",
-        nw_project_id: config.nwProjectId,
-        nw_project_name: config.nwProjectName,
-        nw_language: config.nwLanguage,
-        nw_engine: config.nwEngine,
-        is_connected: true,
-        last_sync_at: new Date().toISOString(),
+        ...updateData,
       });
 
     if (error) throw error;
