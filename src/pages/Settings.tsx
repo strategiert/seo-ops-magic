@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon, Link2, AlertCircle, Wrench, Building2 } from "lucide-react";
+import { Settings as SettingsIcon, Link2, AlertCircle, Wrench, Building2, RotateCcw } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { NeuronWriterSetup } from "@/components/settings/NeuronWriterSetup";
 import { WordPressSetup } from "@/components/settings/WordPressSetup";
 import { DatabaseAdmin } from "@/components/settings/DatabaseAdmin";
 import { BrandIntelligenceSetup } from "@/components/settings/BrandIntelligenceSetup";
+import { useTour, useUserOnboarding } from "@/components/onboarding";
 
 const LANGUAGES = [
   { value: "de", label: "Deutsch" },
@@ -56,6 +57,17 @@ interface ProjectDefaults {
 export default function Settings() {
   const { toast } = useToast();
   const { currentProject } = useWorkspace();
+  const { resetOnboarding } = useUserOnboarding();
+  const { startTour } = useTour();
+
+  const handleRestartTour = () => {
+    resetOnboarding();
+    startTour();
+    toast({
+      title: "Tour gestartet",
+      description: "Die Einführungstour wurde neu gestartet.",
+    });
+  };
 
   const [defaults, setDefaults] = useState<ProjectDefaults>({
     domain: "",
@@ -335,6 +347,22 @@ export default function Settings() {
           </TabsContent>
 
           <TabsContent value="system" className="space-y-4 mt-4">
+            {/* Onboarding Tour */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Einführungstour</CardTitle>
+                <CardDescription>
+                  Starte die geführte Tour erneut, um alle Funktionen kennenzulernen.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" onClick={handleRestartTour}>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Tour neu starten
+                </Button>
+              </CardContent>
+            </Card>
+
             <DatabaseAdmin />
           </TabsContent>
         </Tabs>

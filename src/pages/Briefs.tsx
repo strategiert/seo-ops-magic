@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { BriefCreationWizard } from "@/components/briefs/BriefCreationWizard";
+import { DataStateWrapper, EmptyState, CardGridSkeleton } from "@/components/data-state";
 
 interface ContentBrief {
   id: string;
@@ -111,16 +112,16 @@ export default function Briefs() {
   if (!currentProject) {
     return (
       <AppLayout>
-        <div className="flex flex-col items-center justify-center h-64 text-center">
-          <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-          <h2 className="text-xl font-semibold">Kein Projekt ausgewählt</h2>
-          <p className="text-muted-foreground mt-2">
-            Wähle zuerst ein Projekt aus, um Content Briefs zu verwalten.
-          </p>
-          <Button className="mt-4" onClick={() => navigate("/projects")}>
-            Zu den Projekten
-          </Button>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="Kein Projekt ausgewählt"
+          description="Wähle zuerst ein Projekt aus, um Content Briefs zu verwalten."
+          action={{
+            label: "Zu den Projekten",
+            onClick: () => navigate("/projects"),
+          }}
+          className="h-64"
+        />
       </AppLayout>
     );
   }
@@ -157,70 +158,72 @@ export default function Briefs() {
         </div>
 
         {/* Briefs List */}
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : filteredBriefs.length === 0 ? (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium">
-                {searchQuery ? "Keine Treffer" : "Noch keine Briefs"}
-              </h3>
-              <p className="text-muted-foreground text-center mt-1">
-                {searchQuery
+        <DataStateWrapper
+          isLoading={loading}
+          data={filteredBriefs}
+          skeleton={<CardGridSkeleton cards={6} />}
+          emptyState={
+            <EmptyState
+              icon={FileText}
+              title={searchQuery ? "Keine Treffer" : "Noch keine Briefs"}
+              description={
+                searchQuery
                   ? "Versuche einen anderen Suchbegriff."
-                  : "Erstelle dein erstes Content Brief, um loszulegen."}
-              </p>
-              {!searchQuery && (
-                <Button className="mt-4" onClick={() => setWizardOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Erstes Brief erstellen
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredBriefs.map((brief) => (
-              <Card
-                key={brief.id}
-                className="cursor-pointer hover:border-primary/50 transition-colors"
-                onClick={() => navigate(`/briefs/${brief.id}`)}
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-base line-clamp-2">{brief.title}</CardTitle>
-                    <Badge className={statusColors[brief.status || "draft"]} variant="secondary">
-                      {brief.status || "draft"}
-                    </Badge>
-                  </div>
-                  <CardDescription className="font-mono text-xs">
-                    {brief.primary_keyword}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {brief.search_intent && (
-                      <Badge variant="outline" className="text-xs">
-                        {intentLabels[brief.search_intent] || brief.search_intent}
+                  : "Erstelle dein erstes Content Brief, um loszulegen."
+              }
+              action={
+                !searchQuery
+                  ? {
+                      label: "Erstes Brief erstellen",
+                      onClick: () => setWizardOpen(true),
+                      icon: Plus,
+                    }
+                  : undefined
+              }
+            />
+          }
+        >
+          {(briefs) => (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {briefs.map((brief) => (
+                <Card
+                  key={brief.id}
+                  className="cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => navigate(`/briefs/${brief.id}`)}
+                >
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between">
+                      <CardTitle className="text-base line-clamp-2">{brief.title}</CardTitle>
+                      <Badge className={statusColors[brief.status || "draft"]} variant="secondary">
+                        {brief.status || "draft"}
                       </Badge>
-                    )}
-                    {brief.target_length && (
-                      <span>{brief.target_length} Wörter</span>
-                    )}
-                    {brief.nw_guidelines && (
-                      <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                        NW
-                      </Badge>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+                    </div>
+                    <CardDescription className="font-mono text-xs">
+                      {brief.primary_keyword}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {brief.search_intent && (
+                        <Badge variant="outline" className="text-xs">
+                          {intentLabels[brief.search_intent] || brief.search_intent}
+                        </Badge>
+                      )}
+                      {brief.target_length && (
+                        <span>{brief.target_length} Wörter</span>
+                      )}
+                      {brief.nw_guidelines && (
+                        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                          NW
+                        </Badge>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </DataStateWrapper>
 
         {/* Pagination Controls */}
         {!loading && filteredBriefs.length > 0 && totalCount > PAGE_SIZE && (

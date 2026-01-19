@@ -26,6 +26,8 @@ export default defineSchema({
     email: v.optional(v.string()),
     fullName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
+    // Onboarding tracking
+    onboardingCompletedAt: v.optional(v.number()), // Unix timestamp when onboarding tour was completed
   })
     .index("by_clerk_user", ["clerkUserId"]),
 

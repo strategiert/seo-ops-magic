@@ -5,6 +5,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DataStateWrapper, EmptyState, TableSkeleton } from "@/components/data-state";
 import {
   Table,
   TableBody,
@@ -214,100 +215,102 @@ export default function Articles() {
           )}
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : articles.length === 0 ? (
-          <div className="text-center py-12 border rounded-lg border-dashed">
-            <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium">Keine Artikel vorhanden</h3>
-            <p className="text-muted-foreground mt-1 mb-4">
-              Artikel werden aus Content Briefs generiert.
-            </p>
-            <Button onClick={() => navigate("/briefs")}>
-              <Plus className="h-4 w-4 mr-2" />
-              Zu den Briefs
-            </Button>
-          </div>
-        ) : (
-          <div className="border rounded-lg">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={selectedIds.size === articles.length && articles.length > 0}
-                      onCheckedChange={toggleSelectAll}
-                    />
-                  </TableHead>
-                  <TableHead>Titel</TableHead>
-                  <TableHead>Keyword</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Version</TableHead>
-                  <TableHead className="text-right">Aktualisiert</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {articles.map((article) => (
-                  <TableRow
-                    key={article.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => navigate(`/articles/${article.id}`)}
-                  >
-                    <TableCell onClick={(e) => toggleSelect(article.id, e)}>
-                      <Checkbox checked={selectedIds.has(article.id)} />
-                    </TableCell>
-                    <TableCell className="font-medium">{article.title}</TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground">
-                      {article.primary_keyword || "-"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={statusColors[article.status || "draft"]}>
-                        {statusLabels[article.status || "draft"]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>v{article.version || 1}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {formattedDates.get(article.id)}
-                    </TableCell>
+        <DataStateWrapper
+          isLoading={loading}
+          data={articles}
+          skeleton={<TableSkeleton rows={5} />}
+          emptyState={
+            <EmptyState
+              icon={FileText}
+              title="Keine Artikel vorhanden"
+              description="Artikel werden aus Content Briefs generiert."
+              action={{
+                label: "Zu den Briefs",
+                onClick: () => navigate("/briefs"),
+                icon: Plus,
+              }}
+            />
+          }
+        >
+          {(articles) => (
+            <div className="border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedIds.size === articles.length && articles.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead>Titel</TableHead>
+                    <TableHead>Keyword</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Version</TableHead>
+                    <TableHead className="text-right">Aktualisiert</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {/* Pagination Controls */}
-            {totalCount > PAGE_SIZE && (
-              <div className="flex items-center justify-between px-4 py-3 border-t">
-                <div className="text-sm text-muted-foreground">
-                  Zeige {page * PAGE_SIZE + 1} bis {Math.min((page + 1) * PAGE_SIZE, totalCount)} von {totalCount} Artikeln
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    disabled={page === 0}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Zurück
-                  </Button>
+                </TableHeader>
+                <TableBody>
+                  {articles.map((article) => (
+                    <TableRow
+                      key={article.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => navigate(`/articles/${article.id}`)}
+                    >
+                      <TableCell onClick={(e) => toggleSelect(article.id, e)}>
+                        <Checkbox checked={selectedIds.has(article.id)} />
+                      </TableCell>
+                      <TableCell className="font-medium">{article.title}</TableCell>
+                      <TableCell className="font-mono text-sm text-muted-foreground">
+                        {article.primary_keyword || "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={statusColors[article.status || "draft"]}>
+                          {statusLabels[article.status || "draft"]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>v{article.version || 1}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {formattedDates.get(article.id)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {/* Pagination Controls */}
+              {totalCount > PAGE_SIZE && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
                   <div className="text-sm text-muted-foreground">
-                    Seite {page + 1} von {Math.ceil(totalCount / PAGE_SIZE)}
+                    Zeige {page * PAGE_SIZE + 1} bis {Math.min((page + 1) * PAGE_SIZE, totalCount)} von {totalCount} Artikeln
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage((p) => p + 1)}
-                    disabled={(page + 1) * PAGE_SIZE >= totalCount}
-                  >
-                    Weiter
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      disabled={page === 0}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Zurück
+                    </Button>
+                    <div className="text-sm text-muted-foreground">
+                      Seite {page + 1} von {Math.ceil(totalCount / PAGE_SIZE)}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => p + 1)}
+                      disabled={(page + 1) * PAGE_SIZE >= totalCount}
+                    >
+                      Weiter
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </DataStateWrapper>
       </div>
 
       {/* Bulk Publish Dialog */}
