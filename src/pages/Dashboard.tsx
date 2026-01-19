@@ -7,17 +7,32 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FileText, LayoutTemplate, PenTool, Plus, ArrowRight, Zap } from 'lucide-react';
+import { TOUR_IDS, useTour, useUserOnboarding } from '@/components/onboarding';
+import { EmptyState } from '@/components/data-state';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
   const { currentProject, projects, isLoading: workspaceLoading } = useWorkspace();
+  const { isFirstTimeUser, isChecked, markComplete } = useUserOnboarding();
+  const { startTour } = useTour({ onComplete: markComplete });
 
   useEffect(() => {
     if (!authLoading && !user) {
       navigate('/auth');
     }
   }, [user, authLoading, navigate]);
+
+  // Start onboarding tour for first-time users
+  useEffect(() => {
+    if (isChecked && isFirstTimeUser && !authLoading && !workspaceLoading) {
+      // Small delay to ensure DOM is ready
+      const timer = setTimeout(() => {
+        startTour();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isChecked, isFirstTimeUser, authLoading, workspaceLoading, startTour]);
 
   if (authLoading || workspaceLoading) {
     return (
@@ -83,10 +98,10 @@ export default function Dashboard() {
     >
       <div className="space-y-6">
         {/* Quick Actions */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div id={TOUR_IDS.DASHBOARD_QUICK_ACTIONS} className="grid gap-4 md:grid-cols-3">
           {quickActions.map((action) => (
-            <Card 
-              key={action.title} 
+            <Card
+              key={action.title}
               className="group cursor-pointer transition-smooth hover:shadow-md hover:border-primary/20"
               onClick={() => navigate(action.href)}
             >
@@ -107,7 +122,7 @@ export default function Dashboard() {
         </div>
 
         {/* Stats Overview */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div id={TOUR_IDS.DASHBOARD_STATS} className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Content Briefs</CardDescription>

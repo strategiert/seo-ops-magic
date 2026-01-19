@@ -33,11 +33,12 @@ import {
   BarChart3,
   PenTool,
 } from 'lucide-react';
+import { TOUR_IDS } from '@/components/onboarding';
 
 const mainNavItems = [
-  { title: 'Content Briefs', url: '/briefs', icon: FileText },
-  { title: 'Artikel', url: '/articles', icon: PenTool },
-  { title: 'Elementor Templates', url: '/templates', icon: LayoutTemplate },
+  { title: 'Content Briefs', url: '/briefs', icon: FileText, tourId: TOUR_IDS.SIDEBAR_BRIEFS },
+  { title: 'Artikel', url: '/articles', icon: PenTool, tourId: TOUR_IDS.SIDEBAR_ARTICLES },
+  { title: 'Elementor Templates', url: '/templates', icon: LayoutTemplate, tourId: TOUR_IDS.SIDEBAR_TEMPLATES },
 ];
 
 const futureNavItems = [
@@ -45,8 +46,8 @@ const futureNavItems = [
 ];
 
 const settingsNavItems = [
-  { title: 'Projekte', url: '/projects', icon: FolderKanban },
-  { title: 'Einstellungen', url: '/settings', icon: Settings },
+  { title: 'Projekte', url: '/projects', icon: FolderKanban, tourId: TOUR_IDS.SIDEBAR_PROJECTS },
+  { title: 'Einstellungen', url: '/settings', icon: Settings, tourId: TOUR_IDS.SIDEBAR_SETTINGS },
 ];
 
 export function AppSidebar() {
@@ -94,10 +95,11 @@ export function AppSidebar() {
               {mainNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink 
-                      to={item.url} 
+                    <NavLink
+                      to={item.url}
                       className="flex items-center gap-2"
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+                      id={item.tourId}
                     >
                       <item.icon className="h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
@@ -138,10 +140,11 @@ export function AppSidebar() {
               {settingsNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink 
-                      to={item.url} 
+                    <NavLink
+                      to={item.url}
                       className="flex items-center gap-2"
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+                      id={item.tourId}
                     >
                       <item.icon className="h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
