@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 
 interface CreateArticleDialogProps {
   open: boolean;
@@ -28,7 +28,7 @@ export function CreateArticleDialog({
   onCreated,
 }: CreateArticleDialogProps) {
   const { toast } = useToast();
-  const { currentProject } = useWorkspace();
+  const { currentProject } = useWorkspaceConvex();
   const [isCreating, setIsCreating] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
@@ -37,7 +37,7 @@ export function CreateArticleDialog({
   });
 
   const handleCreate = async () => {
-    if (!currentProject?.id) {
+    if (!currentProject?._id) {
       toast({
         title: "Kein Projekt ausgewählt",
         description: "Bitte wähle zuerst ein Projekt aus.",
@@ -60,7 +60,7 @@ export function CreateArticleDialog({
       const { data, error } = await supabase
         .from("articles")
         .insert({
-          project_id: currentProject.id,
+          project_id: currentProject._id,
           title: formData.title.trim(),
           primary_keyword: formData.primaryKeyword.trim() || null,
           content_markdown: formData.content.trim() || null,

@@ -23,7 +23,7 @@ import { GuidelinesDisplay } from "@/components/briefs/GuidelinesDisplay";
 import { WorkflowActions } from "@/components/briefs/WorkflowActions";
 import type { NWGuidelines } from "@/lib/api/neuronwriter";
 import { transformNWGuidelines } from "@/lib/api/neuronwriter";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 
 interface ContentBrief {
   id: string;
@@ -46,7 +46,7 @@ export default function BriefDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { currentProject } = useWorkspace(); // Add useWorkspace
+  const { currentProject } = useWorkspaceConvex();
 
   const [brief, setBrief] = useState<ContentBrief | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,7 +76,7 @@ export default function BriefDetail() {
       // We set a 'fake' brief object so the UI renders
       setBrief({
         id: "new",
-        project_id: currentProject?.id || "",
+        project_id: currentProject?._id || "",
         title: "",
         primary_keyword: "",
         search_intent: "informational",
@@ -172,7 +172,7 @@ export default function BriefDetail() {
     setSaving(true);
     try {
       if (id === "new") {
-        if (!currentProject?.id) {
+        if (!currentProject?._id) {
           toast({ title: "Fehler", description: "Kein Projekt ausgewählt", variant: "destructive" });
           return;
         }
@@ -180,7 +180,7 @@ export default function BriefDetail() {
         const { data, error } = await supabase
           .from("content_briefs")
           .insert({
-            project_id: currentProject.id,
+            project_id: currentProject._id,
             title: formData.title,
             primary_keyword: formData.primary_keyword,
             search_intent: formData.search_intent,

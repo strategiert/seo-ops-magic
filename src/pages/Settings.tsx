@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import { supabase } from "@/integrations/supabase/client";
 import { NeuronWriterSetup } from "@/components/settings/NeuronWriterSetup";
 import { WordPressSetup } from "@/components/settings/WordPressSetup";
@@ -56,7 +56,7 @@ interface ProjectDefaults {
 
 export default function Settings() {
   const { toast } = useToast();
-  const { currentProject } = useWorkspace();
+  const { currentProject } = useWorkspaceConvex();
   const { resetOnboarding } = useUserOnboarding();
   const { startTour } = useTour();
 
@@ -84,7 +84,7 @@ export default function Settings() {
   // Load project defaults
   useEffect(() => {
     const loadDefaults = async () => {
-      if (!currentProject?.id) {
+      if (!currentProject?._id) {
         setLoading(false);
         return;
       }
@@ -93,7 +93,7 @@ export default function Settings() {
         const { data, error } = await supabase
           .from("projects")
           .select("domain, wp_url, default_language, default_country, default_tonality, default_target_audience, default_design_preset")
-          .eq("id", currentProject.id)
+          .eq("id", currentProject._id)
           .single();
 
         if (error) throw error;
@@ -117,10 +117,10 @@ export default function Settings() {
     };
 
     loadDefaults();
-  }, [currentProject?.id]);
+  }, [currentProject?._id]);
 
   const saveDefaults = async () => {
-    if (!currentProject?.id) return;
+    if (!currentProject?._id) return;
 
     setSaving(true);
     try {
@@ -135,7 +135,7 @@ export default function Settings() {
           default_target_audience: defaults.defaultTargetAudience || null,
           default_design_preset: defaults.defaultDesignPreset,
         })
-        .eq("id", currentProject.id);
+        .eq("id", currentProject._id);
 
       if (error) throw error;
 

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import { DataStateWrapper, EmptyState, TableSkeleton } from "@/components/data-state";
 
 interface Template {
@@ -30,7 +30,7 @@ interface Template {
 export default function Templates() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { currentProject } = useWorkspace();
+  const { currentProject } = useWorkspaceConvex();
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,13 +39,13 @@ export default function Templates() {
   const PAGE_SIZE = 50;
 
   useEffect(() => {
-    if (currentProject?.id) {
+    if (currentProject?._id) {
       loadTemplates();
     }
-  }, [currentProject?.id, page]);
+  }, [currentProject?._id, page]);
 
   const loadTemplates = async () => {
-    if (!currentProject?.id) return;
+    if (!currentProject?._id) return;
 
     setLoading(true);
     try {
@@ -56,7 +56,7 @@ export default function Templates() {
       const { count } = await supabase
         .from("elementor_templates")
         .select("*", { count: "exact", head: true })
-        .eq("project_id", currentProject.id);
+        .eq("project_id", currentProject._id);
 
       setTotalCount(count || 0);
 
@@ -64,7 +64,7 @@ export default function Templates() {
       const { data, error } = await supabase
         .from("elementor_templates")
         .select("*")
-        .eq("project_id", currentProject.id)
+        .eq("project_id", currentProject._id)
         .order("updated_at", { ascending: false })
         .range(from, to);
 
