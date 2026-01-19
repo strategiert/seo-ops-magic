@@ -7,7 +7,6 @@ export const TOUR_IDS = {
   // Sidebar navigation
   SIDEBAR_BRIEFS: "tour-sidebar-briefs",
   SIDEBAR_ARTICLES: "tour-sidebar-articles",
-  SIDEBAR_TEMPLATES: "tour-sidebar-templates",
   SIDEBAR_PROJECTS: "tour-sidebar-projects",
   SIDEBAR_SETTINGS: "tour-sidebar-settings",
 
@@ -50,16 +49,6 @@ export const TOUR_STEPS: DriveStep[] = [
       title: "Artikel",
       description:
         "Deine generierten Artikel findest du hier. Bearbeite, prüfe und veröffentliche sie zu WordPress.",
-      side: "right" as const,
-      align: "start" as const,
-    },
-  },
-  {
-    element: `#${TOUR_IDS.SIDEBAR_TEMPLATES}`,
-    popover: {
-      title: "Elementor Templates",
-      description:
-        "Exportiere Artikel als Elementor-kompatible JSON-Templates für den direkten WordPress-Import.",
       side: "right" as const,
       align: "start" as const,
     },

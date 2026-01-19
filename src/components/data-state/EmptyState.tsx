@@ -14,6 +14,7 @@ export interface EmptyStateProps {
   title: string;
   description?: string;
   action?: EmptyStateAction;
+  children?: React.ReactNode;
   className?: string;
 }
 
@@ -22,6 +23,7 @@ export function EmptyState({
   title,
   description,
   action,
+  children,
   className,
 }: EmptyStateProps) {
   return (
@@ -45,6 +47,7 @@ export function EmptyState({
           {action.label}
         </Button>
       )}
+      {children}
     </div>
   );
 }
