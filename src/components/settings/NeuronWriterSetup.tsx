@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Loader2, CheckCircle2, XCircle, Settings2 } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Settings2, Key, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -47,6 +48,11 @@ export function NeuronWriterSetup() {
   const [apiConnected, setApiConnected] = useState<boolean | null>(null);
   const [testing, setTesting] = useState(false);
 
+  // API Key state
+  const [apiKey, setApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [savingApiKey, setSavingApiKey] = useState(false);
+
   // Setup form state
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [selectedProject, setSelectedProject] = useState("");
@@ -54,11 +60,15 @@ export function NeuronWriterSetup() {
   const [selectedEngine, setSelectedEngine] = useState("google.de");
   const [saving, setSaving] = useState(false);
 
+  // Get the effective API key (user input or stored)
+  const getEffectiveApiKey = () => apiKey || neuronwriter?.nwApiKey || undefined;
+
   // Test API connection and load projects
-  const testConnection = async () => {
+  const testConnection = async (testApiKey?: string) => {
     setTesting(true);
     try {
-      const projects = await listNWProjects();
+      const keyToUse = testApiKey || getEffectiveApiKey();
+      const projects = await listNWProjects(keyToUse);
       setNwProjects(projects);
       setApiConnected(true);
       return projects;
@@ -67,7 +77,7 @@ export function NeuronWriterSetup() {
       setApiConnected(false);
       toast({
         title: "Verbindung fehlgeschlagen",
-        description: "NeuronWriter API Key im Backend prüfen.",
+        description: "API Key prüfen oder neuen Key eingeben.",
         variant: "destructive",
       });
       return [];
@@ -76,10 +86,52 @@ export function NeuronWriterSetup() {
     }
   };
 
-  // Initial check on mount
+  // Save API Key
+  const handleSaveApiKey = async () => {
+    if (!currentProject?.id || !apiKey.trim()) {
+      toast({
+        title: "API Key erforderlich",
+        description: "Bitte gib einen gültigen API Key ein.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingApiKey(true);
+    try {
+      await saveNeuronWriterIntegration(currentProject.id, {
+        nwApiKey: apiKey.trim(),
+      });
+
+      // Test the new key
+      const projects = await testConnection(apiKey.trim());
+
+      if (projects.length > 0) {
+        toast({
+          title: "API Key gespeichert",
+          description: "NeuronWriter Verbindung erfolgreich.",
+        });
+        setApiKey(""); // Clear input after successful save
+        await refetch();
+      }
+    } catch (error) {
+      console.error("Error saving API key:", error);
+      toast({
+        title: "Fehler beim Speichern",
+        description: error instanceof Error ? error.message : "Unbekannter Fehler",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingApiKey(false);
+    }
+  };
+
+  // Initial check on mount (only if API key is configured)
   useEffect(() => {
-    testConnection();
-  }, []);
+    if (neuronwriter?.nwApiKey) {
+      testConnection();
+    }
+  }, [neuronwriter?.nwApiKey]);
 
   // Pre-fill form when editing existing config
   useEffect(() => {
@@ -269,6 +321,7 @@ export function NeuronWriterSetup() {
                 <p><strong>Projekt:</strong> {neuronwriter.nwProjectName}</p>
                 <p><strong>Sprache:</strong> {LANGUAGES.find(l => l.value === neuronwriter.nwLanguage)?.label || neuronwriter.nwLanguage}</p>
                 <p><strong>Engine:</strong> {ENGINES.find(e => e.value === neuronwriter.nwEngine)?.label || neuronwriter.nwEngine}</p>
+                <p><strong>API Key:</strong> ••••••••{neuronwriter.nwApiKey?.slice(-4) || "****"}</p>
                 {neuronwriter.lastSyncAt && (
                   <p className="text-xs">
                     Letzter Sync: {new Date(neuronwriter.lastSyncAt).toLocaleString("de-DE")}
@@ -282,21 +335,97 @@ export function NeuronWriterSetup() {
             </Button>
           </div>
         ) : (
-          /* Not Connected State */
+          /* Not Connected State - API Key Input */
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Verknüpfe ein NeuronWriter Projekt, um SEO Guidelines automatisch zu importieren.
-            </p>
-            <Button 
-              onClick={startConfiguring} 
-              disabled={testing || loadingProjects || apiConnected === false}
-            >
-              {(testing || loadingProjects) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              NeuronWriter verbinden
-            </Button>
-            {apiConnected === false && (
+            {/* API Key Section */}
+            <div className="space-y-3 p-4 border rounded-lg">
+              <div className="flex items-center gap-2">
+                <Key className="h-4 w-4 text-muted-foreground" />
+                <Label className="font-medium">API Key</Label>
+              </div>
+
+              {neuronwriter?.nwApiKey ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    API Key konfiguriert: ••••••••{neuronwriter.nwApiKey.slice(-4)}
+                  </p>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        type={showApiKey ? "text" : "password"}
+                        placeholder="Neuen API Key eingeben..."
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        disabled={savingApiKey}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                      >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <Button onClick={handleSaveApiKey} disabled={!apiKey.trim() || savingApiKey}>
+                      {savingApiKey && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      Ändern
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Gib deinen NeuronWriter API Key ein. Du findest ihn in deinem NeuronWriter Account unter Settings → API.
+                  </p>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        type={showApiKey ? "text" : "password"}
+                        placeholder="API Key eingeben..."
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        disabled={savingApiKey}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                      >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <Button onClick={handleSaveApiKey} disabled={!apiKey.trim() || savingApiKey}>
+                      {savingApiKey && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      Speichern
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Connect Button */}
+            {neuronwriter?.nwApiKey && apiConnected && (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Verknüpfe ein NeuronWriter Projekt, um SEO Guidelines automatisch zu importieren.
+                </p>
+                <Button
+                  onClick={startConfiguring}
+                  disabled={testing || loadingProjects}
+                >
+                  {(testing || loadingProjects) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  NeuronWriter Projekt verbinden
+                </Button>
+              </>
+            )}
+
+            {apiConnected === false && neuronwriter?.nwApiKey && (
               <p className="text-sm text-destructive">
-                API-Verbindung fehlgeschlagen. Bitte prüfe den NEURONWRITER_API_KEY im Backend.
+                API-Verbindung fehlgeschlagen. Bitte prüfe deinen API Key.
               </p>
             )}
           </div>
