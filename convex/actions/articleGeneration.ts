@@ -24,9 +24,11 @@ const GEMINI_API_URL =
 
 interface Outline {
   title: string;
+  slug: string;
   metaTitle: string;
   metaDescription: string;
   h1: string;
+  contentType: "pillar" | "cluster" | "how-to" | "comparison" | "listicle";
   sections: Array<{
     heading: string;
     level: number;
@@ -35,6 +37,32 @@ interface Outline {
     keywords: string[];
   }>;
   faqQuestions: string[];
+}
+
+interface SeoMetadata {
+  primaryKeyword: string;
+  secondaryKeywords: string[];
+  keywordDensity: {
+    primary: string;
+    secondary: string[];
+  };
+  readingTime: string;
+  wordCount: number;
+  structure: {
+    h1: string;
+    h2Count: number;
+    h3Count: number;
+  };
+  internalLinksSuggested: number;
+  ogTags: {
+    ogTitle: string;
+    ogDescription: string;
+    twitterCard: string;
+  };
+  schemaMarkup: {
+    article: object;
+    faq?: object;
+  };
 }
 
 interface GenerationProgress {
@@ -104,8 +132,13 @@ export const generate = action({
     success: boolean;
     articleId?: string;
     title?: string;
+    slug?: string;
     wordCount?: number;
+    readingTime?: string;
+    contentType?: string;
     sectionsWritten?: number;
+    keywordDensity?: string;
+    internalLinksSuggested?: number;
     error?: string;
   }> => {
     const identity = await ctx.auth.getUserIdentity();
@@ -208,10 +241,27 @@ export const generate = action({
 
       // Assemble full article
       const fullMarkdown = [intro, ...sections, faq].join("\n\n");
-      const wordCount = fullMarkdown.split(/\s+/).length;
+      const wordCount = fullMarkdown.split(/\s+/).filter((w) => w.length > 0).length;
 
       // Build FAQ JSON
       const faqJson = parseFaqJson(faq, outline.faqQuestions);
+
+      // Extract secondary keywords and build SEO metadata
+      const secondaryKeywords = extractSecondaryKeywords(outline, brief.primaryKeyword);
+      const seoMetadata = buildSeoMetadata(
+        fullMarkdown,
+        outline,
+        brief.primaryKeyword,
+        secondaryKeywords,
+        faqJson,
+        brandProfile?.brandName
+      );
+
+      // Store outline with SEO metadata
+      const enrichedOutline = {
+        ...outline,
+        seoMetadata,
+      };
 
       // Create article
       const articleId = await ctx.runMutation(api.tables.articles.create, {
@@ -222,7 +272,7 @@ export const generate = action({
         contentMarkdown: fullMarkdown,
         metaTitle: outline.metaTitle,
         metaDescription: outline.metaDescription,
-        outlineJson: outline,
+        outlineJson: enrichedOutline,
         faqJson,
         status: "draft",
       });
@@ -237,8 +287,13 @@ export const generate = action({
         success: true,
         articleId,
         title: outline.title,
+        slug: outline.slug,
         wordCount,
+        readingTime: seoMetadata.readingTime,
+        contentType: outline.contentType,
         sectionsWritten: sections.length + 2, // +2 for intro and FAQ
+        keywordDensity: seoMetadata.keywordDensity.primary,
+        internalLinksSuggested: seoMetadata.internalLinksSuggested,
       };
     } catch (error) {
       console.error("Article generation error:", error);
@@ -316,8 +371,12 @@ async function generateOutline(params: {
   tonality?: string;
   targetLength?: number;
   brandContext: string;
+  contentType?: "pillar" | "cluster" | "how-to" | "comparison" | "listicle";
 }): Promise<Outline> {
-  const { title, keyword, searchIntent, targetAudience, tonality, targetLength, brandContext } = params;
+  const { title, keyword, searchIntent, targetAudience, tonality, targetLength, brandContext, contentType } = params;
+
+  // Determine content type from target length if not specified
+  const inferredContentType = contentType || inferContentType(targetLength || 1500, searchIntent);
 
   const systemPrompt = `Du bist ein SEO-Experte, der strukturierte Artikel-Gliederungen erstellt.
 Antworte NUR mit validem JSON ohne Markdown-Codeblöcke.`;
@@ -326,18 +385,28 @@ Antworte NUR mit validem JSON ohne Markdown-Codeblöcke.`;
 
 Titel: ${title}
 Hauptkeyword: ${keyword}
+Content-Typ: ${inferredContentType}
 Suchintention: ${searchIntent || "informational"}
 Zielgruppe: ${targetAudience || "allgemein"}
 Tonalität: ${tonality || "professionell"}
 Ziellänge: ${targetLength || 1500} Wörter
 ${brandContext}
 
+Content-Typ Richtlinien:
+- pillar: Umfassend, viele H2/H3, 3000-5000 Wörter, Topic Authority
+- cluster: Fokussiert, tiefgehend, 1500-2500 Wörter, Long-Tail Keywords
+- how-to: Schritte, Listen, Bilder, 2000-3000 Wörter
+- comparison: Tabellen, Pro/Contra, 2000-3500 Wörter
+- listicle: Nummeriert, scannable, 1500-2500 Wörter
+
 JSON-Format:
 {
   "title": "SEO-optimierter Titel mit Keyword",
+  "slug": "url-freundlicher-slug",
   "metaTitle": "Meta-Titel (max 60 Zeichen)",
   "metaDescription": "Meta-Beschreibung (max 155 Zeichen)",
   "h1": "H1 Überschrift mit Keyword",
+  "contentType": "${inferredContentType}",
   "sections": [
     {
       "heading": "H2/H3 Überschrift",
@@ -350,20 +419,32 @@ JSON-Format:
   "faqQuestions": ["Frage 1?", "Frage 2?", "Frage 3?"]
 }
 
-Erstelle 4-6 Hauptabschnitte (H2) mit optionalen Unterabschnitten (H3).`;
+Erstelle 4-6 Hauptabschnitte (H2) mit optionalen Unterabschnitten (H3).
+Der Slug sollte kurz, lesbar und SEO-freundlich sein.`;
 
   const response = await callGemini(userPrompt, systemPrompt, { temperature: 0.5 });
 
   try {
     const jsonStr = response.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    return JSON.parse(jsonStr);
+    const parsed = JSON.parse(jsonStr);
+    // Ensure slug exists
+    if (!parsed.slug) {
+      parsed.slug = generateSlug(parsed.title || title);
+    }
+    // Ensure content type exists
+    if (!parsed.contentType) {
+      parsed.contentType = inferredContentType;
+    }
+    return parsed;
   } catch {
     // Fallback outline
     return {
       title: title,
+      slug: generateSlug(title),
       metaTitle: `${title} - Ratgeber`,
       metaDescription: `Erfahren Sie alles über ${keyword}. Umfassender Ratgeber mit praktischen Tipps.`,
       h1: title,
+      contentType: inferredContentType,
       sections: [
         {
           heading: `Was ist ${keyword}?`,
@@ -401,6 +482,19 @@ Erstelle 4-6 Hauptabschnitte (H2) mit optionalen Unterabschnitten (H3).`;
       ],
     };
   }
+}
+
+/**
+ * Infer content type from target length and search intent
+ */
+function inferContentType(
+  targetLength: number,
+  searchIntent?: string
+): "pillar" | "cluster" | "how-to" | "comparison" | "listicle" {
+  if (targetLength >= 3000) return "pillar";
+  if (searchIntent === "commercial") return "comparison";
+  if (searchIntent === "transactional") return "listicle";
+  return "cluster";
 }
 
 /**
@@ -602,4 +696,176 @@ function parseFaqJson(
   }
 
   return result;
+}
+
+/**
+ * Generate URL-friendly slug from title
+ */
+function generateSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+/**
+ * Calculate reading time in minutes
+ */
+function calculateReadingTime(wordCount: number): string {
+  const wordsPerMinute = 200;
+  const minutes = Math.ceil(wordCount / wordsPerMinute);
+  return `${minutes} min`;
+}
+
+/**
+ * Calculate keyword density
+ */
+function calculateKeywordDensity(
+  content: string,
+  primaryKeyword: string,
+  secondaryKeywords: string[]
+): { primary: string; secondary: string[] } {
+  const lowerContent = content.toLowerCase();
+  const words = lowerContent.split(/\s+/).filter((w) => w.length > 0);
+  const totalWords = words.length;
+
+  if (totalWords === 0) {
+    return { primary: "0%", secondary: [] };
+  }
+
+  // Count primary keyword occurrences
+  const primaryLower = primaryKeyword.toLowerCase();
+  const primaryCount = (lowerContent.match(new RegExp(primaryLower, "gi")) || []).length;
+  const primaryDensity = ((primaryCount / totalWords) * 100).toFixed(1);
+
+  // Count secondary keyword occurrences
+  const secondaryDensities = secondaryKeywords.map((keyword) => {
+    const keywordLower = keyword.toLowerCase();
+    const count = (lowerContent.match(new RegExp(keywordLower, "gi")) || []).length;
+    return ((count / totalWords) * 100).toFixed(1) + "%";
+  });
+
+  return {
+    primary: primaryDensity + "%",
+    secondary: secondaryDensities,
+  };
+}
+
+/**
+ * Count heading structure in content
+ */
+function analyzeHeadingStructure(content: string): { h1: string; h2Count: number; h3Count: number } {
+  const h1Match = content.match(/^#\s+(.+)$/m);
+  const h2Matches = content.match(/^##\s+.+$/gm) || [];
+  const h3Matches = content.match(/^###\s+.+$/gm) || [];
+
+  return {
+    h1: h1Match ? h1Match[1] : "",
+    h2Count: h2Matches.length,
+    h3Count: h3Matches.length,
+  };
+}
+
+/**
+ * Suggest number of internal links based on word count
+ */
+function suggestInternalLinks(wordCount: number): number {
+  // Roughly 1 internal link per 500 words, min 3, max 10
+  const suggested = Math.floor(wordCount / 500);
+  return Math.max(3, Math.min(10, suggested));
+}
+
+/**
+ * Build comprehensive SEO metadata
+ */
+function buildSeoMetadata(
+  content: string,
+  outline: Outline,
+  primaryKeyword: string,
+  secondaryKeywords: string[],
+  faqJson: Array<{ question: string; answer: string }>,
+  brandName?: string
+): SeoMetadata {
+  const wordCount = content.split(/\s+/).filter((w) => w.length > 0).length;
+  const readingTime = calculateReadingTime(wordCount);
+  const keywordDensity = calculateKeywordDensity(content, primaryKeyword, secondaryKeywords);
+  const structure = analyzeHeadingStructure(content);
+  const internalLinksSuggested = suggestInternalLinks(wordCount);
+
+  // Build Article schema
+  const articleSchema = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: outline.title,
+    description: outline.metaDescription,
+    author: {
+      "@type": "Organization",
+      name: brandName || "SEO Ops Magic",
+    },
+    datePublished: new Date().toISOString().split("T")[0],
+    dateModified: new Date().toISOString().split("T")[0],
+  };
+
+  // Build FAQ schema if FAQ exists
+  const faqSchema =
+    faqJson.length > 0
+      ? {
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: faqJson.map((item) => ({
+            "@type": "Question",
+            name: item.question,
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: item.answer,
+            },
+          })),
+        }
+      : undefined;
+
+  return {
+    primaryKeyword,
+    secondaryKeywords,
+    keywordDensity,
+    readingTime,
+    wordCount,
+    structure,
+    internalLinksSuggested,
+    ogTags: {
+      ogTitle: outline.metaTitle,
+      ogDescription: outline.metaDescription,
+      twitterCard: "summary_large_image",
+    },
+    schemaMarkup: {
+      article: articleSchema,
+      faq: faqSchema,
+    },
+  };
+}
+
+/**
+ * Extract secondary keywords from brief or generate from outline
+ */
+function extractSecondaryKeywords(
+  outline: Outline,
+  primaryKeyword: string
+): string[] {
+  const keywords = new Set<string>();
+
+  // Collect keywords from all sections
+  for (const section of outline.sections) {
+    for (const kw of section.keywords) {
+      if (kw.toLowerCase() !== primaryKeyword.toLowerCase()) {
+        keywords.add(kw);
+      }
+    }
+  }
+
+  // Return top 5 secondary keywords
+  return Array.from(keywords).slice(0, 5);
 }
