@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Plus, Loader2, Globe, CheckCircle2, XCircle, Palette, ChevronLeft, ChevronRight } from "lucide-react";
+import { FileText, PenTool, Loader2, Globe, CheckCircle2, XCircle, Palette, ChevronLeft, ChevronRight } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useWordPressBulkPublish } from "@/hooks/useWordPress";
+import { CreateArticleDialog } from "@/components/articles/CreateArticleDialog";
 
 interface Article {
   id: string;
@@ -75,6 +76,7 @@ export default function Articles() {
   const [bulkUseStyledHtml, setBulkUseStyledHtml] = useState(true);
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const PAGE_SIZE = 50;
 
   const toggleSelect = (id: string, e: React.MouseEvent) => {
@@ -223,13 +225,19 @@ export default function Articles() {
             <EmptyState
               icon={FileText}
               title="Keine Artikel vorhanden"
-              description="Artikel werden aus Content Briefs generiert."
-              action={{
-                label: "Zu den Briefs",
-                onClick: () => navigate("/briefs"),
-                icon: Plus,
-              }}
-            />
+              description="Erstelle einen Content Brief für SEO-optimierte Artikel oder schreibe direkt."
+            >
+              <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                <Button onClick={() => navigate("/briefs")}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Content Brief erstellen
+                </Button>
+                <Button variant="outline" onClick={() => setCreateDialogOpen(true)}>
+                  <PenTool className="h-4 w-4 mr-2" />
+                  Artikel ohne Brief
+                </Button>
+              </div>
+            </EmptyState>
           }
         >
           {(articles) => (
@@ -396,6 +404,13 @@ export default function Articles() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Create Article Dialog */}
+      <CreateArticleDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onCreated={(articleId) => navigate(`/articles/${articleId}`)}
+      />
     </AppLayout>
   );
 }

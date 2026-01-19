@@ -24,7 +24,6 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   FileText,
-  LayoutTemplate,
   Settings,
   FolderKanban,
   Zap,
@@ -38,7 +37,6 @@ import { TOUR_IDS } from '@/components/onboarding';
 const mainNavItems = [
   { title: 'Content Briefs', url: '/briefs', icon: FileText, tourId: TOUR_IDS.SIDEBAR_BRIEFS },
   { title: 'Artikel', url: '/articles', icon: PenTool, tourId: TOUR_IDS.SIDEBAR_ARTICLES },
-  { title: 'Elementor Templates', url: '/templates', icon: LayoutTemplate, tourId: TOUR_IDS.SIDEBAR_TEMPLATES },
 ];
 
 const futureNavItems = [
