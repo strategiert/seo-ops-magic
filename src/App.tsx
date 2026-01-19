@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/lib/auth";
 import { WorkspaceProvider } from "@/hooks/useWorkspace";
+import { WorkspaceProviderConvex } from "@/hooks/useWorkspaceConvex";
 import { ChangelogModal } from "@/components/changelog";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
@@ -30,7 +31,8 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <WorkspaceProvider>
-            <Routes>
+            <WorkspaceProviderConvex>
+              <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/projects" element={<Projects />} />
@@ -43,8 +45,9 @@ const App = () => (
               <Route path="/templates/:id" element={<TemplateDetail />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
-            </Routes>
-            <ChangelogModal />
+              </Routes>
+              <ChangelogModal />
+            </WorkspaceProviderConvex>
           </WorkspaceProvider>
         </AuthProvider>
       </BrowserRouter>
