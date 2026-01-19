@@ -73,15 +73,16 @@ export const getByProjectType = query({
 
 /**
  * Create or update a NeuronWriter integration
+ * All fields except projectId are optional to allow partial updates
  */
 export const upsertNeuronWriter = mutation({
   args: {
     projectId: v.id("projects"),
-    nwProjectId: v.string(),
+    nwApiKey: v.optional(v.string()),
+    nwProjectId: v.optional(v.string()),
     nwProjectName: v.optional(v.string()),
     nwLanguage: v.optional(v.string()),
     nwEngine: v.optional(v.string()),
-    credentialsEncrypted: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx);
@@ -98,29 +99,31 @@ export const upsertNeuronWriter = mutation({
       )
       .first();
 
+    // Build update object with only provided fields
+    const updateData: Record<string, any> = {
+      lastSyncAt: Date.now(),
+    };
+
+    if (args.nwApiKey !== undefined) updateData.credentialsEncrypted = args.nwApiKey;
+    if (args.nwProjectId !== undefined) {
+      updateData.nwProjectId = args.nwProjectId;
+      updateData.isConnected = true;
+    }
+    if (args.nwProjectName !== undefined) updateData.nwProjectName = args.nwProjectName;
+    if (args.nwLanguage !== undefined) updateData.nwLanguage = args.nwLanguage;
+    if (args.nwEngine !== undefined) updateData.nwEngine = args.nwEngine;
+
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        nwProjectId: args.nwProjectId,
-        nwProjectName: args.nwProjectName,
-        nwLanguage: args.nwLanguage ?? "de",
-        nwEngine: args.nwEngine ?? "google.de",
-        credentialsEncrypted: args.credentialsEncrypted,
-        isConnected: true,
-        lastSyncAt: Date.now(),
-      });
+      await ctx.db.patch(existing._id, updateData);
       return existing._id;
     }
 
     return await ctx.db.insert("integrations", {
       projectId: args.projectId,
       type: "neuronwriter",
-      nwProjectId: args.nwProjectId,
-      nwProjectName: args.nwProjectName,
+      ...updateData,
       nwLanguage: args.nwLanguage ?? "de",
       nwEngine: args.nwEngine ?? "google.de",
-      credentialsEncrypted: args.credentialsEncrypted,
-      isConnected: true,
-      lastSyncAt: Date.now(),
     });
   },
 });

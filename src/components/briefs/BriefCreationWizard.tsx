@@ -1,5 +1,6 @@
 import { useState, useEffect, memo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useMutation } from "convex/react";
 import { Loader2, Check, AlertCircle, Sparkles } from "lucide-react";
 import {
   Dialog,
@@ -14,15 +15,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import {
   useProjectIntegrations,
-  updateNeuronWriterSyncTime,
+  useUpdateNeuronWriterSyncTime,
 } from "@/hooks/useProjectIntegrations";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "../../../convex/_generated/api";
 import {
   startNewQuery,
-  pollQueryUntilReady,
+  getQueryGuidelines,
   type NWGuidelines,
 } from "@/lib/api/neuronwriter";
 
@@ -39,8 +40,13 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
 }: BriefCreationWizardProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { currentProject } = useWorkspace();
+  const { currentProject } = useWorkspaceConvex();
   const { neuronwriter, loading: intLoading } = useProjectIntegrations();
+  const updateSyncTime = useUpdateNeuronWriterSyncTime();
+
+  // Convex mutations for content briefs
+  const createBrief = useMutation(api.tables.contentBriefs.create);
+  const updateBrief = useMutation(api.tables.contentBriefs.update);
 
   const [step, setStep] = useState<WizardStep>("keyword");
   const [keyword, setKeyword] = useState("");
@@ -83,31 +89,35 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
   }, [open, intLoading, neuronwriter, step]);
 
   const startAnalysis = async () => {
-    if (!keyword.trim() || !currentProject?.id || !neuronwriter?.nwProjectId) {
+    if (!keyword.trim() || !currentProject?._id || !neuronwriter?.nwProjectId) {
+      return;
+    }
+
+    if (!neuronwriter.nwApiKey) {
+      toast({
+        title: "API Key fehlt",
+        description: "Bitte konfiguriere den NeuronWriter API Key in den Einstellungen.",
+        variant: "destructive",
+      });
       return;
     }
 
     const briefTitle = title.trim() || keyword.trim();
-    
+
     setStep("analyzing");
     setProgress(5);
     setProgressText("Brief wird erstellt...");
 
     try {
-      // Step 1: Create brief with status "pending"
-      const { data: briefData, error: briefError } = await supabase
-        .from("content_briefs")
-        .insert({
-          project_id: currentProject.id,
-          title: briefTitle,
-          primary_keyword: keyword.trim(),
-          status: "pending",
-        })
-        .select()
-        .single();
+      // Step 1: Create brief with status "pending" using Convex
+      const briefId = await createBrief({
+        projectId: currentProject._id,
+        title: briefTitle,
+        primaryKeyword: keyword.trim(),
+        status: "pending",
+      });
 
-      if (briefError) throw briefError;
-      setCreatedBriefId(briefData.id);
+      setCreatedBriefId(briefId);
       setProgress(15);
       setProgressText("Starte NeuronWriter Analyse...");
 
@@ -117,14 +127,14 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
         keyword.trim(),
         neuronwriter.nwLanguage || "de",
         neuronwriter.nwEngine || "google.de",
-        neuronwriter.nwApiKey || undefined
+        neuronwriter.nwApiKey
       );
 
       // Save query ID to brief for resume capability
-      await supabase
-        .from("content_briefs")
-        .update({ nw_query_id: queryId })
-        .eq("id", briefData.id);
+      await updateBrief({
+        id: briefId,
+        nwQueryId: queryId,
+      });
 
       setProgress(25);
       setProgressText("Analysiere Keyword bei NeuronWriter (ca. 60s)...");
@@ -132,7 +142,7 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
       // Step 3: Poll for results with progress updates
       let pollCount = 0;
       const maxPolls = 20;
-      
+
       const pollWithProgress = async (): Promise<NWGuidelines> => {
         for (let i = 0; i < maxPolls; i++) {
           pollCount++;
@@ -142,27 +152,14 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
           setProgressText(`Analysiere Keyword... (${pollCount}/${maxPolls})`);
 
           try {
-            const guidelines = await supabase.functions.invoke("neuronwriter-api", {
-              body: { action: "get-query", queryId, apiKey: neuronwriter.nwApiKey },
-            });
+            // Use the Convex-based API client
+            const guidelines = await getQueryGuidelines(queryId, neuronwriter.nwApiKey!);
 
-            if (guidelines.error) throw new Error(guidelines.error.message);
-            if (guidelines.data.error) throw new Error(guidelines.data.error);
-
-            const data = guidelines.data;
-            if (data.status === "ready" || (data.terms && data.terms.length > 0)) {
-              return {
-                terms: data.terms || [],
-                terms_txt: data.terms_txt,
-                metrics: data.metrics,
-                ideas: data.ideas || [],
-                questions: data.questions || [],
-                competitors: data.competitors || [],
-                status: data.status,
-              };
+            if (guidelines.status === "ready" || (guidelines.terms && guidelines.terms.length > 0)) {
+              return guidelines;
             }
 
-            if (data.status === "error") {
+            if (guidelines.status === "error") {
               throw new Error("NeuronWriter Analyse fehlgeschlagen");
             }
           } catch (e) {
@@ -173,7 +170,7 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
           // Wait 5 seconds before next poll
           await new Promise(resolve => setTimeout(resolve, 5000));
         }
-        
+
         throw new Error("Analyse-Timeout: Bitte versuche es erneut.");
       };
 
@@ -182,21 +179,17 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
       setProgress(95);
       setProgressText("Speichere Guidelines...");
 
-      // Step 4: Save guidelines to brief and update status
-      const { error: updateError } = await supabase
-        .from("content_briefs")
-        .update({
-          nw_guidelines: guidelines as unknown as any,
-          status: "draft",
-          nw_query_id: null, // Clear query ID after success
-        })
-        .eq("id", briefData.id);
-
-      if (updateError) throw updateError;
+      // Step 4: Save guidelines to brief and update status using Convex
+      await updateBrief({
+        id: briefId,
+        nwGuidelines: guidelines,
+        status: "draft",
+        nwQueryId: undefined, // Clear query ID after success
+      });
 
       // Update sync time
       if (neuronwriter.id) {
-        await updateNeuronWriterSyncTime(neuronwriter.id);
+        await updateSyncTime(neuronwriter.id);
       }
 
       setProgress(100);
@@ -214,10 +207,10 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
 
       // Update brief status to draft on error (so user can still use it)
       if (createdBriefId) {
-        await supabase
-          .from("content_briefs")
-          .update({ status: "draft" })
-          .eq("id", createdBriefId);
+        await updateBrief({
+          id: createdBriefId as any,
+          status: "draft",
+        });
       }
     }
   };
