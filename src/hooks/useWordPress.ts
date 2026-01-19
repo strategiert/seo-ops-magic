@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useWorkspace } from "./useWorkspace";
+import { useWorkspaceConvex } from "./useWorkspaceConvex";
 
 export interface TaxonomyItem {
   id: number;
@@ -39,14 +39,14 @@ export interface PublishOptions {
 }
 
 export function useWordPress(): UseWordPressReturn {
-  const { currentProject } = useWorkspace();
+  const { currentProject } = useWorkspaceConvex();
   const [taxonomies, setTaxonomies] = useState<WordPressTaxonomies | null>(null);
   const [loadingTaxonomies, setLoadingTaxonomies] = useState(false);
   const [taxonomiesError, setTaxonomiesError] = useState<string | null>(null);
   const [publishingArticleId, setPublishingArticleId] = useState<string | null>(null);
 
   const fetchTaxonomies = useCallback(async () => {
-    if (!currentProject?.id) {
+    if (!currentProject?._id) {
       setTaxonomies(null);
       return;
     }
@@ -56,7 +56,7 @@ export function useWordPress(): UseWordPressReturn {
 
     try {
       const response = await supabase.functions.invoke("wordpress-taxonomies", {
-        body: { projectId: currentProject.id },
+        body: { projectId: currentProject._id },
       });
 
       if (response.error) {
@@ -76,7 +76,7 @@ export function useWordPress(): UseWordPressReturn {
     } finally {
       setLoadingTaxonomies(false);
     }
-  }, [currentProject?.id]);
+  }, [currentProject?._id]);
 
   const publishArticle = useCallback(
     async (articleId: string, options: PublishOptions = {}): Promise<PublishResult> => {
@@ -121,10 +121,10 @@ export function useWordPress(): UseWordPressReturn {
 
   // Auto-fetch taxonomies when project changes
   useEffect(() => {
-    if (currentProject?.id) {
+    if (currentProject?._id) {
       fetchTaxonomies();
     }
-  }, [currentProject?.id, fetchTaxonomies]);
+  }, [currentProject?._id, fetchTaxonomies]);
 
   return {
     taxonomies,

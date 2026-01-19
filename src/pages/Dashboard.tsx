@@ -1,40 +1,39 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@clerk/clerk-react';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { useAuth } from '@/lib/auth';
-import { useWorkspace } from '@/hooks/useWorkspace';
+import { useWorkspaceConvex } from '@/hooks/useWorkspaceConvex';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FileText, LayoutTemplate, PenTool, Plus, ArrowRight, Zap } from 'lucide-react';
 import { TOUR_IDS, useTour, useUserOnboarding } from '@/components/onboarding';
-import { EmptyState } from '@/components/data-state';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user, isLoading: authLoading } = useAuth();
-  const { currentProject, projects, isLoading: workspaceLoading } = useWorkspace();
+  const { isSignedIn, isLoaded: authLoaded } = useAuth();
+  const { currentProject, projects, isLoading: workspaceLoading } = useWorkspaceConvex();
   const { isFirstTimeUser, isChecked, markComplete } = useUserOnboarding();
   const { startTour } = useTour({ onComplete: markComplete });
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (authLoaded && !isSignedIn) {
       navigate('/auth');
     }
-  }, [user, authLoading, navigate]);
+  }, [isSignedIn, authLoaded, navigate]);
 
   // Start onboarding tour for first-time users
   useEffect(() => {
-    if (isChecked && isFirstTimeUser && !authLoading && !workspaceLoading) {
+    if (isChecked && isFirstTimeUser && authLoaded && !workspaceLoading) {
       // Small delay to ensure DOM is ready
       const timer = setTimeout(() => {
         startTour();
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [isChecked, isFirstTimeUser, authLoading, workspaceLoading, startTour]);
+  }, [isChecked, isFirstTimeUser, authLoaded, workspaceLoading, startTour]);
 
-  if (authLoading || workspaceLoading) {
+  if (!authLoaded || workspaceLoading) {
     return (
       <AppLayout title="Dashboard">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -92,7 +91,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <AppLayout 
+    <AppLayout
       title={`Projekt: ${currentProject.name}`}
       breadcrumbs={[{ label: 'Dashboard' }]}
     >

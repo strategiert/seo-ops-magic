@@ -33,7 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import { useWordPressBulkPublish } from "@/hooks/useWordPress";
 import { CreateArticleDialog } from "@/components/articles/CreateArticleDialog";
 
@@ -65,7 +65,7 @@ const statusLabels: Record<string, string> = {
 export default function Articles() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { currentProject } = useWorkspace();
+  const { currentProject } = useWorkspaceConvex();
   const { publishing, results, publishMultiple } = useWordPressBulkPublish();
 
   const [articles, setArticles] = useState<Article[]>([]);
@@ -128,13 +128,13 @@ export default function Articles() {
   };
 
   useEffect(() => {
-    if (currentProject?.id) {
+    if (currentProject?._id) {
       loadArticles();
     }
-  }, [currentProject?.id, page]);
+  }, [currentProject?._id, page]);
 
   const loadArticles = async () => {
-    if (!currentProject?.id) return;
+    if (!currentProject?._id) return;
 
     setLoading(true);
     try {
@@ -145,7 +145,7 @@ export default function Articles() {
       const { count } = await supabase
         .from("articles")
         .select("*", { count: "exact", head: true })
-        .eq("project_id", currentProject.id);
+        .eq("project_id", currentProject._id);
 
       setTotalCount(count || 0);
 
@@ -153,7 +153,7 @@ export default function Articles() {
       const { data, error } = await supabase
         .from("articles")
         .select("*")
-        .eq("project_id", currentProject.id)
+        .eq("project_id", currentProject._id)
         .order("updated_at", { ascending: false })
         .range(from, to);
 

@@ -31,12 +31,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import { useBrandProfile, type Product, type Service, type Persona, type Competitor } from "@/hooks/useBrandProfile";
 
 export function BrandIntelligenceSetup() {
   const { toast } = useToast();
-  const { currentProject } = useWorkspace();
+  const { currentProject } = useWorkspaceConvex();
   const {
     brandProfile,
     loading,

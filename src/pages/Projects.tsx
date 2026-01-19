@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { useWorkspace, Project } from '@/hooks/useWorkspace';
+import { useWorkspaceConvex } from '@/hooks/useWorkspaceConvex';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Plus, FolderKanban, Globe, CheckCircle2 } from 'lucide-react';
 
 export default function Projects() {
-  const { projects, currentProject, setCurrentProject, createProject, isLoading } = useWorkspace();
+  const { projects, currentProject, setCurrentProject, createProject, isLoading } = useWorkspaceConvex();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', domain: '', wpUrl: '' });
@@ -46,14 +46,14 @@ export default function Projects() {
     if (project) {
       toast({
         title: 'Projekt erstellt',
-        description: `"${project.name}" wurde erfolgreich erstellt.`,
+        description: `"${newProject.name}" wurde erfolgreich erstellt.`,
       });
       setIsDialogOpen(false);
       setNewProject({ name: '', domain: '', wpUrl: '' });
     }
   };
 
-  const handleSelectProject = (project: Project) => {
+  const handleSelectProject = (project: typeof projects[number]) => {
     setCurrentProject(project);
     toast({
       title: 'Projekt gewechselt',
@@ -142,17 +142,17 @@ export default function Projects() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {projects.map((project) => (
-              <Card 
-                key={project.id}
+              <Card
+                key={project._id}
                 className={`cursor-pointer transition-smooth hover:shadow-md ${
-                  currentProject?.id === project.id ? 'border-primary ring-1 ring-primary' : ''
+                  currentProject?._id === project._id ? 'border-primary ring-1 ring-primary' : ''
                 }`}
                 onClick={() => handleSelectProject(project)}
               >
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-base">{project.name}</CardTitle>
-                    {currentProject?.id === project.id && (
+                    {currentProject?._id === project._id && (
                       <Badge variant="secondary" className="text-xs">
                         <CheckCircle2 className="mr-1 h-3 w-3" />
                         Aktiv
@@ -168,7 +168,7 @@ export default function Projects() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-muted-foreground">
-                    Erstellt am {new Date(project.created_at).toLocaleDateString('de-DE')}
+                    Erstellt am {new Date(project._creationTime).toLocaleDateString('de-DE')}
                   </p>
                 </CardContent>
               </Card>

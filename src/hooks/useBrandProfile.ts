@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useWorkspace } from "./useWorkspace";
+import { useWorkspaceConvex } from "./useWorkspaceConvex";
 import type { Json } from "@/integrations/supabase/types";
 
 // Brand Profile Types
@@ -116,14 +116,14 @@ function parseJsonField<T>(value: Json | null, defaultValue: T): T {
 }
 
 export function useBrandProfile(): UseBrandProfileReturn {
-  const { currentProject } = useWorkspace();
+  const { currentProject } = useWorkspaceConvex();
   const [brandProfile, setBrandProfile] = useState<BrandProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Load brand profile from database
   const loadProfile = useCallback(async () => {
-    if (!currentProject?.id) {
+    if (!currentProject?._id) {
       setBrandProfile(null);
       return;
     }
@@ -135,7 +135,7 @@ export function useBrandProfile(): UseBrandProfileReturn {
       const { data, error: fetchError } = await supabase
         .from("brand_profiles")
         .select("*")
-        .eq("project_id", currentProject.id)
+        .eq("project_id", currentProject._id)
         .maybeSingle();
 
       if (fetchError) {
@@ -187,19 +187,19 @@ export function useBrandProfile(): UseBrandProfileReturn {
     } finally {
       setLoading(false);
     }
-  }, [currentProject?.id]);
+  }, [currentProject?._id]);
 
   // Trigger website crawl
   const triggerCrawl = useCallback(
     async (websiteUrl: string, maxPages = 20): Promise<{ success: boolean; error?: string }> => {
-      if (!currentProject?.id) {
+      if (!currentProject?._id) {
         return { success: false, error: "Kein Projekt ausgewählt" };
       }
 
       try {
         const response = await supabase.functions.invoke("brand-crawl", {
           body: {
-            projectId: currentProject.id,
+            projectId: currentProject._id,
             websiteUrl,
             maxPages,
           },
@@ -225,19 +225,19 @@ export function useBrandProfile(): UseBrandProfileReturn {
         };
       }
     },
-    [currentProject?.id, loadProfile]
+    [currentProject?._id, loadProfile]
   );
 
   // Trigger AI analysis
   const triggerAnalysis = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    if (!currentProject?.id || !brandProfile?.id) {
+    if (!currentProject?._id || !brandProfile?.id) {
       return { success: false, error: "Kein Brand-Profil vorhanden" };
     }
 
     try {
       const response = await supabase.functions.invoke("brand-analyze", {
         body: {
-          projectId: currentProject.id,
+          projectId: currentProject._id,
           brandProfileId: brandProfile.id,
         },
       });
@@ -261,7 +261,7 @@ export function useBrandProfile(): UseBrandProfileReturn {
         error: err instanceof Error ? err.message : "Analyse fehlgeschlagen",
       };
     }
-  }, [currentProject?.id, brandProfile?.id, loadProfile]);
+  }, [currentProject?._id, brandProfile?.id, loadProfile]);
 
   // Update profile manually
   const updateProfile = useCallback(
@@ -315,14 +315,14 @@ export function useBrandProfile(): UseBrandProfileReturn {
 
   // Sync to OpenAI Vector Store
   const syncVectorStore = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    if (!currentProject?.id || !brandProfile?.id) {
+    if (!currentProject?._id || !brandProfile?.id) {
       return { success: false, error: "Kein Brand-Profil vorhanden" };
     }
 
     try {
       const response = await supabase.functions.invoke("brand-vector-store", {
         body: {
-          projectId: currentProject.id,
+          projectId: currentProject._id,
           brandProfileId: brandProfile.id,
           action: "sync",
         },
@@ -347,7 +347,7 @@ export function useBrandProfile(): UseBrandProfileReturn {
         error: err instanceof Error ? err.message : "Vector Store Sync fehlgeschlagen",
       };
     }
-  }, [currentProject?.id, brandProfile?.id, loadProfile]);
+  }, [currentProject?._id, brandProfile?.id, loadProfile]);
 
   // Reset brand profile completely
   const resetProfile = useCallback(async (): Promise<{ success: boolean; error?: string }> => {

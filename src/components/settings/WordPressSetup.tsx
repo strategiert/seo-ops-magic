@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import {
   useProjectIntegrations,
   saveWordPressIntegration,
@@ -13,7 +13,7 @@ import {
 
 export function WordPressSetup() {
   const { toast } = useToast();
-  const { currentProject } = useWorkspace();
+  const { currentProject } = useWorkspaceConvex();
   const { wordpress, loading: intLoading, refetch } = useProjectIntegrations();
 
   const [isConfiguring, setIsConfiguring] = useState(false);
@@ -99,7 +99,7 @@ export function WordPressSetup() {
   };
 
   const handleSave = async () => {
-    if (!currentProject?.id) {
+    if (!currentProject?._id) {
       toast({
         title: "Fehler",
         description: "Kein Projekt ausgewählt.",
@@ -129,7 +129,7 @@ export function WordPressSetup() {
         baseUrl = baseUrl.slice(0, -8);
       }
 
-      await saveWordPressIntegration(currentProject.id, {
+      await saveWordPressIntegration(currentProject._id, {
         wpUrl: baseUrl,
         wpUsername: wpUsername,
         wpAppPassword: wpAppPassword,

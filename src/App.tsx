@@ -4,8 +4,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/lib/auth";
-import { WorkspaceProvider } from "@/hooks/useWorkspace";
 import { WorkspaceProviderConvex } from "@/hooks/useWorkspaceConvex";
 import { ChangelogModal } from "@/components/changelog";
 import Dashboard from "./pages/Dashboard";
@@ -29,27 +27,23 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AuthProvider>
-          <WorkspaceProvider>
-            <WorkspaceProviderConvex>
-              <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/briefs" element={<Briefs />} />
-              <Route path="/briefs/:id" element={<BriefDetail />} />
-              <Route path="/articles" element={<Articles />} />
-              <Route path="/articles/:id" element={<ArticleDetail />} />
-              <Route path="/import-article" element={<ImportArticle />} />
-              <Route path="/templates" element={<Templates />} />
-              <Route path="/templates/:id" element={<TemplateDetail />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="*" element={<NotFound />} />
-              </Routes>
-              <ChangelogModal />
-            </WorkspaceProviderConvex>
-          </WorkspaceProvider>
-        </AuthProvider>
+        <WorkspaceProviderConvex>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/projects" element={<Projects />} />
+            <Route path="/briefs" element={<Briefs />} />
+            <Route path="/briefs/:id" element={<BriefDetail />} />
+            <Route path="/articles" element={<Articles />} />
+            <Route path="/articles/:id" element={<ArticleDetail />} />
+            <Route path="/import-article" element={<ImportArticle />} />
+            <Route path="/templates" element={<Templates />} />
+            <Route path="/templates/:id" element={<TemplateDetail />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+          <ChangelogModal />
+        </WorkspaceProviderConvex>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
