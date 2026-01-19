@@ -62,20 +62,20 @@ serve(async (req) => {
     const body: NWRequestBody = await req.json();
     const { action, apiKey, projectId, queryId, keyword, language, engine, content, html, title, description, status, tags } = body;
 
-    // Get NeuronWriter API key: prefer user-provided, fallback to env var
-    const nwApiKey = apiKey || Deno.env.get("NEURONWRITER_API_KEY");
-    if (!nwApiKey) {
-      console.error("No NeuronWriter API key available");
+    // Get NeuronWriter API key from request (project-specific)
+    if (!apiKey) {
+      console.error("No NeuronWriter API key provided in request");
       return new Response(JSON.stringify({
         error: "NeuronWriter API key not configured",
-        message: "Bitte gib deinen NeuronWriter API Key in den Einstellungen ein."
+        message: "Bitte gib deinen NeuronWriter API Key in den Projekt-Einstellungen ein."
       }), {
-        status: 500,
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("API Key source:", apiKey ? "user-provided" : "env-var");
+    const nwApiKey = apiKey;
+    console.log("Using project-specific API key");
 
     console.log(`NeuronWriter API call: ${action}`, { projectId, queryId, keyword, language, engine });
 

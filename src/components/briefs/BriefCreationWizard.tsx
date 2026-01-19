@@ -116,7 +116,8 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
         neuronwriter.nwProjectId,
         keyword.trim(),
         neuronwriter.nwLanguage || "de",
-        neuronwriter.nwEngine || "google.de"
+        neuronwriter.nwEngine || "google.de",
+        neuronwriter.nwApiKey || undefined
       );
 
       // Save query ID to brief for resume capability
@@ -142,7 +143,7 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
 
           try {
             const guidelines = await supabase.functions.invoke("neuronwriter-api", {
-              body: { action: "get-query", queryId },
+              body: { action: "get-query", queryId, apiKey: neuronwriter.nwApiKey },
             });
 
             if (guidelines.error) throw new Error(guidelines.error.message);
