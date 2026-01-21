@@ -80,6 +80,9 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
   // Check if Clerk auth is available
   const { isSignedIn, isLoaded: clerkLoaded } = useAuth();
 
+  // Track if we're creating the default workspace to prevent duplicates
+  const [isCreatingDefaultWorkspace, setIsCreatingDefaultWorkspace] = useState(false);
+
   // State
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<
     Id<"workspaces"> | null
@@ -97,17 +100,21 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
 
   // Convex queries - only run if Clerk is signed in
   // Skip queries if not authenticated to avoid server errors
-  const workspaces = useQuery(
+  const workspacesQuery = useQuery(
     api.tables.workspaces.list,
     clerkLoaded && isSignedIn ? {} : "skip"
-  ) ?? [];
+  );
+  // Track if workspaces query has loaded (undefined = loading, array = loaded)
+  const workspacesLoaded = workspacesQuery !== undefined;
+  const workspaces = workspacesQuery ?? [];
 
-  const projects = useQuery(
+  const projectsQuery = useQuery(
     api.tables.projects.listByWorkspace,
     clerkLoaded && isSignedIn && currentWorkspaceId
       ? { workspaceId: currentWorkspaceId }
       : "skip"
-  ) ?? [];
+  );
+  const projects = projectsQuery ?? [];
 
   // Mutations
   const createWorkspaceMutation = useMutation(api.tables.workspaces.create);
@@ -126,6 +133,38 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
       setCurrentWorkspaceId(workspaces[0]._id);
     }
   }, [workspaces, currentWorkspaceId]);
+
+  // Auto-create default workspace for new users
+  useEffect(() => {
+    const createDefaultWorkspace = async () => {
+      // Only create if:
+      // 1. User is signed in
+      // 2. Workspaces query has loaded (workspacesLoaded = true)
+      // 3. No workspaces exist
+      // 4. Not already creating
+      if (
+        clerkLoaded &&
+        isSignedIn &&
+        workspacesLoaded &&
+        workspaces.length === 0 &&
+        !isCreatingDefaultWorkspace
+      ) {
+        setIsCreatingDefaultWorkspace(true);
+        try {
+          console.log("Creating default workspace for new user...");
+          const id = await createWorkspaceMutation({ name: "Mein Workspace" });
+          setCurrentWorkspaceId(id);
+          console.log("Default workspace created:", id);
+        } catch (error) {
+          console.error("Failed to create default workspace:", error);
+        } finally {
+          setIsCreatingDefaultWorkspace(false);
+        }
+      }
+    };
+
+    createDefaultWorkspace();
+  }, [clerkLoaded, isSignedIn, workspacesLoaded, workspaces.length, isCreatingDefaultWorkspace, createWorkspaceMutation]);
 
   // Auto-select first project if none selected
   useEffect(() => {
@@ -207,8 +246,8 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
     projects,
     currentProject,
     setCurrentProject,
-    isLoading: !clerkLoaded || (isSignedIn && workspaces === undefined),
-    isLoadingProjects: !clerkLoaded || (isSignedIn && currentWorkspaceId && projects === undefined),
+    isLoading: !clerkLoaded || (isSignedIn && !workspacesLoaded) || isCreatingDefaultWorkspace,
+    isLoadingProjects: !clerkLoaded || (isSignedIn && currentWorkspaceId && projectsQuery === undefined),
     createWorkspace,
     createProject,
     updateProject,
