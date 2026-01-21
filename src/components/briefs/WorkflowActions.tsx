@@ -1,10 +1,12 @@
 import { useState, memo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Sparkles, FileText, FileJson, Download, Loader2, CheckCircle2, Circle } from "lucide-react";
+import { Sparkles, FileText, FileJson, Download, Loader2, CheckCircle2 } from "lucide-react";
+import { useAction } from "convex/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 interface WorkflowActionsProps {
   briefId: string;
@@ -28,36 +30,29 @@ export const WorkflowActions = memo(function WorkflowActions({
   const [generatingArticle, setGeneratingArticle] = useState(false);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
 
+  // Convex actions
+  const generateArticle = useAction(api.actions.articleGeneration.generate);
+
   const handleGenerateArticle = async () => {
     setGeneratingArticle(true);
     try {
-      // Debug: Check session
-      const { data: sessionData } = await supabase.auth.getSession();
-      console.log("Current session:", sessionData.session ? "EXISTS" : "NULL");
-      console.log("User ID:", sessionData.session?.user?.id);
-      console.log("Token expires:", sessionData.session?.expires_at);
-
-      if (!sessionData.session) {
-        throw new Error("Keine aktive Session. Bitte neu einloggen.");
-      }
-
-      const { data, error } = await supabase.functions.invoke("generate-article", {
-        body: { briefId },
+      const result = await generateArticle({
+        briefId: briefId as Id<"contentBriefs">,
       });
 
-      if (error) throw error;
-
-      if (data.error) {
-        throw new Error(data.error);
+      if (!result.success) {
+        throw new Error(result.error || "Artikel konnte nicht generiert werden.");
       }
 
       toast({
         title: "Artikel generiert",
-        description: `"${data.title}" wurde erstellt.`,
+        description: `"${result.title}" wurde erstellt.`,
       });
 
-      onArticleGenerated?.(data.articleId);
-      navigate(`/articles/${data.articleId}`);
+      if (result.articleId) {
+        onArticleGenerated?.(result.articleId);
+        navigate(`/articles/${result.articleId}`);
+      }
     } catch (error) {
       console.error("Error generating article:", error);
       toast({
@@ -75,36 +70,11 @@ export const WorkflowActions = memo(function WorkflowActions({
 
     setGeneratingTemplate(true);
     try {
-      // Session-Check vor Edge Function Call
-      const { data: sessionData } = await supabase.auth.getSession();
-      console.log("Template generation - Session:", sessionData.session ? "EXISTS" : "NULL");
-      
-      if (!sessionData.session) {
-        throw new Error("Keine aktive Session. Bitte neu einloggen.");
-      }
-
-      const { data, error } = await supabase.functions.invoke("generate-elementor-template", {
-        body: { articleId },
-      });
-
-      if (error) {
-        // Spezifische Behandlung für 401 Fehler
-        if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
-          throw new Error("Session abgelaufen. Bitte neu einloggen.");
-        }
-        throw error;
-      }
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
+      // For now, just show a message - Elementor template generation needs Convex action
       toast({
-        title: "Template generiert",
-        description: "Elementor Template wurde erstellt.",
+        title: "Elementor Templates",
+        description: "Diese Funktion wird bald verfügbar sein.",
       });
-
-      navigate(`/templates/${data.templateId}`);
     } catch (error) {
       console.error("Error generating template:", error);
       toast({

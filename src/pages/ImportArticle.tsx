@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery, useMutation } from "convex/react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { FileJson, Upload, Loader2 } from "lucide-react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 export default function ImportArticle() {
   const navigate = useNavigate();
@@ -17,8 +19,17 @@ export default function ImportArticle() {
   const [jsonInput, setJsonInput] = useState("");
   const [importing, setImporting] = useState(false);
 
+  // Convex queries and mutations
+  const brief = useQuery(
+    api.tables.contentBriefs.get,
+    briefId ? { id: briefId as Id<"contentBriefs"> } : "skip"
+  );
+
+  const createArticle = useMutation(api.tables.articles.create);
+  const updateBrief = useMutation(api.tables.contentBriefs.update);
+
   const handleImport = async () => {
-    if (!briefId) {
+    if (!briefId || !brief) {
       toast({
         title: "Fehler",
         description: "Brief ID fehlt. Bitte geben Sie die URL mit ?briefId=... Parameter an.",
@@ -46,48 +57,32 @@ export default function ImportArticle() {
         throw new Error("JSON muss mindestens 'title' und 'content_markdown' enthalten.");
       }
 
-      // Get brief to get project_id and primary_keyword
-      const { data: brief, error: briefError } = await supabase
-        .from("content_briefs")
-        .select("project_id, primary_keyword")
-        .eq("id", briefId)
-        .single();
-
-      if (briefError) throw briefError;
-
       // Insert article
-      const { data: article, error: articleError } = await supabase
-        .from("articles")
-        .insert({
-          project_id: brief.project_id,
-          brief_id: briefId,
-          title: articleData.title,
-          primary_keyword: brief.primary_keyword,
-          content_markdown: articleData.content_markdown,
-          meta_title: articleData.meta_title || articleData.title.slice(0, 60),
-          meta_description: articleData.meta_description || "",
-          outline_json: articleData.outline || [],
-          faq_json: articleData.faq || [],
-          status: "draft",
-          version: 1,
-        })
-        .select()
-        .single();
-
-      if (articleError) throw articleError;
+      const articleId = await createArticle({
+        projectId: brief.projectId,
+        briefId: briefId as Id<"contentBriefs">,
+        title: articleData.title,
+        primaryKeyword: brief.primaryKeyword,
+        contentMarkdown: articleData.content_markdown,
+        metaTitle: articleData.meta_title || articleData.title.slice(0, 60),
+        metaDescription: articleData.meta_description || "",
+        outlineJson: articleData.outline || [],
+        faqJson: articleData.faq || [],
+        status: "draft",
+      });
 
       // Update brief status
-      await supabase
-        .from("content_briefs")
-        .update({ status: "completed" })
-        .eq("id", briefId);
+      await updateBrief({
+        id: briefId as Id<"contentBriefs">,
+        status: "completed",
+      });
 
       toast({
         title: "Artikel importiert",
-        description: `"${article.title}" wurde erfolgreich gespeichert.`,
+        description: `"${articleData.title}" wurde erfolgreich gespeichert.`,
       });
 
-      navigate(`/articles/${article.id}`);
+      navigate(`/articles/${articleId}`);
     } catch (error) {
       console.error("Import error:", error);
       toast({
@@ -131,7 +126,7 @@ export default function ImportArticle() {
             <div className="flex gap-2">
               <Button
                 onClick={handleImport}
-                disabled={importing || !jsonInput.trim()}
+                disabled={importing || !jsonInput.trim() || !brief}
                 className="flex-1"
               >
                 {importing ? (

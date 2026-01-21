@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileJson, Download, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { FileJson, Download } from "lucide-react";
+import { useQuery } from "convex/react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,84 +14,33 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import { DataStateWrapper, EmptyState, TableSkeleton } from "@/components/data-state";
-
-interface Template {
-  id: string;
-  name: string;
-  design_preset: string | null;
-  article_id: string | null;
-  template_json: any;
-  created_at: string;
-  updated_at: string;
-}
+import { api } from "../../convex/_generated/api";
 
 export default function Templates() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentProject } = useWorkspaceConvex();
 
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(0);
-  const [totalCount, setTotalCount] = useState(0);
-  const PAGE_SIZE = 50;
+  // Use Convex query for real-time templates data
+  const templatesData = useQuery(
+    api.tables.elementorTemplates.listByProject,
+    currentProject?._id ? { projectId: currentProject._id } : "skip"
+  );
 
-  useEffect(() => {
-    if (currentProject?._id) {
-      loadTemplates();
-    }
-  }, [currentProject?._id, page]);
-
-  const loadTemplates = async () => {
-    if (!currentProject?._id) return;
-
-    setLoading(true);
-    try {
-      const from = page * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
-
-      // Get count
-      const { count } = await supabase
-        .from("elementor_templates")
-        .select("*", { count: "exact", head: true })
-        .eq("project_id", currentProject._id);
-
-      setTotalCount(count || 0);
-
-      // Get paginated data
-      const { data, error } = await supabase
-        .from("elementor_templates")
-        .select("*")
-        .eq("project_id", currentProject._id)
-        .order("updated_at", { ascending: false })
-        .range(from, to);
-
-      if (error) throw error;
-      setTemplates(data || []);
-    } catch (error) {
-      console.error("Error loading templates:", error);
-      toast({
-        title: "Fehler",
-        description: "Templates konnten nicht geladen werden.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loading = templatesData === undefined;
+  const templates = templatesData ?? [];
 
   // Memoize formatted dates to avoid creating Date objects on every render
   const formattedDates = useMemo(() => {
     return new Map(
-      templates.map((t) => [t.id, new Date(t.created_at).toLocaleDateString("de-DE")])
+      templates.map((t) => [t._id, new Date(t._creationTime).toLocaleDateString("de-DE")])
     );
   }, [templates]);
 
-  const downloadTemplate = (template: Template) => {
-    const blob = new Blob([JSON.stringify(template.template_json, null, 2)], {
+  const downloadTemplate = (template: (typeof templates)[0]) => {
+    const blob = new Blob([JSON.stringify(template.templateJson, null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
@@ -148,18 +98,18 @@ export default function Templates() {
                 <TableBody>
                   {templates.map((template) => (
                     <TableRow
-                      key={template.id}
+                      key={template._id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => navigate(`/templates/${template.id}`)}
+                      onClick={() => navigate(`/templates/${template._id}`)}
                     >
                       <TableCell className="font-medium">{template.name}</TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {template.design_preset || "default"}
+                          {template.designPreset || "default"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {formattedDates.get(template.id)}
+                        {formattedDates.get(template._id)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -177,37 +127,6 @@ export default function Templates() {
                   ))}
                 </TableBody>
               </Table>
-              {/* Pagination Controls */}
-              {totalCount > PAGE_SIZE && (
-                <div className="flex items-center justify-between px-4 py-3 border-t">
-                  <div className="text-sm text-muted-foreground">
-                    Zeige {page * PAGE_SIZE + 1} bis {Math.min((page + 1) * PAGE_SIZE, totalCount)} von {totalCount} Templates
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((p) => Math.max(0, p - 1))}
-                      disabled={page === 0}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Zurück
-                    </Button>
-                    <div className="text-sm text-muted-foreground">
-                      Seite {page + 1} von {Math.ceil(totalCount / PAGE_SIZE)}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((p) => p + 1)}
-                      disabled={(page + 1) * PAGE_SIZE >= totalCount}
-                    >
-                      Weiter
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </DataStateWrapper>

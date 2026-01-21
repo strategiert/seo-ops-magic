@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAction } from "convex/react";
 import { useWorkspaceConvex } from "./useWorkspaceConvex";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 export interface TaxonomyItem {
   id: number;
   name: string;
   slug: string;
-  count: number;
+  count?: number;
   parent?: number;
 }
 
@@ -45,6 +47,10 @@ export function useWordPress(): UseWordPressReturn {
   const [taxonomiesError, setTaxonomiesError] = useState<string | null>(null);
   const [publishingArticleId, setPublishingArticleId] = useState<string | null>(null);
 
+  // Convex actions
+  const fetchTaxonomiesAction = useAction(api.actions.wordpress.fetchTaxonomies);
+  const publishArticleAction = useAction(api.actions.wordpress.publishArticle);
+
   const fetchTaxonomies = useCallback(async () => {
     if (!currentProject?._id) {
       setTaxonomies(null);
@@ -55,17 +61,17 @@ export function useWordPress(): UseWordPressReturn {
     setTaxonomiesError(null);
 
     try {
-      const response = await supabase.functions.invoke("wordpress-taxonomies", {
-        body: { projectId: currentProject._id },
+      const result = await fetchTaxonomiesAction({
+        projectId: currentProject._id,
       });
 
-      if (response.error) {
-        throw new Error(response.error.message);
+      if (result.error) {
+        throw new Error(result.error);
       }
 
       setTaxonomies({
-        categories: response.data.categories || [],
-        tags: response.data.tags || [],
+        categories: result.categories || [],
+        tags: result.tags || [],
       });
     } catch (error) {
       console.error("Error fetching taxonomies:", error);
@@ -76,35 +82,28 @@ export function useWordPress(): UseWordPressReturn {
     } finally {
       setLoadingTaxonomies(false);
     }
-  }, [currentProject?._id]);
+  }, [currentProject?._id, fetchTaxonomiesAction]);
 
   const publishArticle = useCallback(
     async (articleId: string, options: PublishOptions = {}): Promise<PublishResult> => {
       setPublishingArticleId(articleId);
 
       try {
-        const response = await supabase.functions.invoke("wordpress-publish", {
-          body: {
-            articleId,
-            status: options.status || "draft",
-            categoryIds: options.categoryIds || [],
-            tagIds: options.tagIds || [],
-            useStyledHtml: options.useStyledHtml !== false, // Default to true
-          },
+        const result = await publishArticleAction({
+          articleId: articleId as Id<"articles">,
+          status: options.status || "draft",
+          categoryIds: options.categoryIds || [],
+          tagIds: options.tagIds || [],
         });
 
-        if (response.error) {
-          throw new Error(response.error.message);
-        }
-
-        if (!response.data.success) {
-          throw new Error(response.data.error || "Publishing failed");
+        if (!result.success) {
+          throw new Error(result.error || "Publishing failed");
         }
 
         return {
           success: true,
-          wpPostId: response.data.wpPostId,
-          wpUrl: response.data.wpUrl,
+          wpPostId: result.wpPostId,
+          wpUrl: result.wpUrl,
         };
       } catch (error) {
         console.error("Error publishing article:", error);
@@ -116,7 +115,7 @@ export function useWordPress(): UseWordPressReturn {
         setPublishingArticleId(null);
       }
     },
-    []
+    [publishArticleAction]
   );
 
   // Auto-fetch taxonomies when project changes
@@ -141,6 +140,9 @@ export function useWordPressBulkPublish() {
   const [publishing, setPublishing] = useState(false);
   const [results, setResults] = useState<Map<string, PublishResult>>(new Map());
 
+  // Convex action
+  const publishArticleAction = useAction(api.actions.wordpress.publishArticle);
+
   const publishMultiple = useCallback(
     async (
       articleIds: string[],
@@ -152,42 +154,31 @@ export function useWordPressBulkPublish() {
       // Publish all articles in parallel using Promise.allSettled for better error handling
       const publishPromises = articleIds.map(async (articleId) => {
         try {
-          const response = await supabase.functions.invoke("wordpress-publish", {
-            body: {
-              articleId,
-              status: options.status || "draft",
-              categoryIds: options.categoryIds || [],
-              tagIds: options.tagIds || [],
-              useStyledHtml: options.useStyledHtml !== false, // Default to true
-            },
+          const result = await publishArticleAction({
+            articleId: articleId as Id<"articles">,
+            status: options.status || "draft",
+            categoryIds: options.categoryIds || [],
+            tagIds: options.tagIds || [],
           });
 
-          if (response.error) {
+          if (!result.success) {
             return {
               articleId,
               result: {
                 success: false,
-                error: response.error.message,
-              } as PublishResult,
-            };
-          } else if (!response.data.success) {
-            return {
-              articleId,
-              result: {
-                success: false,
-                error: response.data.error || "Publishing failed",
-              } as PublishResult,
-            };
-          } else {
-            return {
-              articleId,
-              result: {
-                success: true,
-                wpPostId: response.data.wpPostId,
-                wpUrl: response.data.wpUrl,
+                error: result.error || "Publishing failed",
               } as PublishResult,
             };
           }
+
+          return {
+            articleId,
+            result: {
+              success: true,
+              wpPostId: result.wpPostId,
+              wpUrl: result.wpUrl,
+            } as PublishResult,
+          };
         } catch (error) {
           return {
             articleId,
@@ -220,7 +211,7 @@ export function useWordPressBulkPublish() {
       setPublishing(false);
       return newResults;
     },
-    []
+    [publishArticleAction]
   );
 
   return {

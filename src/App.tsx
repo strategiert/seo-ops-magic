@@ -5,7 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { WorkspaceProviderConvex } from "@/hooks/useWorkspaceConvex";
-import { ChangelogModal } from "@/components/changelog";
+// TODO: Migrate ChangelogModal to Convex
+// import { ChangelogModal } from "@/components/changelog";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import Projects from "./pages/Projects";
@@ -42,7 +43,7 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
-          <ChangelogModal />
+          {/* <ChangelogModal /> */}
         </WorkspaceProviderConvex>
       </BrowserRouter>
     </TooltipProvider>

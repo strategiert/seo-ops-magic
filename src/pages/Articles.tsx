@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, PenTool, Loader2, Globe, CheckCircle2, XCircle, Palette, ChevronLeft, ChevronRight } from "lucide-react";
+import { FileText, PenTool, Loader2, Globe, CheckCircle2, XCircle, Palette } from "lucide-react";
+import { useQuery } from "convex/react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,21 +33,10 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import { useWordPressBulkPublish } from "@/hooks/useWordPress";
 import { CreateArticleDialog } from "@/components/articles/CreateArticleDialog";
-
-interface Article {
-  id: string;
-  title: string;
-  primary_keyword: string | null;
-  status: string | null;
-  version: number | null;
-  created_at: string;
-  updated_at: string;
-  brief_id: string | null;
-}
+import { api } from "../../convex/_generated/api";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -68,16 +58,25 @@ export default function Articles() {
   const { currentProject } = useWorkspaceConvex();
   const { publishing, results, publishMultiple } = useWordPressBulkPublish();
 
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkPublishOpen, setBulkPublishOpen] = useState(false);
   const [bulkStatus, setBulkStatus] = useState<"publish" | "draft">("draft");
   const [bulkUseStyledHtml, setBulkUseStyledHtml] = useState(true);
-  const [page, setPage] = useState(0);
-  const [totalCount, setTotalCount] = useState(0);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const PAGE_SIZE = 50;
+
+  // Use Convex query for real-time articles data
+  const articlesData = useQuery(
+    api.tables.articles.listByProject,
+    currentProject?._id ? { projectId: currentProject._id } : "skip"
+  );
+
+  const loading = articlesData === undefined;
+  const articles = articlesData ?? [];
+
+  // Sort by creation time descending
+  const sortedArticles = useMemo(() => {
+    return [...articles].sort((a, b) => b._creationTime - a._creationTime);
+  }, [articles]);
 
   const toggleSelect = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -93,10 +92,10 @@ export default function Articles() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === articles.length) {
+    if (selectedIds.size === sortedArticles.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(articles.map((a) => a.id)));
+      setSelectedIds(new Set(sortedArticles.map((a) => a._id)));
     }
   };
 
@@ -117,7 +116,6 @@ export default function Articles() {
       });
       setBulkPublishOpen(false);
       setSelectedIds(new Set());
-      loadArticles();
     } else {
       toast({
         title: "Teilweise fehlgeschlagen",
@@ -127,61 +125,17 @@ export default function Articles() {
     }
   };
 
-  useEffect(() => {
-    if (currentProject?._id) {
-      loadArticles();
-    }
-  }, [currentProject?._id, page]);
-
-  const loadArticles = async () => {
-    if (!currentProject?._id) return;
-
-    setLoading(true);
-    try {
-      const from = page * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
-
-      // Get count
-      const { count } = await supabase
-        .from("articles")
-        .select("*", { count: "exact", head: true })
-        .eq("project_id", currentProject._id);
-
-      setTotalCount(count || 0);
-
-      // Get paginated data
-      const { data, error } = await supabase
-        .from("articles")
-        .select("*")
-        .eq("project_id", currentProject._id)
-        .order("updated_at", { ascending: false })
-        .range(from, to);
-
-      if (error) throw error;
-      setArticles(data || []);
-    } catch (error) {
-      console.error("Error loading articles:", error);
-      toast({
-        title: "Fehler",
-        description: "Artikel konnten nicht geladen werden.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Memoize article map for O(1) lookup in bulk publish dialog
   const articleMap = useMemo(() => {
-    return new Map(articles.map((a) => [a.id, a]));
-  }, [articles]);
+    return new Map(sortedArticles.map((a) => [a._id, a]));
+  }, [sortedArticles]);
 
   // Memoize formatted dates to avoid creating Date objects on every render
   const formattedDates = useMemo(() => {
     return new Map(
-      articles.map((a) => [a.id, new Date(a.updated_at).toLocaleDateString("de-DE")])
+      sortedArticles.map((a) => [a._id, new Date(a._creationTime).toLocaleDateString("de-DE")])
     );
-  }, [articles]);
+  }, [sortedArticles]);
 
   return (
     <AppLayout>
@@ -219,7 +173,7 @@ export default function Articles() {
 
         <DataStateWrapper
           isLoading={loading}
-          data={articles}
+          data={sortedArticles}
           skeleton={<TableSkeleton rows={5} />}
           emptyState={
             <EmptyState
@@ -255,22 +209,22 @@ export default function Articles() {
                     <TableHead>Keyword</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Version</TableHead>
-                    <TableHead className="text-right">Aktualisiert</TableHead>
+                    <TableHead className="text-right">Erstellt</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {articles.map((article) => (
                     <TableRow
-                      key={article.id}
+                      key={article._id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => navigate(`/articles/${article.id}`)}
+                      onClick={() => navigate(`/articles/${article._id}`)}
                     >
-                      <TableCell onClick={(e) => toggleSelect(article.id, e)}>
-                        <Checkbox checked={selectedIds.has(article.id)} />
+                      <TableCell onClick={(e) => toggleSelect(article._id, e)}>
+                        <Checkbox checked={selectedIds.has(article._id)} />
                       </TableCell>
                       <TableCell className="font-medium">{article.title}</TableCell>
                       <TableCell className="font-mono text-sm text-muted-foreground">
-                        {article.primary_keyword || "-"}
+                        {article.primaryKeyword || "-"}
                       </TableCell>
                       <TableCell>
                         <Badge className={statusColors[article.status || "draft"]}>
@@ -279,43 +233,12 @@ export default function Articles() {
                       </TableCell>
                       <TableCell>v{article.version || 1}</TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {formattedDates.get(article.id)}
+                        {formattedDates.get(article._id)}
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-              {/* Pagination Controls */}
-              {totalCount > PAGE_SIZE && (
-                <div className="flex items-center justify-between px-4 py-3 border-t">
-                  <div className="text-sm text-muted-foreground">
-                    Zeige {page * PAGE_SIZE + 1} bis {Math.min((page + 1) * PAGE_SIZE, totalCount)} von {totalCount} Artikeln
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((p) => Math.max(0, p - 1))}
-                      disabled={page === 0}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Zurück
-                    </Button>
-                    <div className="text-sm text-muted-foreground">
-                      Seite {page + 1} von {Math.ceil(totalCount / PAGE_SIZE)}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((p) => p + 1)}
-                      disabled={(page + 1) * PAGE_SIZE >= totalCount}
-                    >
-                      Weiter
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </DataStateWrapper>

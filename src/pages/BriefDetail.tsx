@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Save, Download, Loader2, Sparkles } from "lucide-react";
+import { useQuery, useMutation } from "convex/react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,30 +18,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { NeuronWriterImport } from "@/components/briefs/NeuronWriterImport";
 import { GuidelinesDisplay } from "@/components/briefs/GuidelinesDisplay";
 import { WorkflowActions } from "@/components/briefs/WorkflowActions";
 import type { NWGuidelines } from "@/lib/api/neuronwriter";
 import { transformNWGuidelines } from "@/lib/api/neuronwriter";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
-
-interface ContentBrief {
-  id: string;
-  project_id: string;
-  title: string;
-  primary_keyword: string;
-  search_intent: string | null;
-  target_audience: string | null;
-  tonality: string | null;
-  target_length: number | null;
-  notes: string | null;
-  status: string | null;
-  priority_score: number | null;
-  nw_guidelines: NWGuidelines | null;
-  created_at: string;
-  updated_at: string;
-}
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 export default function BriefDetail() {
   const { id } = useParams<{ id: string }>();
@@ -48,172 +33,106 @@ export default function BriefDetail() {
   const { toast } = useToast();
   const { currentProject } = useWorkspaceConvex();
 
-  const [brief, setBrief] = useState<ContentBrief | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
-  const [articleId, setArticleId] = useState<string | null>(null);
-  const [templateId, setTemplateId] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
     title: "",
-    primary_keyword: "",
-    search_intent: "informational",
-    target_audience: "",
+    primaryKeyword: "",
+    searchIntent: "informational",
+    targetAudience: "",
     tonality: "",
-    target_length: 1500,
+    targetLength: 1500,
     notes: "",
     status: "draft",
   });
 
+  const isNew = id === "new";
+
+  // Convex queries
+  const brief = useQuery(
+    api.tables.contentBriefs.get,
+    !isNew && id ? { id: id as Id<"contentBriefs"> } : "skip"
+  );
+
+  // Query articles to find one linked to this brief
+  const articles = useQuery(
+    api.tables.articles.listByProject,
+    currentProject?._id && !isNew ? { projectId: currentProject._id } : "skip"
+  );
+
+  // Find article linked to this brief
+  const linkedArticle = articles?.find((a) => a.briefId === id);
+  const articleId = linkedArticle?._id ?? null;
+
+  // Convex mutations
+  const createBrief = useMutation(api.tables.contentBriefs.create);
+  const updateBrief = useMutation(api.tables.contentBriefs.update);
+
+  const loading = !isNew && brief === undefined;
+
+  // Sync form data when brief loads
   useEffect(() => {
-    if (id && id !== "new") {
-      loadBrief();
-    } else if (id === "new") {
-      // Initialize for new brief
-      setLoading(false);
-      // We set a 'fake' brief object so the UI renders
-      setBrief({
-        id: "new",
-        project_id: currentProject?._id || "",
-        title: "",
-        primary_keyword: "",
-        search_intent: "informational",
-        target_audience: null,
-        tonality: null,
-        target_length: 1500,
-        notes: null,
-        status: "draft",
-        priority_score: 0,
-        nw_guidelines: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-      // Reset form data for new brief
-      setFormData({
-        title: "",
-        primary_keyword: "",
-        search_intent: "informational",
-        target_audience: "",
-        tonality: "",
-        target_length: 1500,
-        notes: "",
-        status: "draft",
-      });
-    }
-  }, [id, currentProject]);
-
-  const loadBrief = async () => {
-    if (!id || id === "new") return;
-
-    setLoading(true);
-    try {
-      // Load brief and article in parallel to reduce latency
-      const [briefResult, articleResult] = await Promise.all([
-        supabase
-          .from("content_briefs")
-          .select("*")
-          .eq("id", id)
-          .single(),
-        supabase
-          .from("articles")
-          .select("id")
-          .eq("brief_id", id)
-          .maybeSingle(),
-      ]);
-
-      if (briefResult.error) throw briefResult.error;
-
+    if (brief) {
       // Transform nw_guidelines if they exist (handles old stored data format)
-      const transformedData = {
-        ...briefResult.data,
-        nw_guidelines: briefResult.data.nw_guidelines ? transformNWGuidelines(briefResult.data.nw_guidelines) : null
-      };
+      const transformedGuidelines = brief.nwGuidelines
+        ? transformNWGuidelines(brief.nwGuidelines)
+        : null;
 
-      setBrief(transformedData as unknown as ContentBrief);
       setFormData({
-        title: briefResult.data.title || "",
-        primary_keyword: briefResult.data.primary_keyword || "",
-        search_intent: briefResult.data.search_intent || "informational",
-        target_audience: briefResult.data.target_audience || "",
-        tonality: briefResult.data.tonality || "",
-        target_length: briefResult.data.target_length || 1500,
-        notes: briefResult.data.notes || "",
-        status: briefResult.data.status || "draft",
+        title: brief.title || "",
+        primaryKeyword: brief.primaryKeyword || "",
+        searchIntent: brief.searchIntent || "informational",
+        targetAudience: brief.targetAudience || "",
+        tonality: brief.tonality || "",
+        targetLength: brief.targetLength || 1500,
+        notes: brief.notes || "",
+        status: brief.status || "draft",
       });
-
-      // If article exists, load related template
-      if (articleResult.data) {
-        setArticleId(articleResult.data.id);
-
-        const { data: template } = await supabase
-          .from("elementor_templates")
-          .select("id")
-          .eq("article_id", articleResult.data.id)
-          .maybeSingle();
-
-        if (template) setTemplateId(template.id);
-      }
-    } catch (error) {
-      console.error("Error loading brief:", error);
-      toast({
-        title: "Fehler beim Laden",
-        description: "Brief konnte nicht geladen werden.",
-        variant: "destructive",
-      });
-      navigate("/briefs");
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [brief]);
 
   const saveBrief = async () => {
     setSaving(true);
     try {
-      if (id === "new") {
+      if (isNew) {
         if (!currentProject?._id) {
-          toast({ title: "Fehler", description: "Kein Projekt ausgewählt", variant: "destructive" });
+          toast({
+            title: "Fehler",
+            description: "Kein Projekt ausgewählt",
+            variant: "destructive",
+          });
           return;
         }
         // CREATE
-        const { data, error } = await supabase
-          .from("content_briefs")
-          .insert({
-            project_id: currentProject._id,
-            title: formData.title,
-            primary_keyword: formData.primary_keyword,
-            search_intent: formData.search_intent,
-            target_audience: formData.target_audience || null,
-            tonality: formData.tonality || null,
-            target_length: formData.target_length || null,
-            notes: formData.notes || null,
-            status: formData.status,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
+        const newBriefId = await createBrief({
+          projectId: currentProject._id,
+          title: formData.title,
+          primaryKeyword: formData.primaryKeyword,
+          searchIntent: formData.searchIntent,
+          targetAudience: formData.targetAudience || undefined,
+          tonality: formData.tonality || undefined,
+          targetLength: formData.targetLength || undefined,
+          notes: formData.notes || undefined,
+          status: formData.status,
+        });
 
         toast({ title: "Erstellt", description: "Brief wurde angelegt." });
-        navigate(`/briefs/${data.id}`);
+        navigate(`/briefs/${newBriefId}`);
       } else {
         // UPDATE
-        const { error } = await supabase
-          .from("content_briefs")
-          .update({
-            title: formData.title,
-            primary_keyword: formData.primary_keyword,
-            search_intent: formData.search_intent,
-            target_audience: formData.target_audience || null,
-            tonality: formData.tonality || null,
-            target_length: formData.target_length || null,
-            notes: formData.notes || null,
-            status: formData.status,
-          })
-          .eq("id", id!);
-
-        if (error) throw error;
+        await updateBrief({
+          id: id as Id<"contentBriefs">,
+          title: formData.title,
+          primaryKeyword: formData.primaryKeyword,
+          searchIntent: formData.searchIntent,
+          targetAudience: formData.targetAudience || undefined,
+          tonality: formData.tonality || undefined,
+          targetLength: formData.targetLength || undefined,
+          notes: formData.notes || undefined,
+          status: formData.status,
+        });
 
         toast({
           title: "Gespeichert",
@@ -233,22 +152,15 @@ export default function BriefDetail() {
   };
 
   const handleGuidelinesImport = async (guidelines: NWGuidelines) => {
-    if (!id) return;
+    if (!id || isNew) return;
 
     try {
-      const { error } = await supabase
-        .from("content_briefs")
-        .update({
-          nw_guidelines: guidelines as unknown as any,
-          status: "in_progress",
-        })
-        .eq("id", id);
+      await updateBrief({
+        id: id as Id<"contentBriefs">,
+        nwGuidelines: guidelines as unknown as any,
+        status: "in_progress",
+      });
 
-      if (error) throw error;
-
-      setBrief((prev) =>
-        prev ? { ...prev, nw_guidelines: guidelines, status: "in_progress" } : null
-      );
       setFormData((prev) => ({ ...prev, status: "in_progress" }));
       setImportModalOpen(false);
 
@@ -276,7 +188,7 @@ export default function BriefDetail() {
     );
   }
 
-  if (!brief) {
+  if (!isNew && brief === null) {
     return (
       <AppLayout>
         <div className="text-center py-12">
@@ -289,6 +201,10 @@ export default function BriefDetail() {
     );
   }
 
+  const nwGuidelines = brief?.nwGuidelines
+    ? transformNWGuidelines(brief.nwGuidelines)
+    : null;
+
   return (
     <AppLayout>
       <div className="space-y-6">
@@ -299,21 +215,25 @@ export default function BriefDetail() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="text-2xl font-bold">{formData.title || "Content Brief"}</h1>
+              <h1 className="text-2xl font-bold">
+                {formData.title || "Content Brief"}
+              </h1>
               <p className="text-muted-foreground font-mono text-sm">
-                {formData.primary_keyword}
+                {formData.primaryKeyword}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <Button
-              variant={brief.nw_guidelines ? "default" : "outline"}
-              onClick={() => setImportModalOpen(true)}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              {brief.nw_guidelines ? "Regenerieren" : "NW Guidelines"}
-            </Button>
+            {!isNew && (
+              <Button
+                variant={nwGuidelines ? "default" : "outline"}
+                onClick={() => setImportModalOpen(true)}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {nwGuidelines ? "Regenerieren" : "NW Guidelines"}
+              </Button>
+            )}
             <Button onClick={saveBrief} disabled={saving}>
               {saving ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -328,9 +248,9 @@ export default function BriefDetail() {
         <Tabs defaultValue="brief" className="w-full">
           <TabsList>
             <TabsTrigger value="brief">Brief Details</TabsTrigger>
-            <TabsTrigger value="guidelines" disabled={!brief.nw_guidelines}>
+            <TabsTrigger value="guidelines" disabled={!nwGuidelines}>
               SEO Guidelines
-              {brief.nw_guidelines && (
+              {nwGuidelines && (
                 <Badge variant="secondary" className="ml-2 text-xs">
                   NW
                 </Badge>
@@ -351,7 +271,9 @@ export default function BriefDetail() {
                     <Input
                       id="title"
                       value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, title: e.target.value })
+                      }
                     />
                   </div>
 
@@ -359,16 +281,20 @@ export default function BriefDetail() {
                     <Label htmlFor="keyword">Primary Keyword</Label>
                     <Input
                       id="keyword"
-                      value={formData.primary_keyword}
-                      onChange={(e) => setFormData({ ...formData, primary_keyword: e.target.value })}
+                      value={formData.primaryKeyword}
+                      onChange={(e) =>
+                        setFormData({ ...formData, primaryKeyword: e.target.value })
+                      }
                     />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="intent">Search Intent</Label>
                     <Select
-                      value={formData.search_intent}
-                      onValueChange={(value) => setFormData({ ...formData, search_intent: value })}
+                      value={formData.searchIntent}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, searchIntent: value })
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -377,7 +303,9 @@ export default function BriefDetail() {
                         <SelectItem value="informational">Informational</SelectItem>
                         <SelectItem value="transactional">Transaktional</SelectItem>
                         <SelectItem value="navigational">Navigational</SelectItem>
-                        <SelectItem value="commercial">Commercial Investigation</SelectItem>
+                        <SelectItem value="commercial">
+                          Commercial Investigation
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -386,13 +314,17 @@ export default function BriefDetail() {
                     <Label htmlFor="status">Status</Label>
                     <Select
                       value={formData.status}
-                      onValueChange={(value) => setFormData({ ...formData, status: value })}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, status: value })
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="pending" disabled>Ausstehend</SelectItem>
+                        <SelectItem value="pending" disabled>
+                          Ausstehend
+                        </SelectItem>
                         <SelectItem value="draft">Entwurf</SelectItem>
                         <SelectItem value="in_progress">In Bearbeitung</SelectItem>
                         <SelectItem value="completed">Abgeschlossen</SelectItem>
@@ -413,8 +345,10 @@ export default function BriefDetail() {
                     <Input
                       id="audience"
                       placeholder="z.B. SEO Anfänger, Marketing Manager"
-                      value={formData.target_audience}
-                      onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
+                      value={formData.targetAudience}
+                      onChange={(e) =>
+                        setFormData({ ...formData, targetAudience: e.target.value })
+                      }
                     />
                   </div>
 
@@ -424,7 +358,9 @@ export default function BriefDetail() {
                       id="tonality"
                       placeholder="z.B. professionell, freundlich, locker"
                       value={formData.tonality}
-                      onChange={(e) => setFormData({ ...formData, tonality: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, tonality: e.target.value })
+                      }
                     />
                   </div>
 
@@ -433,8 +369,13 @@ export default function BriefDetail() {
                     <Input
                       id="length"
                       type="number"
-                      value={formData.target_length}
-                      onChange={(e) => setFormData({ ...formData, target_length: parseInt(e.target.value) || 1500 })}
+                      value={formData.targetLength}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          targetLength: parseInt(e.target.value) || 1500,
+                        })
+                      }
                     />
                   </div>
 
@@ -445,7 +386,9 @@ export default function BriefDetail() {
                       placeholder="Zusätzliche Anweisungen..."
                       rows={4}
                       value={formData.notes}
-                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, notes: e.target.value })
+                      }
                     />
                   </div>
                 </CardContent>
@@ -453,15 +396,18 @@ export default function BriefDetail() {
             </div>
 
             {/* NeuronWriter CTA if no guidelines */}
-            {!brief.nw_guidelines && (
+            {!isNew && !nwGuidelines && (
               <Card className="border-dashed border-primary/50 bg-primary/5">
                 <CardContent className="flex items-center justify-between py-6">
                   <div className="flex items-center gap-4">
                     <Sparkles className="h-8 w-8 text-primary" />
                     <div>
-                      <h3 className="font-semibold">NeuronWriter Guidelines importieren</h3>
+                      <h3 className="font-semibold">
+                        NeuronWriter Guidelines importieren
+                      </h3>
                       <p className="text-sm text-muted-foreground">
-                        Lade NLP-Keywords, Content-Fragen und Konkurrenz-Analyse für optimalen SEO-Content.
+                        Lade NLP-Keywords, Content-Fragen und Konkurrenz-Analyse
+                        für optimalen SEO-Content.
                       </p>
                     </div>
                   </div>
@@ -474,31 +420,33 @@ export default function BriefDetail() {
             )}
 
             {/* Workflow Actions */}
-            <WorkflowActions
-              briefId={id!}
-              hasGuidelines={!!brief.nw_guidelines}
-              articleId={articleId}
-              templateId={templateId}
-              onOpenImport={() => setImportModalOpen(true)}
-              onArticleGenerated={setArticleId}
-            />
+            {!isNew && (
+              <WorkflowActions
+                briefId={id!}
+                hasGuidelines={!!nwGuidelines}
+                articleId={articleId}
+                templateId={null}
+                onOpenImport={() => setImportModalOpen(true)}
+                onArticleGenerated={() => {}}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="guidelines" className="mt-4">
-            {brief.nw_guidelines && (
-              <GuidelinesDisplay guidelines={brief.nw_guidelines} />
-            )}
+            {nwGuidelines && <GuidelinesDisplay guidelines={nwGuidelines} />}
           </TabsContent>
         </Tabs>
       </div>
 
       {/* NeuronWriter Import Modal */}
-      <NeuronWriterImport
-        open={importModalOpen}
-        onOpenChange={setImportModalOpen}
-        keyword={formData.primary_keyword}
-        onImport={handleGuidelinesImport}
-      />
+      {!isNew && (
+        <NeuronWriterImport
+          open={importModalOpen}
+          onOpenChange={setImportModalOpen}
+          keyword={formData.primaryKeyword}
+          onImport={handleGuidelinesImport}
+        />
+      )}
     </AppLayout>
   );
 }

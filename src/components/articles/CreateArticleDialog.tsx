@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useMutation } from "convex/react";
 import {
   Dialog,
   DialogContent,
@@ -13,8 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
+import { api } from "../../../convex/_generated/api";
 
 interface CreateArticleDialogProps {
   open: boolean;
@@ -29,6 +30,7 @@ export function CreateArticleDialog({
 }: CreateArticleDialogProps) {
   const { toast } = useToast();
   const { currentProject } = useWorkspaceConvex();
+  const createArticle = useMutation(api.tables.articles.create);
   const [isCreating, setIsCreating] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
@@ -57,20 +59,13 @@ export function CreateArticleDialog({
 
     setIsCreating(true);
     try {
-      const { data, error } = await supabase
-        .from("articles")
-        .insert({
-          project_id: currentProject._id,
-          title: formData.title.trim(),
-          primary_keyword: formData.primaryKeyword.trim() || null,
-          content_markdown: formData.content.trim() || null,
-          status: "draft",
-          version: 1,
-        })
-        .select("id")
-        .single();
-
-      if (error) throw error;
+      const articleId = await createArticle({
+        projectId: currentProject._id,
+        title: formData.title.trim(),
+        primaryKeyword: formData.primaryKeyword.trim() || undefined,
+        contentMarkdown: formData.content.trim() || undefined,
+        status: "draft",
+      });
 
       toast({
         title: "Artikel erstellt",
@@ -80,7 +75,7 @@ export function CreateArticleDialog({
       // Reset form
       setFormData({ title: "", primaryKeyword: "", content: "" });
       onOpenChange(false);
-      onCreated(data.id);
+      onCreated(articleId);
     } catch (error) {
       console.error("Error creating article:", error);
       toast({

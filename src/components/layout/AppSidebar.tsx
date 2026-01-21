@@ -1,6 +1,6 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { NavLink } from '@/components/NavLink';
-import { useAuth } from '@/lib/auth';
+import { useUser, useClerk } from '@clerk/clerk-react';
 import {
   Sidebar,
   SidebarContent,
@@ -49,7 +49,8 @@ const settingsNavItems = [
 ];
 
 export function AppSidebar() {
-  const { user, signOut } = useAuth();
+  const { user } = useUser();
+  const { signOut } = useClerk();
   const navigate = useNavigate();
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
@@ -59,9 +60,9 @@ export function AppSidebar() {
     navigate('/auth');
   };
 
-  const userInitials = user?.user_metadata?.full_name
-    ? user.user_metadata.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase()
-    : user?.email?.charAt(0).toUpperCase() || 'U';
+  const userInitials = user?.fullName
+    ? user.fullName.split(' ').map((n: string) => n[0]).join('').toUpperCase()
+    : user?.primaryEmailAddress?.emailAddress?.charAt(0).toUpperCase() || 'U';
 
   return (
     <Sidebar collapsible="icon">
@@ -170,10 +171,10 @@ export function AppSidebar() {
                     <>
                       <div className="flex flex-col flex-1 text-left text-xs">
                         <span className="font-medium truncate">
-                          {user?.user_metadata?.full_name || 'Benutzer'}
+                          {user?.fullName || 'Benutzer'}
                         </span>
                         <span className="text-sidebar-muted truncate">
-                          {user?.email}
+                          {user?.primaryEmailAddress?.emailAddress}
                         </span>
                       </div>
                       <ChevronUp className="h-4 w-4" />

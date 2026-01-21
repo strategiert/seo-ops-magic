@@ -1,28 +1,16 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, FileText, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, FileText, Search } from "lucide-react";
+import { useQuery } from "convex/react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import { BriefCreationWizard } from "@/components/briefs/BriefCreationWizard";
 import { DataStateWrapper, EmptyState, CardGridSkeleton } from "@/components/data-state";
-
-interface ContentBrief {
-  id: string;
-  title: string;
-  primary_keyword: string;
-  search_intent: string | null;
-  status: string | null;
-  priority_score: number | null;
-  target_length: number | null;
-  created_at: string;
-  nw_guidelines: unknown | null;
-}
+import { api } from "../../convex/_generated/api";
 
 const statusColors: Record<string, string> = {
   pending: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
@@ -40,73 +28,28 @@ const intentLabels: Record<string, string> = {
 
 export default function Briefs() {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const { currentProject } = useWorkspaceConvex();
-  
-  const [briefs, setBriefs] = useState<ContentBrief[]>([]);
-  const [loading, setLoading] = useState(true);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [page, setPage] = useState(0);
-  const [totalCount, setTotalCount] = useState(0);
-  const PAGE_SIZE = 50;
 
-  useEffect(() => {
-    if (currentProject?._id) {
-      loadBriefs();
-    }
-  }, [currentProject?._id, page]);
+  // Use Convex query for real-time briefs data
+  const briefs = useQuery(
+    api.tables.contentBriefs.listByProject,
+    currentProject?._id ? { projectId: currentProject._id } : "skip"
+  );
 
-  const loadBriefs = async () => {
-    if (!currentProject?._id) return;
+  const loading = briefs === undefined;
 
-    setLoading(true);
-    try {
-      const from = page * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
-
-      // Get count
-      const { count } = await supabase
-        .from("content_briefs")
-        .select("*", { count: "exact", head: true })
-        .eq("project_id", currentProject._id);
-
-      setTotalCount(count || 0);
-
-      // Get paginated data
-      const { data, error } = await supabase
-        .from("content_briefs")
-        .select("*")
-        .eq("project_id", currentProject._id)
-        .order("created_at", { ascending: false })
-        .range(from, to);
-
-      if (error) throw error;
-      setBriefs(data || []);
-    } catch (error) {
-      console.error("Error loading briefs:", error);
-      toast({
-        title: "Fehler beim Laden",
-        description: "Content Briefs konnten nicht geladen werden.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Refetch briefs when wizard closes (in case new brief was created)
-  const handleWizardChange = (open: boolean) => {
-    setWizardOpen(open);
-    if (!open) {
-      loadBriefs();
-    }
-  };
-
-  const filteredBriefs = briefs.filter(
+  const filteredBriefs = (briefs ?? []).filter(
     (brief) =>
       brief.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      brief.primary_keyword.toLowerCase().includes(searchQuery.toLowerCase())
+      brief.primaryKeyword.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Sort by creation time descending
+  const sortedBriefs = [...filteredBriefs].sort(
+    (a, b) => b._creationTime - a._creationTime
   );
 
   if (!currentProject) {
@@ -137,7 +80,7 @@ export default function Briefs() {
               SEO-optimierte Briefings für {currentProject.name}
             </p>
           </div>
-          
+
           <Button onClick={() => setWizardOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Neues Brief
@@ -160,7 +103,7 @@ export default function Briefs() {
         {/* Briefs List */}
         <DataStateWrapper
           isLoading={loading}
-          data={filteredBriefs}
+          data={sortedBriefs}
           skeleton={<CardGridSkeleton cards={6} />}
           emptyState={
             <EmptyState
@@ -187,9 +130,9 @@ export default function Briefs() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {briefs.map((brief) => (
                 <Card
-                  key={brief.id}
+                  key={brief._id}
                   className="cursor-pointer hover:border-primary/50 transition-colors"
-                  onClick={() => navigate(`/briefs/${brief.id}`)}
+                  onClick={() => navigate(`/briefs/${brief._id}`)}
                 >
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">
@@ -199,20 +142,20 @@ export default function Briefs() {
                       </Badge>
                     </div>
                     <CardDescription className="font-mono text-xs">
-                      {brief.primary_keyword}
+                      {brief.primaryKeyword}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      {brief.search_intent && (
+                      {brief.searchIntent && (
                         <Badge variant="outline" className="text-xs">
-                          {intentLabels[brief.search_intent] || brief.search_intent}
+                          {intentLabels[brief.searchIntent] || brief.searchIntent}
                         </Badge>
                       )}
-                      {brief.target_length && (
-                        <span>{brief.target_length} Wörter</span>
+                      {brief.targetLength && (
+                        <span>{brief.targetLength} Wörter</span>
                       )}
-                      {brief.nw_guidelines && (
+                      {brief.nwGuidelines && (
                         <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
                           NW
                         </Badge>
@@ -224,44 +167,12 @@ export default function Briefs() {
             </div>
           )}
         </DataStateWrapper>
-
-        {/* Pagination Controls */}
-        {!loading && filteredBriefs.length > 0 && totalCount > PAGE_SIZE && (
-          <div className="flex items-center justify-between px-4 py-3 border rounded-lg">
-            <div className="text-sm text-muted-foreground">
-              Zeige {page * PAGE_SIZE + 1} bis {Math.min((page + 1) * PAGE_SIZE, totalCount)} von {totalCount} Briefs
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Zurück
-              </Button>
-              <div className="text-sm text-muted-foreground">
-                Seite {page + 1} von {Math.ceil(totalCount / PAGE_SIZE)}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={(page + 1) * PAGE_SIZE >= totalCount}
-              >
-                Weiter
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Brief Creation Wizard */}
-      <BriefCreationWizard 
-        open={wizardOpen} 
-        onOpenChange={handleWizardChange} 
+      <BriefCreationWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
       />
     </AppLayout>
   );

@@ -32,23 +32,68 @@ import {
 } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
-import { useBrandProfile, type Product, type Service, type Persona, type Competitor } from "@/hooks/useBrandProfile";
+import { useBrandProfileConvex } from "@/hooks/useBrandProfileConvex";
+
+// Types for brand profile data
+interface Product {
+  name: string;
+  description: string;
+  price?: string;
+  features: string[];
+}
+
+interface Service {
+  name: string;
+  description: string;
+  pricing_model?: string;
+}
+
+interface Persona {
+  name: string;
+  demographics: string;
+  pain_points: string[];
+  goals: string[];
+}
+
+interface Competitor {
+  name: string;
+  domain: string;
+  strengths?: string[];
+  weaknesses?: string[];
+}
 
 export function BrandIntelligenceSetup() {
   const { toast } = useToast();
   const { currentProject } = useWorkspaceConvex();
   const {
-    brandProfile,
+    brandProfile: rawBrandProfile,
     loading,
-    error,
     crawlStatus,
     triggerCrawl,
     triggerAnalysis,
-    updateProfile,
     syncVectorStore,
-    resetProfile,
-    refreshProfile,
-  } = useBrandProfile();
+  } = useBrandProfileConvex();
+
+  // Map Convex camelCase to component's expected snake_case format
+  const brandProfile = rawBrandProfile ? {
+    brand_name: rawBrandProfile.brandName,
+    tagline: rawBrandProfile.tagline,
+    mission_statement: rawBrandProfile.missionStatement,
+    brand_story: rawBrandProfile.brandStory,
+    brand_voice: rawBrandProfile.brandVoice,
+    products: rawBrandProfile.products,
+    services: rawBrandProfile.services,
+    personas: rawBrandProfile.personas,
+    brand_keywords: rawBrandProfile.brandKeywords,
+    competitors: rawBrandProfile.competitors,
+    visual_identity: rawBrandProfile.visualIdentity,
+    crawl_error: rawBrandProfile.crawlError,
+    openai_vector_store_id: rawBrandProfile.openaiVectorStoreId,
+    last_analysis_at: rawBrandProfile.lastAnalysisAt,
+    internal_links: [], // Not in Convex schema yet
+  } : null;
+
+  const error = null; // Error handling via toast
 
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [crawling, setCrawling] = useState(false);
@@ -78,7 +123,7 @@ export function BrandIntelligenceSetup() {
   };
 
   const handleStartCrawl = async () => {
-    const url = websiteUrl || currentProject?.wp_url || `https://${currentProject?.domain}`;
+    const url = websiteUrl || currentProject?.wpUrl || `https://${currentProject?.domain}`;
     if (!url) {
       toast({
         title: "Fehler",
@@ -145,47 +190,22 @@ export function BrandIntelligenceSetup() {
   };
 
   const handleReset = async () => {
-    if (!confirm("Bist du sicher? Alle Brand-Daten werden gelöscht und der Crawl-Status zurückgesetzt.")) {
-      return;
-    }
-
-    setResetting(true);
-    const result = await resetProfile();
-    setResetting(false);
-    setShowCrawlForm(false);
-
-    if (result.success) {
-      toast({
-        title: "Zurückgesetzt",
-        description: "Das Brand-Profil wurde zurückgesetzt.",
-      });
-    } else {
-      toast({
-        title: "Fehler",
-        description: result.error || "Reset fehlgeschlagen.",
-        variant: "destructive",
-      });
-    }
+    // TODO: Implement reset in Convex
+    toast({
+      title: "Nicht verfügbar",
+      description: "Reset-Funktion wird noch migriert.",
+      variant: "destructive",
+    });
   };
 
   const handleSaveField = async (field: string, value: unknown) => {
-    setSaving(true);
-    const result = await updateProfile({ [field]: value });
-    setSaving(false);
+    // TODO: Implement updateProfile in Convex
+    toast({
+      title: "Nicht verfügbar",
+      description: "Bearbeiten wird noch migriert.",
+      variant: "destructive",
+    });
     setEditingField(null);
-
-    if (result.success) {
-      toast({
-        title: "Gespeichert",
-        description: "Änderung wurde gespeichert.",
-      });
-    } else {
-      toast({
-        title: "Fehler",
-        description: result.error || "Speichern fehlgeschlagen.",
-        variant: "destructive",
-      });
-    }
   };
 
   const startEditing = (field: string, value: string) => {
@@ -301,7 +321,7 @@ export function BrandIntelligenceSetup() {
               KI-gestützte Analyse der Markenidentität für konsistente Inhalte
             </CardDescription>
           </div>
-          <Button variant="ghost" size="icon" onClick={refreshProfile} disabled={loading}>
+          <Button variant="ghost" size="icon" disabled={loading} title="Daten werden automatisch aktualisiert">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
         </div>
@@ -313,7 +333,7 @@ export function BrandIntelligenceSetup() {
             <div className="space-y-2">
               <Label>Website-URL</Label>
               <Input
-                placeholder={currentProject?.wp_url || `https://${currentProject?.domain || "beispiel.de"}`}
+                placeholder={currentProject?.wpUrl || `https://${currentProject?.domain || "beispiel.de"}`}
                 value={websiteUrl}
                 onChange={(e) => setWebsiteUrl(e.target.value)}
               />
@@ -357,7 +377,7 @@ export function BrandIntelligenceSetup() {
                 <div className="space-y-2">
                   <Label>Website-URL</Label>
                   <Input
-                    placeholder={currentProject?.wp_url || `https://${currentProject?.domain || "beispiel.de"}`}
+                    placeholder={currentProject?.wpUrl || `https://${currentProject?.domain || "beispiel.de"}`}
                     value={websiteUrl}
                     onChange={(e) => setWebsiteUrl(e.target.value)}
                   />
