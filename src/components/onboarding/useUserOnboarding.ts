@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useAuth } from "@/lib/auth";
+import { useUser } from "@clerk/clerk-react";
 
 const LS_KEY = "seo_content_ops.onboarding_completed";
 
@@ -19,7 +19,7 @@ const LS_KEY = "seo_content_ops.onboarding_completed";
  * }, [isFirstTimeUser]);
  */
 export function useUserOnboarding() {
-  const { user } = useAuth();
+  const { user } = useUser();
   const [isFirstTimeUser, setIsFirstTimeUser] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
 

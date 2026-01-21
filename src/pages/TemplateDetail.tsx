@@ -1,69 +1,34 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, Loader2, Copy, Check } from "lucide-react";
+import { useQuery } from "convex/react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-
-interface Template {
-  id: string;
-  project_id: string;
-  article_id: string | null;
-  name: string;
-  design_preset: string | null;
-  template_json: any;
-  created_at: string;
-  updated_at: string;
-}
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 export default function TemplateDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [template, setTemplate] = useState<Template | null>(null);
-  const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (id) {
-      loadTemplate();
-    }
-  }, [id]);
+  // Convex query
+  const template = useQuery(
+    api.tables.elementorTemplates.get,
+    id ? { id: id as Id<"elementorTemplates"> } : "skip"
+  );
 
-  const loadTemplate = async () => {
-    if (!id) return;
-
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("elementor_templates")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (error) throw error;
-      setTemplate(data as Template);
-    } catch (error) {
-      console.error("Error loading template:", error);
-      toast({
-        title: "Fehler beim Laden",
-        description: "Template konnte nicht geladen werden.",
-        variant: "destructive",
-      });
-      navigate("/templates");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loading = template === undefined;
 
   const downloadTemplate = () => {
     if (!template) return;
 
-    const blob = new Blob([JSON.stringify(template.template_json, null, 2)], {
+    const blob = new Blob([JSON.stringify(template.templateJson, null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
@@ -83,7 +48,7 @@ export default function TemplateDetail() {
     if (!template) return;
 
     try {
-      await navigator.clipboard.writeText(JSON.stringify(template.template_json, null, 2));
+      await navigator.clipboard.writeText(JSON.stringify(template.templateJson, null, 2));
       setCopied(true);
       toast({
         title: "Kopiert",
@@ -109,7 +74,7 @@ export default function TemplateDetail() {
     );
   }
 
-  if (!template) {
+  if (template === null) {
     return (
       <AppLayout>
         <div className="text-center py-12">
@@ -134,9 +99,9 @@ export default function TemplateDetail() {
             <div>
               <h1 className="text-2xl font-bold">{template.name}</h1>
               <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline">{template.design_preset || "default"}</Badge>
+                <Badge variant="outline">{template.designPreset || "default"}</Badge>
                 <span className="text-muted-foreground text-sm">
-                  Erstellt am {new Date(template.created_at).toLocaleDateString("de-DE")}
+                  Erstellt am {new Date(template._creationTime).toLocaleDateString("de-DE")}
                 </span>
               </div>
             </div>
@@ -167,20 +132,20 @@ export default function TemplateDetail() {
             <CardContent className="space-y-3">
               <div>
                 <p className="text-sm text-muted-foreground">Design Preset</p>
-                <p className="font-medium">{template.design_preset || "default"}</p>
+                <p className="font-medium">{template.designPreset || "default"}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Elemente</p>
                 <p className="font-medium">
-                  {Array.isArray(template.template_json?.content)
-                    ? template.template_json.content.length
+                  {Array.isArray(template.templateJson?.content)
+                    ? template.templateJson.content.length
                     : 0}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Größe</p>
                 <p className="font-medium">
-                  {(JSON.stringify(template.template_json).length / 1024).toFixed(1)} KB
+                  {(JSON.stringify(template.templateJson).length / 1024).toFixed(1)} KB
                 </p>
               </div>
             </CardContent>
@@ -193,7 +158,7 @@ export default function TemplateDetail() {
             </CardHeader>
             <CardContent>
               <pre className="text-xs bg-muted p-4 rounded overflow-auto max-h-[500px] font-mono">
-                {JSON.stringify(template.template_json, null, 2)}
+                {JSON.stringify(template.templateJson, null, 2)}
               </pre>
             </CardContent>
           </Card>

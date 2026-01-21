@@ -318,7 +318,123 @@ export default defineSchema({
     .index("by_brand_profile", ["brandProfileId"])
     .index("by_domain", ["domain"]),
 
-  // ============ TIER 7: Utility Tables ============
+  // ============ TIER 7: Agent System & Credits ============
+
+  /**
+   * Customer credits - balance tracking for AI agent usage
+   */
+  credits: defineTable({
+    userId: v.string(), // Clerk user ID
+    workspaceId: v.id("workspaces"),
+    balance: v.number(), // Current credit balance
+    tier: v.string(), // 'free' | 'core' | 'growth' | 'enterprise'
+    monthlyAllowance: v.number(), // Monthly credit allocation
+    bonusCredits: v.optional(v.number()), // One-time bonus credits
+    resetDay: v.number(), // Day of month for reset (1-28)
+    lastResetAt: v.optional(v.number()), // Unix timestamp
+    // Tier-specific features
+    enabledAgents: v.optional(v.any()), // Array of enabled agent IDs
+    concurrencyLimit: v.optional(v.number()), // Max parallel jobs
+  })
+    .index("by_user", ["userId"])
+    .index("by_workspace", ["workspaceId"]),
+
+  /**
+   * Usage log - detailed tracking of all agent executions
+   */
+  usageLog: defineTable({
+    userId: v.string(),
+    workspaceId: v.id("workspaces"),
+    projectId: v.optional(v.id("projects")),
+    agentId: v.string(), // 'seo-writer' | 'social-creator' | etc.
+    jobId: v.optional(v.string()), // Inngest job ID
+    // Resource tracking
+    articleId: v.optional(v.id("articles")),
+    briefId: v.optional(v.id("contentBriefs")),
+    // Usage metrics
+    creditsUsed: v.number(),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    totalTokens: v.optional(v.number()),
+    // Cost tracking (for internal analytics)
+    estimatedCostCents: v.optional(v.number()), // Actual API cost in cents
+    // Status
+    status: v.string(), // 'pending' | 'running' | 'completed' | 'failed'
+    errorMessage: v.optional(v.string()),
+    // Timing
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_workspace", ["workspaceId"])
+    .index("by_agent", ["agentId"])
+    .index("by_job", ["jobId"])
+    .index("by_date", ["startedAt"]),
+
+  /**
+   * Agent jobs - track async Inngest job execution
+   */
+  agentJobs: defineTable({
+    inngestEventId: v.string(), // Inngest event ID for tracking
+    userId: v.string(),
+    workspaceId: v.id("workspaces"),
+    projectId: v.optional(v.id("projects")),
+    // Job definition
+    agentId: v.string(),
+    eventType: v.string(), // 'article/generate' | 'content/generate-social-posts' | etc.
+    inputData: v.any(), // Event payload
+    // Status tracking
+    status: v.string(), // 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+    progress: v.optional(v.number()), // 0-100
+    currentStep: v.optional(v.string()),
+    // Results
+    result: v.optional(v.any()),
+    errorMessage: v.optional(v.string()),
+    // Credits
+    creditsReserved: v.number(), // Reserved on job start
+    creditsUsed: v.optional(v.number()), // Actual usage (may differ)
+    // Timing
+    createdAt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_inngest_event", ["inngestEventId"])
+    .index("by_user", ["userId"])
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_project", ["projectId"]),
+
+  /**
+   * Content assets - repurposed content from articles
+   * Social posts, ad copies, press releases, newsletters, etc.
+   */
+  contentAssets: defineTable({
+    projectId: v.id("projects"),
+    articleId: v.optional(v.id("articles")),
+    jobId: v.optional(v.string()), // Inngest job that created this
+    // Asset type
+    assetType: v.string(), // 'social_post' | 'ad_copy' | 'press_release' | 'newsletter' | 'linkbait'
+    platform: v.optional(v.string()), // 'linkedin' | 'twitter' | 'instagram' | 'facebook' | 'google' | 'meta'
+    accountType: v.optional(v.string()), // 'company' | 'employee'
+    // Content
+    title: v.optional(v.string()),
+    content: v.string(),
+    contentJson: v.optional(v.any()), // Structured content (e.g., press release sections)
+    // Metadata
+    metadata: v.optional(v.any()), // Platform-specific data (hashtags, CTAs, etc.)
+    // Status
+    status: v.string(), // 'draft' | 'approved' | 'scheduled' | 'published'
+    scheduledFor: v.optional(v.number()),
+    publishedAt: v.optional(v.number()),
+    externalId: v.optional(v.string()), // ID from platform after publishing
+    externalUrl: v.optional(v.string()),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_article", ["articleId"])
+    .index("by_type", ["assetType"])
+    .index("by_platform", ["platform"]),
+
+  // ============ TIER 8: Utility Tables ============
 
   /**
    * Research cache - keyword research and URL scraping cache

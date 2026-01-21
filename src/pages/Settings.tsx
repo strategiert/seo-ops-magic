@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Settings as SettingsIcon, Link2, AlertCircle, Wrench, Building2, RotateCcw } from "lucide-react";
+import { useMutation } from "convex/react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,12 +16,12 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
-import { supabase } from "@/integrations/supabase/client";
 import { NeuronWriterSetup } from "@/components/settings/NeuronWriterSetup";
 import { WordPressSetup } from "@/components/settings/WordPressSetup";
 import { DatabaseAdmin } from "@/components/settings/DatabaseAdmin";
 import { BrandIntelligenceSetup } from "@/components/settings/BrandIntelligenceSetup";
 import { useTour, useUserOnboarding } from "@/components/onboarding";
+import { api } from "../../convex/_generated/api";
 
 const LANGUAGES = [
   { value: "de", label: "Deutsch" },
@@ -60,6 +61,9 @@ export default function Settings() {
   const { resetOnboarding } = useUserOnboarding();
   const { startTour } = useTour();
 
+  // Convex mutations
+  const updateProject = useMutation(api.tables.projects.update);
+
   const handleRestartTour = () => {
     resetOnboarding();
     startTour();
@@ -79,65 +83,37 @@ export default function Settings() {
     defaultDesignPreset: "default",
   });
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  // Load project defaults
+  // Sync defaults from currentProject
   useEffect(() => {
-    const loadDefaults = async () => {
-      if (!currentProject?._id) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from("projects")
-          .select("domain, wp_url, default_language, default_country, default_tonality, default_target_audience, default_design_preset")
-          .eq("id", currentProject._id)
-          .single();
-
-        if (error) throw error;
-
-        if (data) {
-          setDefaults({
-            domain: data.domain || "",
-            wpUrl: data.wp_url || "",
-            defaultLanguage: data.default_language || "de",
-            defaultCountry: data.default_country || "DE",
-            defaultTonality: data.default_tonality || "",
-            defaultTargetAudience: data.default_target_audience || "",
-            defaultDesignPreset: data.default_design_preset || "default",
-          });
-        }
-      } catch (error) {
-        console.error("Error loading project defaults:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadDefaults();
-  }, [currentProject?._id]);
+    if (currentProject) {
+      setDefaults({
+        domain: currentProject.domain || "",
+        wpUrl: currentProject.wpUrl || "",
+        defaultLanguage: currentProject.defaultLanguage || "de",
+        defaultCountry: currentProject.defaultCountry || "DE",
+        defaultTonality: currentProject.defaultTonality || "",
+        defaultTargetAudience: currentProject.defaultTargetAudience || "",
+        defaultDesignPreset: currentProject.defaultDesignPreset || "default",
+      });
+    }
+  }, [currentProject]);
 
   const saveDefaults = async () => {
     if (!currentProject?._id) return;
 
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("projects")
-        .update({
-          domain: defaults.domain || null,
-          wp_url: defaults.wpUrl || null,
-          default_language: defaults.defaultLanguage,
-          default_country: defaults.defaultCountry,
-          default_tonality: defaults.defaultTonality || null,
-          default_target_audience: defaults.defaultTargetAudience || null,
-          default_design_preset: defaults.defaultDesignPreset,
-        })
-        .eq("id", currentProject._id);
-
-      if (error) throw error;
+      await updateProject({
+        id: currentProject._id,
+        domain: defaults.domain || undefined,
+        wpUrl: defaults.wpUrl || undefined,
+        defaultLanguage: defaults.defaultLanguage,
+        defaultCountry: defaults.defaultCountry,
+        defaultTonality: defaults.defaultTonality || undefined,
+        defaultTargetAudience: defaults.defaultTargetAudience || undefined,
+        defaultDesignPreset: defaults.defaultDesignPreset,
+      });
 
       toast({
         title: "Gespeichert",

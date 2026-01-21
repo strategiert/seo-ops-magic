@@ -1,4 +1,4 @@
-import { query, mutation } from "../_generated/server";
+import { query, mutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import { requireAuth } from "../auth";
 
@@ -165,5 +165,17 @@ export const remove = mutation({
     // For now, just delete the project
 
     await ctx.db.delete(id);
+  },
+});
+
+// ============ Internal Functions (for agents, no auth) ============
+
+/**
+ * Get a project by ID without auth (for agent internal use)
+ */
+export const getInternal = internalQuery({
+  args: { id: v.id("projects") },
+  handler: async (ctx, { id }) => {
+    return await ctx.db.get(id);
   },
 });

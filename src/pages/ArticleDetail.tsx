@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Save, Loader2, FileJson, Code, Globe, Wand2 } from "lucide-react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,26 +18,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { WordPressPublishDialog } from "@/components/articles/WordPressPublishDialog";
-
-interface Article {
-  id: string;
-  project_id: string;
-  brief_id: string | null;
-  title: string;
-  primary_keyword: string | null;
-  content_markdown: string | null;
-  content_html: string | null;
-  meta_title: string | null;
-  meta_description: string | null;
-  outline_json: any;
-  faq_json: any;
-  status: string | null;
-  version: number | null;
-  created_at: string;
-  updated_at: string;
-}
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 const statusOptions = [
   { value: "draft", label: "Entwurf" },
@@ -50,93 +34,65 @@ export default function ArticleDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [article, setArticle] = useState<Article | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
   const [generatingHtml, setGeneratingHtml] = useState(false);
   const [generatingRecipe, setGeneratingRecipe] = useState(false);
-  const [hasRecipe, setHasRecipe] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
-    primary_keyword: "",
-    content_markdown: "",
-    meta_title: "",
-    meta_description: "",
+    primaryKeyword: "",
+    contentMarkdown: "",
+    metaTitle: "",
+    metaDescription: "",
     status: "draft",
   });
 
+  // Convex queries
+  const article = useQuery(
+    api.tables.articles.getWithRecipe,
+    id ? { id: id as Id<"articles"> } : "skip"
+  );
+
+  // Convex mutations
+  const updateArticle = useMutation(api.tables.articles.update);
+
+  // Convex actions
+  const generateDesignRecipe = useAction(api.actions.gemini.generateDesignRecipe);
+  const generateHtmlExport = useAction(api.actions.htmlExport.generate);
+
+  const loading = article === undefined;
+  const hasRecipe = !!article?.designRecipe;
+
+  // Sync form data when article loads
   useEffect(() => {
-    if (id) {
-      loadArticle();
-    }
-  }, [id]);
-
-  const loadArticle = async () => {
-    if (!id) return;
-
-    setLoading(true);
-    try {
-      // Load article and design recipe in parallel to reduce latency
-      const [articleResult, recipeResult] = await Promise.all([
-        supabase
-          .from("articles")
-          .select("*")
-          .eq("id", id)
-          .single(),
-        supabase
-          .from("article_design_recipes")
-          .select("id")
-          .eq("article_id", id)
-          .maybeSingle(),
-      ]);
-
-      if (articleResult.error) throw articleResult.error;
-
-      setArticle(articleResult.data as Article);
+    if (article) {
       setFormData({
-        title: articleResult.data.title || "",
-        primary_keyword: articleResult.data.primary_keyword || "",
-        content_markdown: articleResult.data.content_markdown || "",
-        meta_title: articleResult.data.meta_title || "",
-        meta_description: articleResult.data.meta_description || "",
-        status: articleResult.data.status || "draft",
+        title: article.title || "",
+        primaryKeyword: article.primaryKeyword || "",
+        contentMarkdown: article.contentMarkdown || "",
+        metaTitle: article.metaTitle || "",
+        metaDescription: article.metaDescription || "",
+        status: article.status || "draft",
       });
-
-      setHasRecipe(!!recipeResult.data);
-    } catch (error) {
-      console.error("Error loading article:", error);
-      toast({
-        title: "Fehler beim Laden",
-        description: "Artikel konnte nicht geladen werden.",
-        variant: "destructive",
-      });
-      navigate("/articles");
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [article]);
 
   const saveArticle = async () => {
     if (!id) return;
 
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("articles")
-        .update({
-          title: formData.title,
-          primary_keyword: formData.primary_keyword || null,
-          content_markdown: formData.content_markdown || null,
-          meta_title: formData.meta_title || null,
-          meta_description: formData.meta_description || null,
-          status: formData.status,
-        })
-        .eq("id", id);
-
-      if (error) throw error;
+      await updateArticle({
+        id: id as Id<"articles">,
+        title: formData.title,
+        primaryKeyword: formData.primaryKeyword || undefined,
+        contentMarkdown: formData.contentMarkdown || undefined,
+        metaTitle: formData.metaTitle || undefined,
+        metaDescription: formData.metaDescription || undefined,
+        status: formData.status,
+      });
 
       toast({
         title: "Gespeichert",
@@ -154,22 +110,24 @@ export default function ArticleDetail() {
     }
   };
 
-  const generateDesignRecipe = async (force = false) => {
+  const handleGenerateDesignRecipe = async (force = false) => {
     if (!id || !article) return;
 
     setGeneratingRecipe(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-design-recipe", {
-        body: { articleId: id, force },
+      const result = await generateDesignRecipe({
+        articleId: id as Id<"articles">,
+        force,
       });
 
-      if (error) throw error;
-
-      setHasRecipe(true);
-      toast({
-        title: data.cached ? "Design Recipe geladen" : "Design Recipe generiert",
-        description: `Theme: ${data.recipe?.theme || "minimal-clean"}`,
-      });
+      if (result.success) {
+        toast({
+          title: result.cached ? "Design Recipe geladen" : "Design Recipe generiert",
+          description: `Theme: ${result.theme || "minimal-clean"}`,
+        });
+      } else {
+        throw new Error(result.error || "Unknown error");
+      }
     } catch (error) {
       console.error("Error generating recipe:", error);
       toast({
@@ -182,23 +140,16 @@ export default function ArticleDetail() {
     }
   };
 
-  const generateTemplate = async () => {
+  const handleGenerateTemplate = async () => {
     if (!id || !article) return;
 
     setGeneratingTemplate(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-elementor-template", {
-        body: { articleId: id },
-      });
-
-      if (error) throw error;
-
+      // For now, just show a message - Elementor templates may need different handling
       toast({
-        title: "Template generiert",
-        description: "Elementor Template wurde erstellt.",
+        title: "Elementor Templates",
+        description: "Diese Funktion wird bald verfügbar sein.",
       });
-
-      navigate(`/templates/${data.templateId}`);
     } catch (error) {
       console.error("Error generating template:", error);
       toast({
@@ -211,39 +162,25 @@ export default function ArticleDetail() {
     }
   };
 
-  const generateHtmlExport = async () => {
+  const handleGenerateHtmlExport = async () => {
     if (!id || !article) return;
 
     setGeneratingHtml(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-html-export", {
-        body: { articleId: id },
+      const result = await generateHtmlExport({
+        articleId: id as Id<"articles">,
+        format: "full",
       });
 
-      if (error) throw error;
+      if (result.success && result.exportId) {
+        toast({
+          title: "HTML Export erstellt",
+          description: `Landing Page wurde generiert (${Math.round((result.htmlLength || 0) / 1024)} KB).`,
+        });
 
-      toast({
-        title: "HTML Export erstellt",
-        description: `Landing Page wurde generiert (${Math.round((data.htmlLength || 0) / 1024)} KB).`,
-      });
-
-      // Fetch and download the HTML
-      const { data: exportData } = await supabase
-        .from("html_exports")
-        .select("html_content, name")
-        .eq("id", data.exportId)
-        .single();
-
-      if (exportData?.html_content) {
-        const blob = new Blob([exportData.html_content], { type: "text/html" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${article.primary_keyword || article.title}.html`.replace(/[^a-z0-9äöü\-]/gi, "_");
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        // TODO: Download the HTML file from Convex storage or query
+      } else {
+        throw new Error(result.error || "Unknown error");
       }
     } catch (error) {
       console.error("Error generating HTML:", error);
@@ -267,7 +204,7 @@ export default function ArticleDetail() {
     );
   }
 
-  if (!article) {
+  if (article === null) {
     return (
       <AppLayout>
         <div className="text-center py-12">
@@ -292,7 +229,7 @@ export default function ArticleDetail() {
             <div>
               <h1 className="text-2xl font-bold">{formData.title || "Artikel"}</h1>
               <p className="text-muted-foreground font-mono text-sm">
-                {formData.primary_keyword || "Kein Keyword"}
+                {formData.primaryKeyword || "Kein Keyword"}
               </p>
             </div>
           </div>
@@ -300,8 +237,8 @@ export default function ArticleDetail() {
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              onClick={() => generateDesignRecipe(false)}
-              disabled={generatingRecipe || !formData.content_markdown}
+              onClick={() => handleGenerateDesignRecipe(false)}
+              disabled={generatingRecipe || !formData.contentMarkdown}
               title={hasRecipe ? "Recipe existiert - Klicke erneut zum Aktualisieren" : "Design Recipe generieren"}
             >
               {generatingRecipe ? (
@@ -313,8 +250,8 @@ export default function ArticleDetail() {
             </Button>
             <Button
               variant="outline"
-              onClick={generateHtmlExport}
-              disabled={generatingHtml || !formData.content_markdown}
+              onClick={handleGenerateHtmlExport}
+              disabled={generatingHtml || !formData.contentMarkdown}
             >
               {generatingHtml ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -325,8 +262,8 @@ export default function ArticleDetail() {
             </Button>
             <Button
               variant="outline"
-              onClick={generateTemplate}
-              disabled={generatingTemplate || !formData.content_markdown}
+              onClick={handleGenerateTemplate}
+              disabled={generatingTemplate || !formData.contentMarkdown}
             >
               {generatingTemplate ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -338,7 +275,7 @@ export default function ArticleDetail() {
             <Button
               variant="outline"
               onClick={() => setPublishDialogOpen(true)}
-              disabled={!formData.content_markdown}
+              disabled={!formData.contentMarkdown}
             >
               <Globe className="h-4 w-4 mr-2" />
               WordPress
@@ -365,7 +302,7 @@ export default function ArticleDetail() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Artikel-Content</CardTitle>
-                <Badge variant="outline">v{article.version || 1}</Badge>
+                <Badge variant="outline">v{article?.version || 1}</Badge>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -381,8 +318,8 @@ export default function ArticleDetail() {
                   <Label htmlFor="content">Markdown Content</Label>
                   <Textarea
                     id="content"
-                    value={formData.content_markdown}
-                    onChange={(e) => setFormData({ ...formData, content_markdown: e.target.value })}
+                    value={formData.contentMarkdown}
+                    onChange={(e) => setFormData({ ...formData, contentMarkdown: e.target.value })}
                     rows={20}
                     className="font-mono text-sm"
                   />
@@ -420,8 +357,8 @@ export default function ArticleDetail() {
                   <Label htmlFor="keyword">Primary Keyword</Label>
                   <Input
                     id="keyword"
-                    value={formData.primary_keyword}
-                    onChange={(e) => setFormData({ ...formData, primary_keyword: e.target.value })}
+                    value={formData.primaryKeyword}
+                    onChange={(e) => setFormData({ ...formData, primaryKeyword: e.target.value })}
                   />
                 </div>
 
@@ -429,12 +366,12 @@ export default function ArticleDetail() {
                   <Label htmlFor="metaTitle">Meta Title</Label>
                   <Input
                     id="metaTitle"
-                    value={formData.meta_title}
-                    onChange={(e) => setFormData({ ...formData, meta_title: e.target.value })}
+                    value={formData.metaTitle}
+                    onChange={(e) => setFormData({ ...formData, metaTitle: e.target.value })}
                     maxLength={60}
                   />
                   <p className="text-xs text-muted-foreground">
-                    {formData.meta_title.length}/60 Zeichen
+                    {formData.metaTitle.length}/60 Zeichen
                   </p>
                 </div>
 
@@ -442,13 +379,13 @@ export default function ArticleDetail() {
                   <Label htmlFor="metaDesc">Meta Description</Label>
                   <Textarea
                     id="metaDesc"
-                    value={formData.meta_description}
-                    onChange={(e) => setFormData({ ...formData, meta_description: e.target.value })}
+                    value={formData.metaDescription}
+                    onChange={(e) => setFormData({ ...formData, metaDescription: e.target.value })}
                     rows={3}
                     maxLength={160}
                   />
                   <p className="text-xs text-muted-foreground">
-                    {formData.meta_description.length}/160 Zeichen
+                    {formData.metaDescription.length}/160 Zeichen
                   </p>
                 </div>
               </CardContent>
@@ -462,9 +399,9 @@ export default function ArticleDetail() {
                   <CardTitle>Outline</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {article.outline_json ? (
+                  {article?.outlineJson ? (
                     <pre className="text-xs bg-muted p-4 rounded overflow-auto max-h-64">
-                      {JSON.stringify(article.outline_json, null, 2)}
+                      {JSON.stringify(article.outlineJson, null, 2)}
                     </pre>
                   ) : (
                     <p className="text-muted-foreground text-sm">Kein Outline vorhanden</p>
@@ -477,9 +414,9 @@ export default function ArticleDetail() {
                   <CardTitle>FAQ</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {article.faq_json ? (
+                  {article?.faqJson ? (
                     <pre className="text-xs bg-muted p-4 rounded overflow-auto max-h-64">
-                      {JSON.stringify(article.faq_json, null, 2)}
+                      {JSON.stringify(article.faqJson, null, 2)}
                     </pre>
                   ) : (
                     <p className="text-muted-foreground text-sm">Keine FAQs vorhanden</p>
@@ -496,11 +433,10 @@ export default function ArticleDetail() {
         <WordPressPublishDialog
           open={publishDialogOpen}
           onOpenChange={setPublishDialogOpen}
-          articleId={article.id}
+          articleId={article._id}
           articleTitle={article.title}
           onPublished={() => {
-            // Optionally reload article to show updated status
-            loadArticle();
+            // Article will auto-refresh via Convex real-time
           }}
         />
       )}
