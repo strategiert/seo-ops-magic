@@ -2,7 +2,7 @@ import { action } from "../_generated/server";
 import { v } from "convex/values";
 import { api } from "../_generated/api";
 
-const GITHUB_REPO = "netco-dc/netco-bodycam-website";
+const GITHUB_REPO = "strategiert/netco-bodycam-website";
 const GITHUB_BRANCH = "main";
 const GITHUB_API_BASE = "https://api.github.com";
 
