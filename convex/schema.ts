@@ -468,4 +468,36 @@ export default defineSchema({
     convexId: v.string(), // New Convex ID
   })
     .index("by_supabase", ["supabaseTable", "supabaseId"]),
+
+  // ============ BODYCAM CMS ============
+
+  /**
+   * bodycamPages - Snapshots der i18n JSON-Inhalte der bodycam Website
+   * Wird via GitHub API in das Repo commited und löst CF Pages Rebuild aus.
+   */
+  bodycamPages: defineTable({
+    pageKey: v.string(),              // z.B. "page-homepage", "page-software"
+    lang: v.string(),                 // "de" | "en" | "nl" | "fr" | "es" | "it"
+    contentJson: v.string(),          // JSON.stringify der Seiteninhalte
+    isDirty: v.boolean(),             // Lokal geändert, noch nicht publiziert
+    lastPublishedAt: v.optional(v.number()),   // Unix timestamp letzter Publish
+    publishedCommit: v.optional(v.string()),   // GitHub Commit SHA
+    importedAt: v.optional(v.number()),        // Wann aus GitHub importiert
+  })
+    .index("by_page_lang", ["pageKey", "lang"])
+    .index("by_dirty", ["isDirty"]),
+
+  /**
+   * bodycamMedia - Bild-Metadaten für Cloudflare R2 Uploads
+   */
+  bodycamMedia: defineTable({
+    filename: v.string(),
+    r2Key: v.string(),                // Pfad im R2-Bucket
+    url: v.string(),                  // Öffentliche URL
+    mimeType: v.string(),
+    sizeBytes: v.number(),
+    alt: v.optional(v.string()),
+    uploadedAt: v.number(),
+  })
+    .index("by_key", ["r2Key"]),
 });

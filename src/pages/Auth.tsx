@@ -56,9 +56,7 @@ export default function Auth() {
                   card: "shadow-none border rounded-lg",
                 },
               }}
-              routing="hash"
-              signUpUrl="#register"
-              afterSignInUrl="/"
+              fallbackRedirectUrl="/"
             />
           </TabsContent>
 
@@ -70,9 +68,7 @@ export default function Auth() {
                   card: "shadow-none border rounded-lg",
                 },
               }}
-              routing="hash"
-              signInUrl="#login"
-              afterSignUpUrl="/"
+              fallbackRedirectUrl="/"
             />
           </TabsContent>
         </Tabs>
