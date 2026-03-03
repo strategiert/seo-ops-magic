@@ -3,8 +3,6 @@ import { action } from "../_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "../_generated/api";
 
-const GITHUB_REPO = "strategiert/netco-bodycam-website";
-const GITHUB_BRANCH = "main";
 const GITHUB_API_BASE = "https://api.github.com";
 
 // ── GitHub Helpers ────────────────────────────────────────────────────────────
@@ -65,6 +63,9 @@ export const importPagesFromGitHub = action({
   handler: async (ctx, { pageKeys, langs }) => {
     const pat = process.env.GITHUB_PAT;
     if (!pat) throw new Error("GITHUB_PAT ist nicht gesetzt (Convex Environment Variables).");
+    const GITHUB_REPO = process.env.GITHUB_REPO;
+    if (!GITHUB_REPO) throw new Error("GITHUB_REPO ist nicht gesetzt (Convex Environment Variables). Erwartet: owner/repo-name");
+    const GITHUB_BRANCH = process.env.GITHUB_BRANCH ?? "main";
 
     const LANGS = langs ?? ["de", "en", "nl", "fr", "es", "it"];
     const results: { pageKey: string; lang: string; status: string }[] = [];
@@ -120,6 +121,9 @@ export const publishPage = action({
   handler: async (ctx, { pageKey, lang }) => {
     const pat = process.env.GITHUB_PAT;
     if (!pat) throw new Error("GITHUB_PAT ist nicht gesetzt.");
+    const GITHUB_REPO = process.env.GITHUB_REPO;
+    if (!GITHUB_REPO) throw new Error("GITHUB_REPO ist nicht gesetzt (Convex Environment Variables).");
+    const GITHUB_BRANCH = process.env.GITHUB_BRANCH ?? "main";
 
     // Seiteninhalte aus Convex laden
     const page = await ctx.runQuery(api.tables.bodycam.getPage, { pageKey, lang });
