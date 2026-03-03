@@ -1,7 +1,7 @@
 "use node";
 import { action } from "../_generated/server";
 import { v } from "convex/values";
-import { api } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 
 const GITHUB_REPO = "strategiert/netco-bodycam-website";
 const GITHUB_BRANCH = "main";
@@ -82,7 +82,7 @@ export const importPagesFromGitHub = action({
 
         for (const lang of LANGS) {
           if (parsed[lang]) {
-            await ctx.runMutation(api.tables.bodycam.upsertImportedPage, {
+            await ctx.runMutation(internal.tables.bodycam.upsertImportedPageInternal, {
               pageKey,
               lang,
               contentJson: JSON.stringify(parsed[lang], null, 2),

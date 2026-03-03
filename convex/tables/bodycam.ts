@@ -1,4 +1,4 @@
-import { query, mutation } from "../_generated/server";
+import { query, mutation, internalMutation } from "../_generated/server";
 import { v } from "convex/values";
 import { requireAuth } from "../auth";
 
@@ -111,6 +111,41 @@ export const markPagePublished = mutation({
         isDirty: false,
         lastPublishedAt: Date.now(),
         publishedCommit: commitSha,
+      });
+    }
+  },
+});
+
+/** Interne Version für Actions (kein User-Auth nötig) */
+export const upsertImportedPageInternal = internalMutation({
+  args: {
+    pageKey: v.string(),
+    lang: v.string(),
+    contentJson: v.string(),
+  },
+  handler: async (ctx, { pageKey, lang, contentJson }) => {
+    const existing = await ctx.db
+      .query("bodycamPages")
+      .withIndex("by_page_lang", (q) =>
+        q.eq("pageKey", pageKey).eq("lang", lang)
+      )
+      .first();
+
+    if (existing) {
+      if (!existing.isDirty) {
+        await ctx.db.patch(existing._id, {
+          contentJson,
+          importedAt: Date.now(),
+        });
+      }
+      return existing._id;
+    } else {
+      return await ctx.db.insert("bodycamPages", {
+        pageKey,
+        lang,
+        contentJson,
+        isDirty: false,
+        importedAt: Date.now(),
       });
     }
   },
