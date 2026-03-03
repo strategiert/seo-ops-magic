@@ -1,4 +1,4 @@
-import { useQuery, useAction, useMutation } from "convex/react";
+import { useQuery, useAction, useMutation, useConvexAuth } from "convex/react";
 import { Upload, Copy, Trash2, Image, Loader2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,12 @@ import type { Id } from "../../convex/_generated/dataModel";
 
 export default function BodycamMedia() {
   const { toast } = useToast();
+  const { isAuthenticated } = useConvexAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState("");
 
-  const media = useQuery(api.tables.bodycam.listMedia, {});
+  const media = useQuery(api.tables.bodycam.listMedia, isAuthenticated ? {} : "skip");
   const uploadMedia = useAction(api.actions.bodycam.uploadMedia);
   const deleteMedia = useMutation(api.tables.bodycam.deleteMedia);
   const updateAlt = useMutation(api.tables.bodycam.updateMediaAlt);

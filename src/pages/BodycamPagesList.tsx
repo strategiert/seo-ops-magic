@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "convex/react";
+import { useQuery, useConvexAuth } from "convex/react";
 import { FileEdit, CheckCircle2, AlertCircle, Globe } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/ui/badge";
@@ -28,11 +28,12 @@ const LANG_LABELS: Record<string, string> = {
 
 export default function BodycamPagesList() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useConvexAuth();
   const [search, setSearch] = useState("");
   const [langFilter, setLangFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const allPages = useQuery(api.tables.bodycam.listPages, {});
+  const allPages = useQuery(api.tables.bodycam.listPages, isAuthenticated ? {} : "skip");
 
   // Gruppiere nach pageKey
   const grouped = useMemo(() => {

@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useQuery, useAction } from "convex/react";
+import { useQuery, useAction, useConvexAuth } from "convex/react";
 import { Globe, Image, Upload, RefreshCw, CheckCircle2, FileEdit, Loader2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -24,12 +24,13 @@ const LANGS = ["de", "en", "nl", "fr", "es", "it"];
 export default function BodycamDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isAuthenticated } = useConvexAuth();
   const [importing, setImporting] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
-  const allPages = useQuery(api.tables.bodycam.listPages, {});
-  const dirtyPages = useQuery(api.tables.bodycam.listDirtyPages, {});
-  const media = useQuery(api.tables.bodycam.listMedia, {});
+  const allPages = useQuery(api.tables.bodycam.listPages, isAuthenticated ? {} : "skip");
+  const dirtyPages = useQuery(api.tables.bodycam.listDirtyPages, isAuthenticated ? {} : "skip");
+  const media = useQuery(api.tables.bodycam.listMedia, isAuthenticated ? {} : "skip");
 
   const importPages = useAction(api.actions.bodycam.importPagesFromGitHub);
   const publishAll = useAction(api.actions.bodycam.publishAllDirtyPages);
