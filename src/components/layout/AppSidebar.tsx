@@ -31,6 +31,8 @@ import {
   LogOut,
   BarChart3,
   PenTool,
+  Globe,
+  Image,
 } from 'lucide-react';
 import { TOUR_IDS } from '@/components/onboarding';
 
@@ -46,6 +48,11 @@ const futureNavItems = [
 const settingsNavItems = [
   { title: 'Projekte', url: '/projects', icon: FolderKanban, tourId: TOUR_IDS.SIDEBAR_PROJECTS },
   { title: 'Einstellungen', url: '/settings', icon: Settings, tourId: TOUR_IDS.SIDEBAR_SETTINGS },
+];
+
+const sitesNavItems = [
+  { title: 'Bodycam', url: '/bodycam', icon: Globe },
+  { title: 'Bilder', url: '/bodycam/media', icon: Image },
 ];
 
 export function AppSidebar() {
@@ -99,6 +106,28 @@ export function AppSidebar() {
                       className="flex items-center gap-2"
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
                       id={item.tourId}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Sites</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {sitesNavItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild tooltip={item.title}>
+                    <NavLink
+                      to={item.url}
+                      className="flex items-center gap-2"
+                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
                     >
                       <item.icon className="h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}

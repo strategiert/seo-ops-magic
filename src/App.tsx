@@ -18,6 +18,10 @@ import ImportArticle from "./pages/ImportArticle";
 import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
 import Settings from "./pages/Settings";
+import BodycamDashboard from "./pages/BodycamDashboard";
+import BodycamPagesList from "./pages/BodycamPagesList";
+import BodycamPageEditor from "./pages/BodycamPageEditor";
+import BodycamMedia from "./pages/BodycamMedia";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +45,11 @@ const App = () => (
             <Route path="/templates" element={<Templates />} />
             <Route path="/templates/:id" element={<TemplateDetail />} />
             <Route path="/settings" element={<Settings />} />
+            {/* Bodycam CMS */}
+            <Route path="/bodycam" element={<BodycamDashboard />} />
+            <Route path="/bodycam/pages" element={<BodycamPagesList />} />
+            <Route path="/bodycam/pages/:pageKey" element={<BodycamPageEditor />} />
+            <Route path="/bodycam/media" element={<BodycamMedia />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           {/* <ChangelogModal /> */}
