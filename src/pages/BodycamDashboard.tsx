@@ -8,15 +8,15 @@ import { useToast } from "@/hooks/use-toast";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
 
-// Alle unterstützten Seiten der bodycam Website
+// Alle Seiten der bodycam Website (= Dateinamen in src/content/pages/*.json ohne Suffix)
 const BODYCAM_PAGES = [
-  "page-homepage", "page-software", "page-preise", "page-technik",
-  "page-dsgvo", "page-konferenz", "page-fachdialog", "page-zubehoer",
-  "page-krankenhaus", "page-referenzen", "page-blog", "page-presse",
-  "page-faq", "page-unternehmen", "page-impressum", "page-datenschutz",
-  "page-branchen", "page-branchen-oepnv", "page-branchen-polizei",
-  "page-branchen-ordnungsamt", "page-branchen-sicherheitsdienste",
-  "page-cmo-system", "page-agent-knowledge",
+  "agb", "agent-knowledge", "agent-knowledge-detail", "blog",
+  "branchen", "branchen-oepnv", "branchen-ordnungsamt", "branchen-polizei",
+  "branchen-sicherheitsdienste", "cmo-system", "cookie-richtlinie",
+  "danke", "datenschutz", "dsgvo", "fachdialog", "fachdialog-anmeldung",
+  "faq", "homepage", "impressum", "konferenz", "konferenz-referent",
+  "konferenz-ticket", "krankenhaus", "preise", "presse", "referenzen",
+  "software", "technik", "unternehmen", "zubehoer",
 ];
 
 const LANGS = ["de", "en", "nl", "fr", "es", "it"];

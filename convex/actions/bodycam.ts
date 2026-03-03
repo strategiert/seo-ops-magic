@@ -43,19 +43,17 @@ async function githubPut(path: string, body: unknown, pat: string) {
 
 // ── pageKey → Dateipfad im Repo ───────────────────────────────────────────────
 
-function pageFilePath(pageKey: string, lang: string): string {
-  // Keystatic speichert i18n-Singletons in: src/content/pages/{pageKey}.{lang}.json
-  // oder src/content/pages/{lang}/{pageKey}.json — je nach Keystatic-Konfiguration.
-  // In der bodycam Website ist das Format: src/content/pages/{pageKey}.json (ein File mit allen Sprachen)
-  // Tatsächlich: Keystatic mit i18nSingleton() → src/content/pages/{pageKey}/{lang}.json
-  return `src/content/pages/${pageKey}/${lang}.json`;
+function pageFilePath(pageKey: string): string {
+  // Alle Sprachen in einer JSON-Datei: src/content/pages/{pageKey}.json
+  // Format: { "de": { field1: "...", ... }, "en": { ... }, ... }
+  return `src/content/pages/${pageKey}.json`;
 }
 
 // ── Import: Seiten aus GitHub lesen ──────────────────────────────────────────
 
 /**
  * Einmaliger Import: Liest alle JSON-Dateien aus dem bodycam Repo
- * und speichert sie in bodycamPages.
+ * und speichert sie in bodycamPages (eine Row pro pageKey×lang).
  * Führt KEINE Überschreibung von dirty-Seiten durch.
  */
 export const importPagesFromGitHub = action({
@@ -71,30 +69,33 @@ export const importPagesFromGitHub = action({
     const results: { pageKey: string; lang: string; status: string }[] = [];
 
     for (const pageKey of pageKeys) {
-      for (const lang of LANGS) {
-        const filePath = pageFilePath(pageKey, lang);
-        try {
-          const data = await githubGet(
-            `/repos/${GITHUB_REPO}/contents/${filePath}?ref=${GITHUB_BRANCH}`,
-            pat
-          );
-          // GitHub gibt content als Base64 zurück
-          const content = atob(data.content.replace(/\n/g, ""));
+      const filePath = pageFilePath(pageKey);
+      try {
+        // Eine Datei pro pageKey, enthält alle Sprachen
+        const data = await githubGet(
+          `/repos/${GITHUB_REPO}/contents/${filePath}?ref=${GITHUB_BRANCH}`,
+          pat
+        );
+        const rawContent = atob(data.content.replace(/\n/g, ""));
+        const parsed: Record<string, Record<string, unknown>> = JSON.parse(rawContent);
 
-          await ctx.runMutation(api.tables.bodycam.upsertImportedPage, {
-            pageKey,
-            lang,
-            contentJson: content,
-          });
-
-          results.push({ pageKey, lang, status: "imported" });
-        } catch (err: any) {
-          // 404 = Sprache existiert nicht für diese Seite → skip
-          if (err.message?.includes("404")) {
-            results.push({ pageKey, lang, status: "not_found" });
+        for (const lang of LANGS) {
+          if (parsed[lang]) {
+            await ctx.runMutation(api.tables.bodycam.upsertImportedPage, {
+              pageKey,
+              lang,
+              contentJson: JSON.stringify(parsed[lang], null, 2),
+            });
+            results.push({ pageKey, lang, status: "imported" });
           } else {
-            results.push({ pageKey, lang, status: `error: ${err.message}` });
+            results.push({ pageKey, lang, status: "not_found" });
           }
+        }
+      } catch (err: any) {
+        // 404 = Datei existiert nicht
+        const status = err.message?.includes("404") ? "file_not_found" : `error: ${err.message}`;
+        for (const lang of LANGS) {
+          results.push({ pageKey, lang, status });
         }
       }
     }
@@ -106,7 +107,8 @@ export const importPagesFromGitHub = action({
 // ── Publish: Einzelne Seite committen ────────────────────────────────────────
 
 /**
- * Committed eine geänderte Seite via GitHub API.
+ * Liest die vollständige JSON-Datei aus GitHub, aktualisiert nur die
+ * geänderte Sprache und committed die Datei zurück.
  * Löst GitHub Actions → Cloudflare Pages Rebuild aus (~2-3 Min bis live).
  */
 export const publishPage = action({
@@ -123,42 +125,40 @@ export const publishPage = action({
     if (!page) throw new Error(`Seite nicht gefunden: ${pageKey}/${lang}`);
     if (!page.isDirty) return { skipped: true, reason: "Keine Änderungen vorhanden." };
 
-    const filePath = pageFilePath(pageKey, lang);
+    const filePath = pageFilePath(pageKey);
 
-    // Aktuellen SHA aus GitHub holen (nötig für Update)
-    let currentSha: string | undefined;
-    try {
-      const existing = await githubGet(
-        `/repos/${GITHUB_REPO}/contents/${filePath}?ref=${GITHUB_BRANCH}`,
-        pat
-      );
-      currentSha = existing.sha;
-    } catch (err: any) {
-      if (!err.message?.includes("404")) throw err;
-      // 404 = neue Datei, kein SHA nötig
-    }
+    // Aktuelle Datei aus GitHub holen (alle Sprachen + SHA)
+    const existing = await githubGet(
+      `/repos/${GITHUB_REPO}/contents/${filePath}?ref=${GITHUB_BRANCH}`,
+      pat
+    );
+    const currentSha: string = existing.sha;
+    const currentAll: Record<string, unknown> = JSON.parse(
+      atob(existing.content.replace(/\n/g, ""))
+    );
 
-    // JSON formatieren
-    const jsonContent = JSON.stringify(JSON.parse(page.contentJson), null, 2);
-    const contentBase64 = btoa(unescape(encodeURIComponent(jsonContent)));
-
-    // GitHub PUT (Create oder Update)
-    const putBody: Record<string, unknown> = {
-      message: `cms: ${pageKey}/${lang} aktualisiert`,
-      content: contentBase64,
-      branch: GITHUB_BRANCH,
+    // Nur die geänderte Sprache ersetzen, alle anderen beibehalten
+    const updatedAll = {
+      ...currentAll,
+      [lang]: JSON.parse(page.contentJson),
     };
-    if (currentSha) putBody.sha = currentSha;
+
+    const jsonContent = JSON.stringify(updatedAll, null, 2);
+    const contentBase64 = btoa(unescape(encodeURIComponent(jsonContent)));
 
     const result = await githubPut(
       `/repos/${GITHUB_REPO}/contents/${filePath}`,
-      putBody,
+      {
+        message: `cms: ${pageKey} (${lang}) aktualisiert`,
+        content: contentBase64,
+        branch: GITHUB_BRANCH,
+        sha: currentSha,
+      },
       pat
     );
 
     const commitSha = result.commit?.sha ?? "unknown";
 
-    // isDirty = false setzen
     await ctx.runMutation(api.tables.bodycam.markPagePublished, {
       pageKey,
       lang,
