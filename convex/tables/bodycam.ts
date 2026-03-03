@@ -231,6 +231,31 @@ export const saveMedia = mutation({
   },
 });
 
+/** Interne Version für Actions (kein User-Auth nötig) */
+export const saveMediaInternal = internalMutation({
+  args: {
+    filename: v.string(),
+    r2Key: v.string(),
+    url: v.string(),
+    mimeType: v.string(),
+    sizeBytes: v.number(),
+    alt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("bodycamMedia")
+      .withIndex("by_key", (q) => q.eq("r2Key", args.r2Key))
+      .first();
+
+    if (existing) return existing._id;
+
+    return await ctx.db.insert("bodycamMedia", {
+      ...args,
+      uploadedAt: Date.now(),
+    });
+  },
+});
+
 /** Alt-Text aktualisieren */
 export const updateMediaAlt = mutation({
   args: { id: v.id("bodycamMedia"), alt: v.string() },

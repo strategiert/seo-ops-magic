@@ -5,6 +5,19 @@ import { api, internal } from "../_generated/api";
 
 const GITHUB_API_BASE = "https://api.github.com";
 
+// ── Debug: Env-Vars prüfen ────────────────────────────────────────────────────
+export const debugEnvVars = action({
+  args: {},
+  handler: async () => {
+    const keys = ["GITHUB_PAT", "GITHUB_REPO", "R2_ACCESS_KEY_ID", "R2_BUCKET_NAME", "MEDIA_BASE_URL"];
+    const result: Record<string, string> = {};
+    for (const k of keys) {
+      result[k] = process.env[k] ? "✅ gesetzt" : "❌ fehlt";
+    }
+    return result;
+  },
+});
+
 // ── GitHub Helpers ────────────────────────────────────────────────────────────
 
 function githubHeaders(pat: string) {
@@ -335,8 +348,8 @@ export const uploadMedia = action({
     const url = `${mediaBaseUrl}/${r2Key}`;
     const sizeBytes = body.length;
 
-    // In Convex speichern
-    const id = await ctx.runMutation(api.tables.bodycam.saveMedia, {
+    // In Convex speichern (internal mutation, kein User-Auth nötig in Action-Kontext)
+    const id = await ctx.runMutation(internal.tables.bodycam.saveMediaInternal, {
       filename: safeFilename,
       r2Key,
       url,
