@@ -1,3 +1,4 @@
+"use node";
 import { action } from "../_generated/server";
 import { v } from "convex/values";
 import { api } from "../_generated/api";
@@ -268,7 +269,9 @@ export const uploadMedia = action({
     const dateStamp = amzDate.slice(0, 8);
     const region = "auto";
     const service = "s3";
-    const host = `${accountId}.r2.cloudflarestorage.com`;
+    const s3Host =
+      process.env.R2_S3_HOST ?? `${accountId}.r2.cloudflarestorage.com`;
+    const host = s3Host;
     const endpoint = `https://${host}/${bucketName}/${r2Key}`;
 
     // Canonical Request
