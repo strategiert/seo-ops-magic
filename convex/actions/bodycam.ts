@@ -72,8 +72,9 @@ export const importPagesFromGitHub = action({
   args: {
     pageKeys: v.array(v.string()),
     langs: v.optional(v.array(v.string())),
+    force: v.optional(v.boolean()),
   },
-  handler: async (ctx, { pageKeys, langs }) => {
+  handler: async (ctx, { pageKeys, langs, force }) => {
     const pat = process.env.GITHUB_PAT;
     if (!pat) throw new Error("GITHUB_PAT ist nicht gesetzt (Convex Environment Variables).");
     const GITHUB_REPO = process.env.GITHUB_REPO;
@@ -100,6 +101,7 @@ export const importPagesFromGitHub = action({
               pageKey,
               lang,
               contentJson: JSON.stringify(parsed[lang], null, 2),
+              overwriteDirty: force ?? false,
             });
             results.push({ pageKey, lang, status: "imported" });
           } else {

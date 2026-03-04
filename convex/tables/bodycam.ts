@@ -122,8 +122,9 @@ export const upsertImportedPageInternal = internalMutation({
     pageKey: v.string(),
     lang: v.string(),
     contentJson: v.string(),
+    overwriteDirty: v.optional(v.boolean()),
   },
-  handler: async (ctx, { pageKey, lang, contentJson }) => {
+  handler: async (ctx, { pageKey, lang, contentJson, overwriteDirty }) => {
     const existing = await ctx.db
       .query("bodycamPages")
       .withIndex("by_page_lang", (q) =>
@@ -132,9 +133,10 @@ export const upsertImportedPageInternal = internalMutation({
       .first();
 
     if (existing) {
-      if (!existing.isDirty) {
+      if (!existing.isDirty || overwriteDirty) {
         await ctx.db.patch(existing._id, {
           contentJson,
+          isDirty: false,
           importedAt: Date.now(),
         });
       }

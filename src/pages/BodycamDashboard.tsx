@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useQuery, useAction, useConvexAuth } from "convex/react";
-import { Globe, Image, Upload, RefreshCw, CheckCircle2, FileEdit, Loader2 } from "lucide-react";
+import { Globe, Image, Upload, RefreshCw, CheckCircle2, FileEdit, Loader2, GitMerge } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,7 @@ export default function BodycamDashboard() {
   const { toast } = useToast();
   const { isAuthenticated } = useConvexAuth();
   const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
   const allPages = useQuery(api.tables.bodycam.listPages, isAuthenticated ? {} : "skip");
@@ -52,6 +53,22 @@ export default function BodycamDashboard() {
       toast({ title: "Fehler", description: err.message, variant: "destructive" });
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const results = await importPages({ pageKeys: BODYCAM_PAGES, force: true });
+      const synced = results.filter((r: any) => r.status === "imported").length;
+      toast({
+        title: "Abgeglichen",
+        description: `${synced} Seiten mit GitHub-Stand synchronisiert. Alle dirty-Flags zurückgesetzt.`,
+      });
+    } catch (err: any) {
+      toast({ title: "Fehler", description: err.message, variant: "destructive" });
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -108,7 +125,7 @@ export default function BodycamDashboard() {
           <Button
             variant="outline"
             onClick={handleImport}
-            disabled={importing}
+            disabled={importing || syncing}
           >
             {importing ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -116,6 +133,20 @@ export default function BodycamDashboard() {
               <RefreshCw className="h-4 w-4 mr-2" />
             )}
             Aus GitHub importieren
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={handleSync}
+            disabled={importing || syncing}
+            title="Zieht alle Seiten neu aus GitHub und setzt alle dirty-Flags zurück"
+          >
+            {syncing ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <GitMerge className="h-4 w-4 mr-2" />
+            )}
+            Mit GitHub abgleichen
           </Button>
 
           <Button
