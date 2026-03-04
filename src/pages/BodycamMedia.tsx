@@ -1,4 +1,4 @@
-import { useQuery, useAction, useMutation } from "convex/react";
+import { useQuery, useAction, useMutation, useConvexAuth } from "convex/react";
 import { Upload, Copy, Trash2, Image, Loader2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,12 @@ import type { Id } from "../../convex/_generated/dataModel";
 
 export default function BodycamMedia() {
   const { toast } = useToast();
+  const { isAuthenticated } = useConvexAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState("");
 
-  const media = useQuery(api.tables.bodycam.listMedia, {});
+  const media = useQuery(api.tables.bodycam.listMedia, isAuthenticated ? {} : "skip");
   const uploadMedia = useAction(api.actions.bodycam.uploadMedia);
   const deleteMedia = useMutation(api.tables.bodycam.deleteMedia);
   const updateAlt = useMutation(api.tables.bodycam.updateMediaAlt);
@@ -117,16 +118,12 @@ export default function BodycamMedia() {
           </Button>
         </div>
 
-        {/* R2 Hinweis */}
+        {/* Leerer Zustand */}
         {media?.length === 0 && (
           <div className="border rounded-lg p-6 text-center text-sm text-muted-foreground">
             <Image className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            <p className="font-medium">Noch keine Bilder</p>
-            <p className="mt-1 text-xs">
-              R2 Bucket "netco-bodycam-media" muss eingerichtet sein.
-              <br />
-              Dann R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY in Convex Environment Variables setzen.
-            </p>
+            <p className="font-medium">Noch keine Bilder hochgeladen</p>
+            <p className="mt-1 text-xs">Klicke auf "Bild hochladen" um Bilder zu R2 hinzuzufügen.</p>
           </div>
         )}
 

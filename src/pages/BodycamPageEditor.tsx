@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useAction } from "convex/react";
+import { useQuery, useMutation, useAction, useConvexAuth } from "convex/react";
 import {
   Save,
   Upload,
@@ -33,6 +33,7 @@ export default function BodycamPageEditor() {
   const { pageKey } = useParams<{ pageKey: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isAuthenticated } = useConvexAuth();
 
   const [activeLang, setActiveLang] = useState("de");
   const [editMode, setEditMode] = useState<"form" | "json">("form");
@@ -40,7 +41,10 @@ export default function BodycamPageEditor() {
   const [saving, setSaving] = useState<string | null>(null);
   const [publishing, setPublishing] = useState<string | null>(null);
 
-  const allPages = useQuery(api.tables.bodycam.listPages, { pageKey: pageKey! });
+  const allPages = useQuery(
+    api.tables.bodycam.listPages,
+    isAuthenticated && pageKey ? { pageKey } : "skip"
+  );
   const savePage = useMutation(api.tables.bodycam.savePage);
   const publishPage = useAction(api.actions.bodycam.publishPage);
 

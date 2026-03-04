@@ -1,10 +1,22 @@
+"use node";
 import { action } from "../_generated/server";
 import { v } from "convex/values";
-import { api } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 
-const GITHUB_REPO = "strategiert/netco-bodycam-website";
-const GITHUB_BRANCH = "main";
 const GITHUB_API_BASE = "https://api.github.com";
+
+// ── Debug: Env-Vars prüfen ────────────────────────────────────────────────────
+export const debugEnvVars = action({
+  args: {},
+  handler: async () => {
+    const keys = ["GITHUB_PAT", "GITHUB_REPO", "R2_ACCESS_KEY_ID", "R2_BUCKET_NAME", "MEDIA_BASE_URL"];
+    const result: Record<string, string> = {};
+    for (const k of keys) {
+      result[k] = process.env[k] ? "✅ gesetzt" : "❌ fehlt";
+    }
+    return result;
+  },
+});
 
 // ── GitHub Helpers ────────────────────────────────────────────────────────────
 
@@ -60,10 +72,14 @@ export const importPagesFromGitHub = action({
   args: {
     pageKeys: v.array(v.string()),
     langs: v.optional(v.array(v.string())),
+    force: v.optional(v.boolean()),
   },
-  handler: async (ctx, { pageKeys, langs }) => {
+  handler: async (ctx, { pageKeys, langs, force }) => {
     const pat = process.env.GITHUB_PAT;
     if (!pat) throw new Error("GITHUB_PAT ist nicht gesetzt (Convex Environment Variables).");
+    const GITHUB_REPO = process.env.GITHUB_REPO;
+    if (!GITHUB_REPO) throw new Error("GITHUB_REPO ist nicht gesetzt (Convex Environment Variables). Erwartet: owner/repo-name");
+    const GITHUB_BRANCH = process.env.GITHUB_BRANCH ?? "main";
 
     const LANGS = langs ?? ["de", "en", "nl", "fr", "es", "it"];
     const results: { pageKey: string; lang: string; status: string }[] = [];
@@ -81,10 +97,11 @@ export const importPagesFromGitHub = action({
 
         for (const lang of LANGS) {
           if (parsed[lang]) {
-            await ctx.runMutation(api.tables.bodycam.upsertImportedPage, {
+            await ctx.runMutation(internal.tables.bodycam.upsertImportedPageInternal, {
               pageKey,
               lang,
               contentJson: JSON.stringify(parsed[lang], null, 2),
+              overwriteDirty: force ?? false,
             });
             results.push({ pageKey, lang, status: "imported" });
           } else {
@@ -119,6 +136,9 @@ export const publishPage = action({
   handler: async (ctx, { pageKey, lang }) => {
     const pat = process.env.GITHUB_PAT;
     if (!pat) throw new Error("GITHUB_PAT ist nicht gesetzt.");
+    const GITHUB_REPO = process.env.GITHUB_REPO;
+    if (!GITHUB_REPO) throw new Error("GITHUB_REPO ist nicht gesetzt (Convex Environment Variables).");
+    const GITHUB_BRANCH = process.env.GITHUB_BRANCH ?? "main";
 
     // Seiteninhalte aus Convex laden
     const page = await ctx.runQuery(api.tables.bodycam.getPage, { pageKey, lang });
@@ -268,7 +288,9 @@ export const uploadMedia = action({
     const dateStamp = amzDate.slice(0, 8);
     const region = "auto";
     const service = "s3";
-    const host = `${accountId}.r2.cloudflarestorage.com`;
+    const s3Host =
+      process.env.R2_S3_HOST ?? `${accountId}.r2.cloudflarestorage.com`;
+    const host = s3Host;
     const endpoint = `https://${host}/${bucketName}/${r2Key}`;
 
     // Canonical Request
@@ -328,8 +350,8 @@ export const uploadMedia = action({
     const url = `${mediaBaseUrl}/${r2Key}`;
     const sizeBytes = body.length;
 
-    // In Convex speichern
-    const id = await ctx.runMutation(api.tables.bodycam.saveMedia, {
+    // In Convex speichern (internal mutation, kein User-Auth nötig in Action-Kontext)
+    const id = await ctx.runMutation(internal.tables.bodycam.saveMediaInternal, {
       filename: safeFilename,
       r2Key,
       url,
