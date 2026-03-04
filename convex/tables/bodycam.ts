@@ -1,4 +1,4 @@
-import { query, mutation, internalMutation } from "../_generated/server";
+import { query, mutation, internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import { requireAuth } from "../auth";
 
@@ -113,6 +113,19 @@ export const markPagePublished = mutation({
         publishedCommit: commitSha,
       });
     }
+  },
+});
+
+/** Interne Query für HTTP-Actions (kein User-Auth nötig) */
+export const getPageInternal = internalQuery({
+  args: { pageKey: v.string(), lang: v.string() },
+  handler: async (ctx, { pageKey, lang }) => {
+    return await ctx.db
+      .query("bodycamPages")
+      .withIndex("by_page_lang", (q) =>
+        q.eq("pageKey", pageKey).eq("lang", lang)
+      )
+      .first();
   },
 });
 
