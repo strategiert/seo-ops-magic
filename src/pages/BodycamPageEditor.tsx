@@ -7,27 +7,32 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  ExternalLink,
+  Code2,
 } from "lucide-react";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "../../convex/_generated/api";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { groupContentBySection } from "@/lib/sectionGroups";
+import { VisualPreview } from "@/components/bodycam/editor/VisualPreview";
+import { PropertiesPanel } from "@/components/bodycam/editor/PropertiesPanel";
+import { AIChatPanel } from "@/components/bodycam/editor/AIChatPanel";
 
 const LANGS = ["de", "en", "nl", "fr", "es", "it"];
 const LANG_LABELS: Record<string, string> = {
-  de: "🇩🇪 Deutsch",
-  en: "🇬🇧 English",
-  nl: "🇳🇱 Nederlands",
-  fr: "🇫🇷 Français",
-  es: "🇪🇸 Español",
-  it: "🇮🇹 Italiano",
+  de: "🇩🇪 DE",
+  en: "🇬🇧 EN",
+  nl: "🇳🇱 NL",
+  fr: "🇫🇷 FR",
+  es: "🇪🇸 ES",
+  it: "🇮🇹 IT",
 };
+
+type EditorMode = "visual" | "json";
 
 export default function BodycamPageEditor() {
   const { pageKey } = useParams<{ pageKey: string }>();
@@ -36,10 +41,18 @@ export default function BodycamPageEditor() {
   const { isAuthenticated } = useConvexAuth();
 
   const [activeLang, setActiveLang] = useState("de");
-  const [editMode, setEditMode] = useState<"form" | "json">("form");
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState<string | null>(null);
-  const [publishing, setPublishing] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState<EditorMode>("visual");
+  const [viewMode, setViewMode] = useState<"desktop" | "mobile">("desktop");
+  const [selectedSection, setSelectedSection] = useState<string | null>(null);
+
+  // Drafts: pro Sprache ein Record<key, value>
+  const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({});
+  // JSON-Modus: raw string per Sprache
+  const [jsonDrafts, setJsonDrafts] = useState<Record<string, string>>({});
+
+  const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const allPages = useQuery(
     api.tables.bodycam.listPages,
@@ -57,59 +70,140 @@ export default function BodycamPageEditor() {
     return map;
   }, [allPages]);
 
-  // Entwurf für aktive Sprache initialisieren
+  // Draft für aktive Sprache aus DB initialisieren
   useEffect(() => {
     const page = pagesByLang[activeLang];
-    if (page && drafts[activeLang] === undefined) {
+    if (page && !drafts[activeLang]) {
       try {
-        const formatted = JSON.stringify(JSON.parse(page.contentJson), null, 2);
-        setDrafts((prev) => ({ ...prev, [activeLang]: formatted }));
+        const parsed = JSON.parse(page.contentJson);
+        const record: Record<string, string> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          record[k] = String(v ?? "");
+        }
+        setDrafts((prev) => ({ ...prev, [activeLang]: record }));
+        setJsonDrafts((prev) => ({
+          ...prev,
+          [activeLang]: JSON.stringify(parsed, null, 2),
+        }));
       } catch {
-        setDrafts((prev) => ({ ...prev, [activeLang]: page.contentJson }));
+        setDrafts((prev) => ({ ...prev, [activeLang]: {} }));
+        setJsonDrafts((prev) => ({ ...prev, [activeLang]: page.contentJson }));
       }
     }
   }, [activeLang, pagesByLang]);
 
-  const currentDraft = drafts[activeLang] ?? "";
+  const currentDraft = drafts[activeLang] ?? null;
+  const currentJsonDraft = jsonDrafts[activeLang] ?? "";
   const currentPage = pagesByLang[activeLang];
 
-  const handleDraftChange = (value: string) => {
-    setDrafts((prev) => ({ ...prev, [activeLang]: value }));
+  // Sections für aktuelle Sprache
+  const sections = useMemo(() => {
+    if (!currentDraft) return [];
+    return groupContentBySection(currentDraft);
+  }, [currentDraft]);
+
+  const selectedSectionData = useMemo(() => {
+    if (!selectedSection) return null;
+    return sections.find((s) => s.id === selectedSection) ?? null;
+  }, [sections, selectedSection]);
+
+  // Field-Update (Properties Panel)
+  const handleFieldChange = useCallback(
+    (key: string, value: string) => {
+      setDrafts((prev) => ({
+        ...prev,
+        [activeLang]: { ...(prev[activeLang] ?? {}), [key]: value },
+      }));
+      setJsonDrafts((prev) => {
+        const current = { ...(drafts[activeLang] ?? {}), [key]: value };
+        return { ...prev, [activeLang]: JSON.stringify(current, null, 2) };
+      });
+      // Debounced Auto-Save
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        doAutoSave(activeLang, { ...(drafts[activeLang] ?? {}), [key]: value });
+      }, 800);
+    },
+    [activeLang, drafts]
+  );
+
+  // AI Updates anwenden
+  const handleApplyAIUpdates = useCallback(
+    (updates: Record<string, string>) => {
+      setDrafts((prev) => {
+        const current = { ...(prev[activeLang] ?? {}) };
+        for (const [k, v] of Object.entries(updates)) {
+          current[k] = v;
+        }
+        setJsonDrafts((jprev) => ({
+          ...jprev,
+          [activeLang]: JSON.stringify(current, null, 2),
+        }));
+        doAutoSave(activeLang, current);
+        return { ...prev, [activeLang]: current };
+      });
+      toast({
+        title: "KI-Änderungen angewendet",
+        description: `${Object.keys(updates).length} Felder aktualisiert.`,
+      });
+    },
+    [activeLang]
+  );
+
+  // JSON-Modus change
+  const handleJsonChange = (value: string) => {
+    setJsonDrafts((prev) => ({ ...prev, [activeLang]: value }));
+    try {
+      const parsed = JSON.parse(value);
+      const record: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        record[k] = String(v ?? "");
+      }
+      setDrafts((prev) => ({ ...prev, [activeLang]: record }));
+    } catch {
+      // Ungültiges JSON → kein Update der drafts
+    }
+  };
+
+  const doAutoSave = async (lang: string, content: Record<string, string>) => {
+    if (!pageKey) return;
+    setSaving(true);
+    try {
+      await savePage({ pageKey, lang, contentJson: JSON.stringify(content) });
+    } catch {
+      // Silent fail bei Auto-Save
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSave = async () => {
     if (!pageKey || !currentDraft) return;
-    // JSON validieren
+    setSaving(true);
     try {
-      JSON.parse(currentDraft);
-    } catch {
-      toast({ title: "Ungültiges JSON", description: "Bitte JSON-Syntax prüfen.", variant: "destructive" });
-      return;
-    }
-    setSaving(activeLang);
-    try {
-      await savePage({ pageKey, lang: activeLang, contentJson: currentDraft });
-      toast({ title: "Gespeichert", description: `${pageKey}/${activeLang} lokal gespeichert.` });
+      await savePage({
+        pageKey,
+        lang: activeLang,
+        contentJson: JSON.stringify(currentDraft),
+      });
+      toast({ title: "Gespeichert", description: `${pageKey} (${activeLang}) gespeichert.` });
     } catch (err: any) {
       toast({ title: "Fehler", description: err.message, variant: "destructive" });
     } finally {
-      setSaving(null);
+      setSaving(false);
     }
   };
 
   const handlePublish = async () => {
     if (!pageKey) return;
-    // Erst speichern
-    if (currentDraft && (!currentPage || currentPage.contentJson !== currentDraft)) {
-      try {
-        JSON.parse(currentDraft);
-        await savePage({ pageKey, lang: activeLang, contentJson: currentDraft });
-      } catch {
-        toast({ title: "Ungültiges JSON", description: "Bitte JSON-Syntax prüfen.", variant: "destructive" });
-        return;
-      }
+    if (currentDraft) {
+      await savePage({
+        pageKey,
+        lang: activeLang,
+        contentJson: JSON.stringify(currentDraft),
+      });
     }
-    setPublishing(activeLang);
+    setPublishing(true);
     try {
       const result = await publishPage({ pageKey, lang: activeLang });
       if ((result as any).skipped) {
@@ -117,285 +211,227 @@ export default function BodycamPageEditor() {
       } else {
         toast({
           title: "Publiziert",
-          description: `Commit: ${(result as any).commitSha?.slice(0, 7)}. CF Pages rebuild startet.`,
+          description: `Commit: ${(result as any).commitSha?.slice(0, 7)}. CF Pages Rebuild läuft.`,
         });
       }
     } catch (err: any) {
       toast({ title: "Fehler", description: err.message, variant: "destructive" });
     } finally {
-      setPublishing(null);
+      setPublishing(false);
     }
   };
 
-  // Form-Felder aus JSON extrahieren
-  const parsedContent = useMemo(() => {
-    try {
-      return JSON.parse(currentDraft);
-    } catch {
-      return null;
-    }
-  }, [currentDraft]);
-
   return (
-    <AppLayout
-      title={pageKey ?? "Seite"}
-      breadcrumbs={[
-        { label: "Bodycam", href: "/bodycam" },
-        { label: "Seiten", href: "/bodycam/pages" },
-        { label: pageKey ?? "" },
-      ]}
-    >
-      <div className="space-y-4">
-        {/* Header Actions */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/bodycam/pages")}>
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Zurück
-          </Button>
-          <div className="flex-1" />
+    <div className="flex flex-col h-screen bg-background overflow-hidden">
+      {/* ── Toolbar ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-white shrink-0 shadow-sm">
+        <Button variant="ghost" size="sm" onClick={() => navigate("/bodycam/pages")}>
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Zurück
+        </Button>
 
-          {/* Speichern + Publizieren für aktive Sprache */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSave}
-            disabled={!!saving}
-          >
-            {saving === activeLang ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4 mr-2" />
-            )}
-            Speichern
-          </Button>
-          <Button
-            size="sm"
-            onClick={handlePublish}
-            disabled={!!publishing}
-            className="bg-[#003366] hover:bg-[#002244] text-white"
-          >
-            {publishing === activeLang ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Upload className="h-4 w-4 mr-2" />
-            )}
-            Publizieren
-          </Button>
-        </div>
-
-        {/* Sprach-Tabs */}
-        <Tabs value={activeLang} onValueChange={setActiveLang}>
-          <TabsList>
-            {LANGS.map((l) => {
-              const page = pagesByLang[l];
-              return (
-                <TabsTrigger key={l} value={l} className="gap-1.5">
-                  {LANG_LABELS[l].split(" ")[0]}
-                  <span className="hidden sm:inline text-xs">{l.toUpperCase()}</span>
-                  {page?.isDirty && (
-                    <AlertCircle className="h-3 w-3 text-amber-500" />
-                  )}
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-
-          {LANGS.map((l) => (
-            <TabsContent key={l} value={l} className="mt-4">
-              {l === activeLang && (
-                <EditorPanel
-                  pageKey={pageKey!}
-                  lang={l}
-                  page={pagesByLang[l]}
-                  draft={drafts[l] ?? ""}
-                  editMode={editMode}
-                  onModeChange={setEditMode}
-                  onDraftChange={handleDraftChange}
-                  parsedContent={parsedContent}
-                  onParsedChange={(newContent) =>
-                    handleDraftChange(JSON.stringify(newContent, null, 2))
-                  }
-                />
-              )}
-            </TabsContent>
-          ))}
-        </Tabs>
-      </div>
-    </AppLayout>
-  );
-}
-
-// ── Editor Panel ──────────────────────────────────────────────────────────────
-
-function EditorPanel({
-  lang,
-  page,
-  draft,
-  editMode,
-  onModeChange,
-  onDraftChange,
-  parsedContent,
-  onParsedChange,
-}: {
-  pageKey: string;
-  lang: string;
-  page: any;
-  draft: string;
-  editMode: "form" | "json";
-  onModeChange: (m: "form" | "json") => void;
-  onDraftChange: (v: string) => void;
-  parsedContent: Record<string, any> | null;
-  onParsedChange: (v: Record<string, any>) => void;
-}) {
-  const isJsonValid = parsedContent !== null;
-
-  return (
-    <div className="space-y-3">
-      {/* Status + Mode Toggle */}
-      <div className="flex items-center gap-3">
-        {page ? (
-          page.isDirty ? (
-            <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">
+        <div className="flex items-center gap-1.5 ml-1">
+          <span className="font-semibold text-sm text-[#003366]">{pageKey}</span>
+          {currentPage?.isDirty && (
+            <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 text-xs">
               <AlertCircle className="h-3 w-3 mr-1" />
               Ausstehend
             </Badge>
-          ) : (
-            <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
+          )}
+          {currentPage && !currentPage.isDirty && (
+            <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50 text-xs">
               <CheckCircle2 className="h-3 w-3 mr-1" />
               Aktuell
             </Badge>
-          )
-        ) : (
-          <Badge variant="outline" className="text-muted-foreground">
-            Nicht importiert
-          </Badge>
-        )}
+          )}
+        </div>
 
-        {page?.lastPublishedAt && (
-          <span className="text-xs text-muted-foreground">
-            Letzter Publish:{" "}
-            {new Date(page.lastPublishedAt).toLocaleString("de-DE")}
-          </span>
-        )}
+        {/* Sprach-Tabs */}
+        <div className="flex gap-0.5 ml-3">
+          {LANGS.map((l) => {
+            const page = pagesByLang[l];
+            return (
+              <button
+                key={l}
+                onClick={() => {
+                  setActiveLang(l);
+                  setSelectedSection(null);
+                }}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors relative ${
+                  activeLang === l
+                    ? "bg-[#003366] text-white"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {LANG_LABELS[l]}
+                {page?.isDirty && (
+                  <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#ff6600]" />
+                )}
+              </button>
+            );
+          })}
+        </div>
 
         <div className="flex-1" />
 
-        <div className="flex gap-1 border rounded-md overflow-hidden text-xs">
+        {/* Mode Toggle */}
+        <div className="flex items-center border rounded-md overflow-hidden text-xs">
           <button
-            onClick={() => onModeChange("form")}
-            className={`px-3 py-1.5 ${
-              editMode === "form" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+            onClick={() => setEditorMode("visual")}
+            className={`px-3 py-1.5 transition-colors ${
+              editorMode === "visual"
+                ? "bg-[#003366] text-white"
+                : "hover:bg-muted"
             }`}
           >
-            Formular
+            Visual
           </button>
           <button
-            onClick={() => onModeChange("json")}
-            className={`px-3 py-1.5 ${
-              editMode === "json" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+            onClick={() => setEditorMode("json")}
+            className={`px-2.5 py-1.5 flex items-center gap-1 transition-colors ${
+              editorMode === "json"
+                ? "bg-[#003366] text-white"
+                : "hover:bg-muted"
             }`}
           >
+            <Code2 className="h-3 w-3" />
             JSON
           </button>
         </div>
+
+        {/* Actions */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSave}
+          disabled={saving}
+          className="h-8 text-xs"
+        >
+          {saving ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+          ) : (
+            <Save className="h-3.5 w-3.5 mr-1.5" />
+          )}
+          Speichern
+        </Button>
+        <Button
+          size="sm"
+          onClick={handlePublish}
+          disabled={publishing}
+          className="h-8 text-xs bg-[#003366] hover:bg-[#002244] text-white"
+        >
+          {publishing ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+          ) : (
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
+          )}
+          Publizieren
+        </Button>
+
+        {/* Preview-Link */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 text-xs text-muted-foreground"
+          onClick={() =>
+            window.open(`/bodycam/preview/${pageKey}/${activeLang}`, "_blank")
+          }
+          title="Vorschau in neuem Tab öffnen"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
-      {/* Editor */}
-      {!page ? (
-        <div className="border rounded-lg p-6 text-center text-muted-foreground text-sm">
-          Diese Sprache ({lang}) wurde noch nicht importiert.
-          <br />
-          <span className="text-xs">Dashboard → Aus GitHub importieren</span>
-        </div>
-      ) : editMode === "json" ? (
-        <div className="space-y-1">
-          <Textarea
-            value={draft}
-            onChange={(e) => onDraftChange(e.target.value)}
-            className={`font-mono text-xs min-h-[60vh] ${!isJsonValid ? "border-red-400" : ""}`}
-            spellCheck={false}
-          />
-          {!isJsonValid && (
-            <p className="text-xs text-red-500">Ungültiges JSON — Fehler beim Parsen.</p>
-          )}
-        </div>
-      ) : parsedContent ? (
-        <FormEditor
-          content={parsedContent}
-          onChange={onParsedChange}
+      {/* ── Main Area ────────────────────────────────────────────────────── */}
+      {editorMode === "json" ? (
+        <JsonEditor
+          value={currentJsonDraft}
+          onChange={handleJsonChange}
+          onSave={handleSave}
         />
       ) : (
-        <p className="text-sm text-red-500">JSON ist ungültig. Bitte in JSON-Modus wechseln.</p>
+        <div className="flex flex-1 overflow-hidden">
+          {/* AI Chat (links) */}
+          <div className="w-64 border-r shrink-0 overflow-hidden">
+            <AIChatPanel
+              pageKey={pageKey ?? ""}
+              lang={activeLang}
+              currentContent={currentDraft}
+              onApplyUpdates={handleApplyAIUpdates}
+            />
+          </div>
+
+          {/* Visual Preview (mitte) */}
+          <div className="flex-1 overflow-hidden border-r">
+            <VisualPreview
+              content={currentDraft}
+              selectedSection={selectedSection}
+              onSelectSection={setSelectedSection}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+            />
+          </div>
+
+          {/* Properties Panel (rechts) */}
+          <div className="w-72 shrink-0 overflow-hidden">
+            <PropertiesPanel
+              section={
+                selectedSectionData
+                  ? {
+                      ...selectedSectionData,
+                      // Immer aktuellste values aus draft nehmen
+                      values: Object.fromEntries(
+                        selectedSectionData.keys.map((k) => [
+                          k,
+                          currentDraft?.[k] ?? "",
+                        ])
+                      ),
+                    }
+                  : null
+              }
+              onChange={handleFieldChange}
+              isSaving={saving}
+              onOpenMediaPicker={() => navigate("/bodycam/media")}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-// ── Form Editor ───────────────────────────────────────────────────────────────
+// ── JSON-Editor ────────────────────────────────────────────────────────────────
 
-function FormEditor({
-  content,
+function JsonEditor({
+  value,
   onChange,
+  onSave,
 }: {
-  content: Record<string, any>;
-  onChange: (v: Record<string, any>) => void;
+  value: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
 }) {
-  const entries = Object.entries(content);
-
-  const handleFieldChange = (key: string, value: string) => {
-    onChange({ ...content, [key]: value });
-  };
+  let isValid = true;
+  try {
+    JSON.parse(value);
+  } catch {
+    isValid = false;
+  }
 
   return (
-    <div className="grid grid-cols-1 gap-3 max-h-[65vh] overflow-y-auto pr-1">
-      {entries.map(([key, value]) => {
-        if (typeof value === "object") {
-          // Objekt / Array → als JSON-Text anzeigen
-          return (
-            <div key={key} className="space-y-1">
-              <Label className="text-xs font-mono text-muted-foreground">{key}</Label>
-              <Textarea
-                value={JSON.stringify(value, null, 2)}
-                onChange={(e) => {
-                  try {
-                    handleFieldChange(key, JSON.parse(e.target.value));
-                  } catch {
-                    // ignore invalid JSON while typing
-                  }
-                }}
-                className="font-mono text-xs min-h-[80px]"
-              />
-            </div>
-          );
-        }
-
-        const isLong =
-          typeof value === "string" &&
-          (value.length > 100 ||
-            key.toLowerCase().includes("text") ||
-            key.toLowerCase().includes("desc") ||
-            key.toLowerCase().includes("intro") ||
-            key.toLowerCase().includes("summary"));
-
-        return (
-          <div key={key} className="space-y-1">
-            <Label className="text-xs font-mono text-muted-foreground">{key}</Label>
-            {isLong ? (
-              <Textarea
-                value={String(value)}
-                onChange={(e) => handleFieldChange(key, e.target.value)}
-                className="text-sm min-h-[60px]"
-              />
-            ) : (
-              <Input
-                value={String(value)}
-                onChange={(e) => handleFieldChange(key, e.target.value)}
-                className="text-sm"
-              />
-            )}
-          </div>
-        );
-      })}
+    <div className="flex-1 flex flex-col p-4 gap-2">
+      {!isValid && (
+        <p className="text-xs text-red-500 flex items-center gap-1">
+          <AlertCircle className="h-3.5 w-3.5" />
+          Ungültiges JSON — Syntax prüfen
+        </p>
+      )}
+      <Textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`flex-1 font-mono text-xs resize-none ${!isValid ? "border-red-400" : ""}`}
+        spellCheck={false}
+      />
     </div>
   );
 }
