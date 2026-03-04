@@ -78,12 +78,19 @@ export function AIChatPanel({
         },
       ]);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Unbekannter Fehler";
+      const rawMsg = err instanceof Error ? err.message : String(err);
+      const isApiKeyMissing =
+        rawMsg.includes("ANTHROPIC_API_KEY") ||
+        rawMsg.includes("API key") ||
+        rawMsg.includes("Unauthorized");
+      const errorMessage = isApiKeyMissing
+        ? "KI nicht verfügbar: ANTHROPIC_API_KEY fehlt in den Convex Environment Variables. Bitte in der Convex-Konsole unter Settings → Environment Variables eintragen."
+        : `Fehler: ${rawMsg}`;
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: `Fehler: ${errorMessage}`,
+          content: errorMessage,
           suggestedUpdates: null,
         },
       ]);

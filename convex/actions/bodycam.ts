@@ -92,7 +92,10 @@ export const importPagesFromGitHub = action({
           `/repos/${GITHUB_REPO}/contents/${filePath}?ref=${GITHUB_BRANCH}`,
           pat
         );
-        const rawContent = atob(data.content.replace(/\n/g, ""));
+        // Decode base64 with correct UTF-8 handling (atob alone garbles umlauts)
+        const binaryStr = atob(data.content.replace(/\n/g, ""));
+        const bytes = Uint8Array.from(binaryStr, (c) => c.charCodeAt(0));
+        const rawContent = new TextDecoder("utf-8").decode(bytes);
         const parsed: Record<string, Record<string, unknown>> = JSON.parse(rawContent);
 
         for (const lang of LANGS) {
@@ -350,8 +353,8 @@ export const uploadMedia = action({
     const url = `${mediaBaseUrl}/${r2Key}`;
     const sizeBytes = body.length;
 
-    // In Convex speichern (internal mutation, kein User-Auth nötig in Action-Kontext)
-    const id = await ctx.runMutation(internal.tables.bodycam.saveMediaInternal, {
+    // In Convex speichern
+    const id = await ctx.runMutation(api.tables.bodycam.saveMedia, {
       filename: safeFilename,
       r2Key,
       url,
