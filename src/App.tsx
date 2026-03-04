@@ -22,6 +22,7 @@ import BodycamDashboard from "./pages/BodycamDashboard";
 import BodycamPagesList from "./pages/BodycamPagesList";
 import BodycamPageEditor from "./pages/BodycamPageEditor";
 import BodycamMedia from "./pages/BodycamMedia";
+import BodycamPreview from "./pages/BodycamPreview";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,7 @@ const App = () => (
             <Route path="/bodycam/pages" element={<BodycamPagesList />} />
             <Route path="/bodycam/pages/:pageKey" element={<BodycamPageEditor />} />
             <Route path="/bodycam/media" element={<BodycamMedia />} />
+            <Route path="/bodycam/preview/:pageKey/:lang" element={<BodycamPreview />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           {/* <ChangelogModal /> */}
