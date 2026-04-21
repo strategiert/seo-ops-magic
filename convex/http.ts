@@ -20,6 +20,69 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
 };
 
+// ── Webhook signature verification helpers ────────────────────────────────────
+
+/**
+ * Verify a Svix-signed webhook payload (used by Clerk).
+ * Returns true if any v1 signature in the svix-signature header matches.
+ * Fails closed if headers are missing or secret is malformed.
+ */
+async function verifySvixSignature(
+  rawBody: string,
+  svixId: string | null,
+  svixTimestamp: string | null,
+  svixSignatureHeader: string | null,
+  secret: string
+): Promise<boolean> {
+  if (!svixId || !svixTimestamp || !svixSignatureHeader) return false;
+
+  const secretPart = secret.startsWith("whsec_") ? secret.slice(6) : secret;
+  let secretBytes: Uint8Array;
+  try {
+    const bin = atob(secretPart);
+    secretBytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  } catch {
+    return false;
+  }
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    secretBytes,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"]
+  );
+
+  const payload = `${svixId}.${svixTimestamp}.${rawBody}`;
+  const enc = new TextEncoder().encode(payload);
+
+  for (const entry of svixSignatureHeader.split(" ")) {
+    const [version, encoded] = entry.split(",");
+    if (version !== "v1" || !encoded) continue;
+    try {
+      const bin = atob(encoded);
+      const sigBytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      const ok = await crypto.subtle.verify("HMAC", key, sigBytes, enc);
+      if (ok) return true;
+    } catch {
+      continue;
+    }
+  }
+  return false;
+}
+
+/**
+ * Constant-time bearer token comparison.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 /**
  * HTTP Router for webhooks and external callbacks
  *
@@ -145,13 +208,32 @@ http.route({
 
 /**
  * Firecrawl webhook handler
- * Receives crawl results and processes them
+ * Receives crawl results and processes them.
+ * Protected by a shared bearer token when FIRECRAWL_WEBHOOK_SECRET is set.
  */
 http.route({
   path: "/firecrawl-webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     try {
+      const expectedSecret = process.env.FIRECRAWL_WEBHOOK_SECRET;
+      if (expectedSecret) {
+        const authHeader = request.headers.get("authorization") ?? "";
+        const provided = authHeader.startsWith("Bearer ")
+          ? authHeader.slice(7)
+          : "";
+        if (!provided || !timingSafeEqual(provided, expectedSecret)) {
+          return new Response(
+            JSON.stringify({ error: "Unauthorized" }),
+            { status: 401, headers: { "Content-Type": "application/json" } }
+          );
+        }
+      } else {
+        console.warn(
+          "FIRECRAWL_WEBHOOK_SECRET not set — firecrawl webhook is publicly reachable"
+        );
+      }
+
       const body = await request.json();
 
       // Extract job ID and data
@@ -259,14 +341,41 @@ http.route({
 
 /**
  * Clerk webhook handler
- * Creates user profile when a new user signs up
+ * Creates user profile when a new user signs up.
+ * Protected by Svix signature verification when CLERK_WEBHOOK_SECRET is set.
  */
 http.route({
   path: "/clerk-webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     try {
-      const body = await request.json();
+      const rawBody = await request.text();
+
+      const expectedSecret = process.env.CLERK_WEBHOOK_SECRET;
+      if (expectedSecret) {
+        const svixId = request.headers.get("svix-id");
+        const svixTimestamp = request.headers.get("svix-timestamp");
+        const svixSignature = request.headers.get("svix-signature");
+        const valid = await verifySvixSignature(
+          rawBody,
+          svixId,
+          svixTimestamp,
+          svixSignature,
+          expectedSecret
+        );
+        if (!valid) {
+          return new Response(
+            JSON.stringify({ error: "Unauthorized" }),
+            { status: 401, headers: { "Content-Type": "application/json" } }
+          );
+        }
+      } else {
+        console.warn(
+          "CLERK_WEBHOOK_SECRET not set — clerk webhook is publicly reachable"
+        );
+      }
+
+      const body = JSON.parse(rawBody);
       const eventType = body.type;
 
       console.log(`Clerk webhook received: ${eventType}`);
