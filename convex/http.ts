@@ -72,23 +72,10 @@ async function verifySvixSignature(
 }
 
 /**
- * Constant-time bearer token comparison.
- */
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
-}
-
-/**
  * HTTP Router for webhooks and external callbacks
  *
  * Handles:
  * - Bodycam live preview (proxy + draft injection)
- * - Firecrawl webhook for crawl results
  * - Clerk webhook for user events
  */
 
@@ -207,139 +194,6 @@ http.route({
 });
 
 /**
- * Firecrawl webhook handler
- * Receives crawl results and processes them.
- * Protected by a shared bearer token when FIRECRAWL_WEBHOOK_SECRET is set.
- */
-http.route({
-  path: "/firecrawl-webhook",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    try {
-      const expectedSecret = process.env.FIRECRAWL_WEBHOOK_SECRET;
-      if (expectedSecret) {
-        const authHeader = request.headers.get("authorization") ?? "";
-        const provided = authHeader.startsWith("Bearer ")
-          ? authHeader.slice(7)
-          : "";
-        if (!provided || !timingSafeEqual(provided, expectedSecret)) {
-          return new Response(
-            JSON.stringify({ error: "Unauthorized" }),
-            { status: 401, headers: { "Content-Type": "application/json" } }
-          );
-        }
-      } else {
-        console.warn(
-          "FIRECRAWL_WEBHOOK_SECRET not set — firecrawl webhook is publicly reachable"
-        );
-      }
-
-      const body = await request.json();
-
-      // Extract job ID and data
-      const jobId = body.jobId || body.id;
-      const status = body.status;
-      const data = body.data || body.results;
-
-      if (!jobId) {
-        return new Response(JSON.stringify({ error: "Missing jobId" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      console.log(`Firecrawl webhook received: jobId=${jobId}, status=${status}`);
-
-      // Find brand profile by job ID
-      const brandProfiles = await ctx.runQuery(internal.tables.brandProfiles.getByJobId, {
-        jobId,
-      });
-
-      if (!brandProfiles || brandProfiles.length === 0) {
-        console.error("No brand profile found for job:", jobId);
-        return new Response(JSON.stringify({ error: "Brand profile not found" }), {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      const brandProfile = brandProfiles[0];
-
-      if (status === "completed" && data) {
-        // Transform and store crawl data
-        const crawlData = data.map((page: any) => ({
-          brandProfileId: brandProfile._id,
-          url: page.url || page.sourceURL,
-          title: page.title || page.metadata?.title,
-          contentMarkdown: page.markdown || page.content,
-          metaDescription: page.metadata?.description,
-          pageType: detectPageType(page.url || page.sourceURL),
-          headings: extractHeadings(page.markdown || page.content),
-          internalLinks: page.links?.filter((l: string) => {
-            try {
-              return l.includes(new URL(page.url || page.sourceURL).hostname);
-            } catch {
-              return false;
-            }
-          }),
-          externalLinks: page.links?.filter((l: string) => {
-            try {
-              return !l.includes(new URL(page.url || page.sourceURL).hostname);
-            } catch {
-              return true;
-            }
-          }),
-          images: page.images,
-          relevanceScore: calculateRelevanceScore(page),
-          crawledAt: Date.now(),
-        }));
-
-        // Insert crawl data
-        await ctx.runMutation(internal.tables.brandCrawlData.insertMany, {
-          data: crawlData,
-        });
-
-        // Update profile status
-        await ctx.runMutation(internal.tables.brandProfiles.internalUpdate, {
-          id: brandProfile._id,
-          updates: {
-            crawlStatus: "analyzing",
-            lastCrawlAt: Date.now(),
-          },
-        });
-
-        // Trigger analysis
-        await ctx.scheduler.runAfter(0, internal.actions.gemini.analyzeBrandInternal, {
-          brandProfileId: brandProfile._id,
-        });
-      } else if (status === "failed") {
-        await ctx.runMutation(internal.tables.brandProfiles.internalUpdate, {
-          id: brandProfile._id,
-          updates: {
-            crawlStatus: "error",
-            crawlError: body.error || "Crawl failed",
-          },
-        });
-      }
-
-      return new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    } catch (error) {
-      console.error("Firecrawl webhook error:", error);
-      return new Response(
-        JSON.stringify({ error: "Internal server error" }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-    }
-  }),
-});
-
-/**
  * Clerk webhook handler
  * Creates user profile when a new user signs up.
  * Protected by Svix signature verification when CLERK_WEBHOOK_SECRET is set.
@@ -421,57 +275,5 @@ http.route({
     });
   }),
 });
-
-// Helper functions
-
-function detectPageType(url: string): string {
-  try {
-    const path = new URL(url).pathname.toLowerCase();
-    if (path === "/" || path === "") return "homepage";
-    if (path.includes("about") || path.includes("ueber")) return "about";
-    if (path.includes("product") || path.includes("produkt")) return "product";
-    if (path.includes("service") || path.includes("leistung")) return "service";
-    if (path.includes("blog") || path.includes("news")) return "blog";
-    if (path.includes("contact") || path.includes("kontakt")) return "contact";
-    if (path.includes("team")) return "team";
-    if (path.includes("preis") || path.includes("pricing")) return "pricing";
-    return "other";
-  } catch {
-    return "other";
-  }
-}
-
-function extractHeadings(content?: string): string[] {
-  if (!content) return [];
-  const matches = content.match(/^#{1,6}\s+(.+)$/gm);
-  return matches?.map((h) => h.replace(/^#+\s+/, "")) ?? [];
-}
-
-function calculateRelevanceScore(page: any): number {
-  let score = 50;
-  const pageType = detectPageType(page.url || page.sourceURL);
-
-  const boosts: Record<string, number> = {
-    homepage: 30,
-    about: 25,
-    service: 20,
-    product: 20,
-    pricing: 15,
-    team: 10,
-    contact: 5,
-    blog: 5,
-    other: 0,
-  };
-
-  score += boosts[pageType] ?? 0;
-
-  const contentLength = (page.markdown || page.content || "").length;
-  if (contentLength > 5000) score += 10;
-  else if (contentLength > 2000) score += 5;
-
-  if (page.images?.length > 0) score += 5;
-
-  return Math.min(100, score);
-}
 
 export default http;

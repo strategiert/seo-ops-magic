@@ -89,7 +89,7 @@ export function useBrandProfileConvex() {
   ) as BrandProfile | null | undefined;
 
   // Actions
-  const startCrawlAction = useAction(api.actions.firecrawl.startCrawl);
+  const startCrawlAction = useAction(api.actions.jina.startCrawl);
   const analyzeBrandAction = useAction(api.actions.gemini.analyzeBrand);
   const syncVectorStoreAction = useAction(api.actions.openai?.syncVectorStore);
 

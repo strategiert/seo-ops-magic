@@ -294,7 +294,7 @@ Extrahiere folgende Informationen als JSON:
 });
 
 /**
- * Internal action for automated analysis (called from firecrawl webhook)
+ * Internal action for automated analysis (scheduled by the Jina crawler action)
  */
 export const analyzeBrandInternal = internalAction({
   args: {
