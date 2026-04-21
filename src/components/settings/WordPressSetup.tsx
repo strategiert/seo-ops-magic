@@ -28,7 +28,7 @@ export function WordPressSetup() {
   // Pre-fill form when editing existing config
   useEffect(() => {
     if (wordpress && isConfiguring) {
-      setWpUrl(currentProject?.wp_url || "");
+      setWpUrl(currentProject?.wpUrl || "");
       setWpUsername(wordpress.wpUsername || "");
       setWpAppPassword(""); // Don't pre-fill password for security
     }
@@ -158,8 +158,8 @@ export function WordPressSetup() {
 
   const startConfiguring = () => {
     setIsConfiguring(true);
-    if (currentProject?.wp_url) {
-      setWpUrl(currentProject.wp_url);
+    if (currentProject?.wpUrl) {
+      setWpUrl(currentProject.wpUrl);
     }
     if (wordpress?.wpUsername) {
       setWpUsername(wordpress.wpUsername);
@@ -272,7 +272,7 @@ export function WordPressSetup() {
               </p>
               <div className="text-sm text-muted-foreground space-y-1">
                 <p><strong>Seite:</strong> {wordpress.wpSiteName || "Unbekannt"}</p>
-                <p><strong>URL:</strong> {currentProject.wp_url}</p>
+                <p><strong>URL:</strong> {currentProject.wpUrl}</p>
                 <p><strong>Benutzer:</strong> {wordpress.wpUsername}</p>
               </div>
             </div>
