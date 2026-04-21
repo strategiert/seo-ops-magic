@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 
 // ── Bodycam Live-Preview (proxy + draft injection) ────────────────────────────
 
-const LIVE_SITE = "https://netco-bodycam-website-eoa.pages.dev";
+const LIVE_SITE = "https://netco-bodycam-website.pages.dev";
 
 function liveUrl(pageKey: string, lang: string): string {
   if (pageKey === "homepage") return `${LIVE_SITE}/${lang}/`;
@@ -19,6 +19,17 @@ const CORS_HEADERS = {
   "X-Frame-Options": "ALLOWALL",
   "Access-Control-Allow-Origin": "*",
 };
+
+/**
+ * HTTP Router for webhooks and external callbacks
+ *
+ * Handles:
+ * - Bodycam live preview (proxy + draft injection)
+ * - Firecrawl webhook for crawl results
+ * - Clerk webhook for user events
+ */
+
+const http = httpRouter();
 
 http.route({
   path: "/bodycam-preview",
@@ -131,16 +142,6 @@ http.route({
     return new Response(html, { status: 200, headers: CORS_HEADERS });
   }),
 });
-
-/**
- * HTTP Router for webhooks and external callbacks
- *
- * Handles:
- * - Firecrawl webhook for crawl results
- * - Clerk webhook for user events
- */
-
-const http = httpRouter();
 
 /**
  * Firecrawl webhook handler
