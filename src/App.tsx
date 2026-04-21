@@ -5,8 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { WorkspaceProviderConvex } from "@/hooks/useWorkspaceConvex";
-// TODO: Migrate ChangelogModal to Convex
-// import { ChangelogModal } from "@/components/changelog";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import Projects from "./pages/Projects";
@@ -35,26 +34,25 @@ const App = () => (
       <BrowserRouter>
         <WorkspaceProviderConvex>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="/briefs" element={<Briefs />} />
-            <Route path="/briefs/:id" element={<BriefDetail />} />
-            <Route path="/articles" element={<Articles />} />
-            <Route path="/articles/:id" element={<ArticleDetail />} />
-            <Route path="/import-article" element={<ImportArticle />} />
-            <Route path="/templates" element={<Templates />} />
-            <Route path="/templates/:id" element={<TemplateDetail />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+            <Route path="/briefs" element={<ProtectedRoute><Briefs /></ProtectedRoute>} />
+            <Route path="/briefs/:id" element={<ProtectedRoute><BriefDetail /></ProtectedRoute>} />
+            <Route path="/articles" element={<ProtectedRoute><Articles /></ProtectedRoute>} />
+            <Route path="/articles/:id" element={<ProtectedRoute><ArticleDetail /></ProtectedRoute>} />
+            <Route path="/import-article" element={<ProtectedRoute><ImportArticle /></ProtectedRoute>} />
+            <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
+            <Route path="/templates/:id" element={<ProtectedRoute><TemplateDetail /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             {/* Bodycam CMS */}
-            <Route path="/bodycam" element={<BodycamDashboard />} />
-            <Route path="/bodycam/pages" element={<BodycamPagesList />} />
-            <Route path="/bodycam/pages/:pageKey" element={<BodycamPageEditor />} />
-            <Route path="/bodycam/media" element={<BodycamMedia />} />
-            <Route path="/bodycam/preview/:pageKey/:lang" element={<BodycamPreview />} />
+            <Route path="/bodycam" element={<ProtectedRoute><BodycamDashboard /></ProtectedRoute>} />
+            <Route path="/bodycam/pages" element={<ProtectedRoute><BodycamPagesList /></ProtectedRoute>} />
+            <Route path="/bodycam/pages/:pageKey" element={<ProtectedRoute><BodycamPageEditor /></ProtectedRoute>} />
+            <Route path="/bodycam/media" element={<ProtectedRoute><BodycamMedia /></ProtectedRoute>} />
+            <Route path="/bodycam/preview/:pageKey/:lang" element={<ProtectedRoute><BodycamPreview /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
-          {/* <ChangelogModal /> */}
         </WorkspaceProviderConvex>
       </BrowserRouter>
     </TooltipProvider>

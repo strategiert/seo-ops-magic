@@ -18,7 +18,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import { NeuronWriterSetup } from "@/components/settings/NeuronWriterSetup";
 import { WordPressSetup } from "@/components/settings/WordPressSetup";
-import { DatabaseAdmin } from "@/components/settings/DatabaseAdmin";
 import { BrandIntelligenceSetup } from "@/components/settings/BrandIntelligenceSetup";
 import { useTour, useUserOnboarding } from "@/components/onboarding";
 import { api } from "../../convex/_generated/api";
@@ -338,8 +337,6 @@ export default function Settings() {
                 </Button>
               </CardContent>
             </Card>
-
-            <DatabaseAdmin />
           </TabsContent>
         </Tabs>
       </div>

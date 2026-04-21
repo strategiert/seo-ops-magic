@@ -1,45 +1,25 @@
 import { serve } from "inngest/vercel";
 import { inngest } from "../src/inngest/client";
 
-// Import all agent functions
+// Import implemented agent functions
 import { seoContentWriter } from "../src/inngest/functions/core/seoWriter";
 import { htmlDesigner } from "../src/inngest/functions/core/htmlDesigner";
 import { wordpressPublisher } from "../src/inngest/functions/core/wpPublisher";
 import { internalLinker } from "../src/inngest/functions/core/internalLinker";
 import { socialPostCreator } from "../src/inngest/functions/growth/socialCreator";
-import { adCopyWriter } from "../src/inngest/functions/growth/adCopyWriter";
-import { pressReleaseWriter } from "../src/inngest/functions/enterprise/pressRelease";
 
-// Import workflows
-import { fullContentPipeline } from "../src/inngest/workflows/fullContentPipeline";
+// NOTE: adCopyWriter, pressReleaseWriter and fullContentPipeline are stubs
+// (TODOs: Convex persistence, credit handling, agentJobs status updates).
+// Registering them caused queued jobs to hang forever in the UI. They are
+// intentionally excluded until their implementations are complete.
 
-/**
- * Inngest API Handler for Vercel
- *
- * This endpoint:
- * 1. Receives events from Inngest
- * 2. Routes them to the appropriate agent functions
- * 3. Handles retries and error reporting
- *
- * All 18 agents will be registered here as they are implemented.
- */
 export default serve({
   client: inngest,
   functions: [
-    // Core Tier (Basis)
     seoContentWriter,
     htmlDesigner,
     wordpressPublisher,
     internalLinker,
-
-    // Growth Tier
     socialPostCreator,
-    adCopyWriter,
-
-    // Enterprise Tier
-    pressReleaseWriter,
-
-    // Workflows
-    fullContentPipeline,
   ],
 });
