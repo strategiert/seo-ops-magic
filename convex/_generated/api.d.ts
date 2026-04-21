@@ -9,6 +9,8 @@
  */
 
 import type * as actions_articleGeneration from "../actions/articleGeneration.js";
+import type * as actions_bodycam from "../actions/bodycam.js";
+import type * as actions_bodycamAI from "../actions/bodycamAI.js";
 import type * as actions_firecrawl from "../actions/firecrawl.js";
 import type * as actions_gemini from "../actions/gemini.js";
 import type * as actions_htmlExport from "../actions/htmlExport.js";
@@ -16,11 +18,13 @@ import type * as actions_neuronwriter from "../actions/neuronwriter.js";
 import type * as actions_wordpress from "../actions/wordpress.js";
 import type * as agents_actions from "../agents/actions.js";
 import type * as agents_internal from "../agents/internal.js";
+import type * as agents_routerTriggers from "../agents/routerTriggers.js";
 import type * as agents_triggers from "../agents/triggers.js";
 import type * as auth from "../auth.js";
 import type * as http from "../http.js";
 import type * as tables_articleDesignRecipes from "../tables/articleDesignRecipes.js";
 import type * as tables_articles from "../tables/articles.js";
+import type * as tables_bodycam from "../tables/bodycam.js";
 import type * as tables_brandCrawlData from "../tables/brandCrawlData.js";
 import type * as tables_brandProfiles from "../tables/brandProfiles.js";
 import type * as tables_contentBriefs from "../tables/contentBriefs.js";
@@ -40,6 +44,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "actions/articleGeneration": typeof actions_articleGeneration;
+  "actions/bodycam": typeof actions_bodycam;
+  "actions/bodycamAI": typeof actions_bodycamAI;
   "actions/firecrawl": typeof actions_firecrawl;
   "actions/gemini": typeof actions_gemini;
   "actions/htmlExport": typeof actions_htmlExport;
@@ -47,11 +53,13 @@ declare const fullApi: ApiFromModules<{
   "actions/wordpress": typeof actions_wordpress;
   "agents/actions": typeof agents_actions;
   "agents/internal": typeof agents_internal;
+  "agents/routerTriggers": typeof agents_routerTriggers;
   "agents/triggers": typeof agents_triggers;
   auth: typeof auth;
   http: typeof http;
   "tables/articleDesignRecipes": typeof tables_articleDesignRecipes;
   "tables/articles": typeof tables_articles;
+  "tables/bodycam": typeof tables_bodycam;
   "tables/brandCrawlData": typeof tables_brandCrawlData;
   "tables/brandProfiles": typeof tables_brandProfiles;
   "tables/contentBriefs": typeof tables_contentBriefs;

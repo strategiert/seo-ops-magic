@@ -11,96 +11,186 @@ import { Inngest } from "inngest";
 
 // Event type definitions for all our agents
 export type Events = {
-  // Content Creation Events
+  // ============ ROUTER EVENTS ============
+  
+  /**
+   * Main entry point: Route a user request to appropriate agents
+   */
+  "agent/route": {
+    data: {
+      workspaceId: string;
+      projectId: string;
+      userId: string;
+      customerId: string;
+      input: {
+        userMessage?: string;
+        briefId?: string;
+        articleId?: string;
+        requestedSkills?: string[];
+        excludeSkills?: string[];
+        autoExecute?: boolean;
+      };
+    };
+  };
+
+  /**
+   * Direct skill execution (bypasses router)
+   */
+  "agent/execute-skill": {
+    data: {
+      workspaceId: string;
+      projectId: string;
+      userId: string;
+      customerId: string;
+      skillId: string;
+      skillInput: Record<string, any>;
+      routerJobId?: string; // If triggered by router
+    };
+  };
+
+  // ============ CONTENT CREATION EVENTS ============
+  
   "article/generate": {
     data: {
       briefId: string;
       projectId: string;
       userId: string;
-      customerId: string; // For concurrency control
+      customerId: string;
+      workspaceId: string;
+      routerJobId?: string;
     };
   };
+  
   "article/published": {
     data: {
       articleId: string;
       projectId: string;
       userId: string;
       customerId: string;
+      workspaceId: string;
       title: string;
       contentMarkdown: string;
       primaryKeyword: string;
     };
   };
+  
   "article/transform-html": {
     data: {
       articleId: string;
       projectId: string;
       userId: string;
       customerId: string;
+      workspaceId: string;
+      routerJobId?: string;
     };
   };
+  
   "article/publish-wordpress": {
     data: {
       articleId: string;
       projectId: string;
       userId: string;
       customerId: string;
+      workspaceId: string;
+      status?: "draft" | "publish";
+      routerJobId?: string;
     };
   };
 
-  // Repurposing Events
+  "article/analyze-links": {
+    data: {
+      articleId: string;
+      projectId: string;
+      userId: string;
+      customerId: string;
+      workspaceId: string;
+      routerJobId?: string;
+    };
+  };
+
+  // ============ CONTENT TRANSFORMATION EVENTS ============
+
   "content/generate-social-posts": {
     data: {
       articleId: string;
       projectId: string;
       userId: string;
       customerId: string;
+      workspaceId: string;
       platforms: ("linkedin" | "twitter" | "instagram" | "facebook")[];
+      routerJobId?: string;
     };
   };
+  
   "content/generate-press-release": {
     data: {
       articleId: string;
       projectId: string;
       userId: string;
       customerId: string;
+      workspaceId: string;
+      routerJobId?: string;
     };
   };
+  
   "content/generate-ad-copies": {
     data: {
       articleId: string;
       projectId: string;
       userId: string;
       customerId: string;
+      workspaceId: string;
       platforms: ("google" | "meta" | "linkedin")[];
+      routerJobId?: string;
     };
   };
+  
   "content/generate-newsletter": {
     data: {
       articleIds: string[];
       projectId: string;
       userId: string;
       customerId: string;
+      workspaceId: string;
+      routerJobId?: string;
     };
   };
 
-  // Visual Asset Events
-  "asset/generate-images": {
+  "content/translate": {
     data: {
-      contentAssetId: string;
+      articleId: string;
       projectId: string;
       userId: string;
       customerId: string;
+      workspaceId: string;
+      targetLanguage: "de" | "en";
+      routerJobId?: string;
     };
   };
 
-  // Workflow Events (Multi-Agent)
+  // ============ VISUAL ASSET EVENTS ============
+
+  "asset/generate-images": {
+    data: {
+      contentAssetId?: string;
+      articleId?: string;
+      projectId: string;
+      userId: string;
+      customerId: string;
+      workspaceId: string;
+      routerJobId?: string;
+    };
+  };
+
+  // ============ WORKFLOW EVENTS (Multi-Agent) ============
+  
   "workflow/full-content-pipeline": {
     data: {
       briefId: string;
       projectId: string;
       userId: string;
       customerId: string;
+      workspaceId: string;
       options: {
         generateSocialPosts: boolean;
         generatePressRelease: boolean;
@@ -109,17 +199,31 @@ export type Events = {
       };
     };
   };
+
+  /**
+   * Callback when a skill completes (for router tracking)
+   */
+  "workflow/skill-completed": {
+    data: {
+      routerJobId: string;
+      skillId: string;
+      success: boolean;
+      result?: any;
+      error?: string;
+    };
+  };
 };
 
 // Create the Inngest client
 export const inngest = new Inngest({
   id: "seo-content-ops",
-  schemas: new Map() as any, // Type assertion for events
+  schemas: new Map() as any,
 });
 
 // Cost estimates per agent (in credits)
 export const AGENT_COSTS = {
-  "seo-writer": 10,        // Long content generation
+  "router": 2,              // Routing logic only
+  "seo-writer": 10,         // Long content generation
   "html-designer": 3,       // Transformation
   "wp-publisher": 1,        // API call only
   "internal-linker": 5,     // Analysis + update
@@ -140,3 +244,21 @@ export const AGENT_COSTS = {
 } as const;
 
 export type AgentId = keyof typeof AGENT_COSTS;
+
+// Skill classification for router
+export const THINKING_SKILLS = [
+  "seo-writer",
+  "social-creator",
+  "ad-copy-writer",
+  "press-release",
+  "newsletter",
+  "content-translator",
+  "image-generator",
+  "linkbait-creator",
+] as const;
+
+export const DETERMINISTIC_SKILLS = [
+  "wp-publisher",
+  "internal-linker",
+  "html-designer",
+] as const;

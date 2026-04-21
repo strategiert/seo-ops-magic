@@ -422,3 +422,36 @@ export const updateAgentJob = internalMutation({
     return job._id;
   },
 });
+
+// ============ Router-specific Queries ============
+
+export const getAgentJobByEventId = internalQuery({
+  args: { inngestEventId: v.string() },
+  handler: async (ctx, { inngestEventId }) => {
+    const job = await ctx.db
+      .query("agentJobs")
+      .withIndex("by_inngest_event", (q) => q.eq("inngestEventId", inngestEventId))
+      .first();
+    
+    return job;
+  },
+});
+
+export const getWorkspaceCredits = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, { workspaceId }) => {
+    const credits = await ctx.db
+      .query("credits")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+      .first();
+    
+    if (!credits) return null;
+    
+    return {
+      balance: credits.balance,
+      tier: credits.tier,
+      monthlyAllowance: credits.monthlyAllowance,
+      enabledAgents: credits.enabledAgents,
+    };
+  },
+});
