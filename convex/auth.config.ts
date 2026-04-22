@@ -1,14 +1,20 @@
 /**
  * Convex Auth Configuration
  *
- * Configures Clerk as the authentication provider.
- * The domain must match your Clerk Frontend API URL.
+ * Uses Clerk's recommended env-var setup so Dev/Prod can be switched by
+ * updating CLERK_FRONTEND_API_URL in the Convex dashboard (no code change).
+ *
+ * - Production: https://clerk.notamsign.com
+ * - Dev sandbox: https://heroic-stinkbug-5.clerk.accounts.dev
  */
+
+const frontendApiUrl =
+  process.env.CLERK_FRONTEND_API_URL ?? "https://clerk.notamsign.com";
 
 export default {
   providers: [
     {
-      domain: "https://heroic-stinkbug-5.clerk.accounts.dev",
+      domain: frontendApiUrl,
       applicationID: "convex",
     },
   ],
