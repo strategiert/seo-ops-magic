@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon, Link2, AlertCircle, Wrench, Building2, RotateCcw } from "lucide-react";
+import { Settings as SettingsIcon, Link2, AlertCircle, Wrench, RotateCcw } from "lucide-react";
 import { useMutation } from "convex/react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +18,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import { NeuronWriterSetup } from "@/components/settings/NeuronWriterSetup";
 import { WordPressSetup } from "@/components/settings/WordPressSetup";
-import { BrandIntelligenceSetup } from "@/components/settings/BrandIntelligenceSetup";
 import { useTour, useUserOnboarding } from "@/components/onboarding";
 import { api } from "../../convex/_generated/api";
 
@@ -163,10 +162,6 @@ export default function Settings() {
             <TabsTrigger value="general">
               <SettingsIcon className="h-4 w-4 mr-2" />
               Allgemein
-            </TabsTrigger>
-            <TabsTrigger value="brand">
-              <Building2 className="h-4 w-4 mr-2" />
-              Brand
             </TabsTrigger>
             <TabsTrigger value="system">
               <Wrench className="h-4 w-4 mr-2" />
@@ -315,10 +310,6 @@ export default function Settings() {
                 </Button>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="brand" className="space-y-4 mt-4">
-            <BrandIntelligenceSetup />
           </TabsContent>
 
           <TabsContent value="system" className="space-y-4 mt-4">

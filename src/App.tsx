@@ -17,6 +17,7 @@ import ImportArticle from "./pages/ImportArticle";
 import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
 import Settings from "./pages/Settings";
+import Brand from "./pages/Brand";
 import BodycamDashboard from "./pages/BodycamDashboard";
 import BodycamPagesList from "./pages/BodycamPagesList";
 import BodycamPageEditor from "./pages/BodycamPageEditor";
@@ -45,6 +46,7 @@ const App = () => (
             <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
             <Route path="/templates/:id" element={<ProtectedRoute><TemplateDetail /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/brand" element={<ProtectedRoute><Brand /></ProtectedRoute>} />
             {/* Bodycam CMS */}
             <Route path="/bodycam" element={<ProtectedRoute><BodycamDashboard /></ProtectedRoute>} />
             <Route path="/bodycam/pages" element={<ProtectedRoute><BodycamPagesList /></ProtectedRoute>} />

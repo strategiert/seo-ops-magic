@@ -301,8 +301,8 @@ export const analyzeBrandInternal = internalAction({
     brandProfileId: v.id("brandProfiles"),
   },
   handler: async (ctx, { brandProfileId }) => {
-    // Get brand profile
-    const brandProfile = await ctx.runQuery(api.tables.brandProfiles.get, {
+    // Get brand profile (internal query — no auth needed for scheduled action)
+    const brandProfile = await ctx.runQuery(internal.tables.brandProfiles.getInternal, {
       id: brandProfileId,
     });
 
@@ -311,8 +311,8 @@ export const analyzeBrandInternal = internalAction({
       return;
     }
 
-    // Get top crawled pages
-    const crawlData = await ctx.runQuery(api.tables.brandCrawlData.getTopByRelevance, {
+    // Get top crawled pages (internal query)
+    const crawlData = await ctx.runQuery(internal.tables.brandCrawlData.getTopByRelevanceInternal, {
       brandProfileId,
       limit: 15,
     });

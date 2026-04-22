@@ -332,3 +332,13 @@ export const getByJobId = internalQuery({
       .collect();
   },
 });
+
+/**
+ * Internal: get brand profile by ID (no auth — for scheduled actions)
+ */
+export const getInternal = internalQuery({
+  args: { id: v.id("brandProfiles") },
+  handler: async (ctx, { id }) => {
+    return await ctx.db.get(id);
+  },
+});

@@ -1,4 +1,4 @@
-import { query, mutation, internalMutation } from "../_generated/server";
+import { query, mutation, internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import { requireAuth } from "../auth";
 
@@ -65,6 +65,25 @@ export const getTopByRelevance = query({
       .collect();
 
     // Sort by relevance score descending
+    return allData
+      .sort((a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0))
+      .slice(0, limit);
+  },
+});
+
+/**
+ * Internal: top pages by relevance (no auth — for scheduled actions)
+ */
+export const getTopByRelevanceInternal = internalQuery({
+  args: {
+    brandProfileId: v.id("brandProfiles"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { brandProfileId, limit = 15 }) => {
+    const allData = await ctx.db
+      .query("brandCrawlData")
+      .withIndex("by_brand_profile", (q) => q.eq("brandProfileId", brandProfileId))
+      .collect();
     return allData
       .sort((a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0))
       .slice(0, limit);

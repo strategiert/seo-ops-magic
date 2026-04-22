@@ -33,10 +33,12 @@ import {
   PenTool,
   Globe,
   Image,
+  Building2,
 } from 'lucide-react';
 import { TOUR_IDS } from '@/components/onboarding';
 
 const mainNavItems = [
+  { title: 'Brand', url: '/brand', icon: Building2 },
   { title: 'Content Briefs', url: '/briefs', icon: FileText, tourId: TOUR_IDS.SIDEBAR_BRIEFS },
   { title: 'Artikel', url: '/articles', icon: PenTool, tourId: TOUR_IDS.SIDEBAR_ARTICLES },
 ];
