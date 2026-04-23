@@ -8,8 +8,9 @@ import Anthropic from "@anthropic-ai/sdk";
  * Article Generation Action
  *
  * Generates full SEO-optimized articles from content briefs via Anthropic
- * (claude-opus-4-7). Migrated from Gemini (OpenAI-compat) after persistent
- * auth issues on Google's side.
+ * (claude-sonnet-4-6 — best quality/cost balance for long-form content;
+ * ~40% cheaper than Opus 4.7). Migrated from Gemini (OpenAI-compat) after
+ * persistent auth issues on Google's side.
  *
  * Flow:
  * 1. Load brief and brand context
@@ -94,7 +95,7 @@ async function callGemini(
   const anthropic = new Anthropic({ apiKey });
 
   const response = await anthropic.messages.create({
-    model: "claude-opus-4-7",
+    model: "claude-sonnet-4-6",
     max_tokens: options?.maxTokens ?? 8000,
     ...(systemPrompt ? { system: systemPrompt } : {}),
     messages: [{ role: "user", content: prompt }],

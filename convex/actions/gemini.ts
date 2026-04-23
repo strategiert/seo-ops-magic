@@ -7,9 +7,11 @@ import Anthropic from "@anthropic-ai/sdk";
 /**
  * AI Actions (Anthropic)
  *
- * Brand analysis and content generation. Historically called Gemini via an
- * OpenAI-compat shim which 400'd on auth; migrated to Anthropic SDK using
- * claude-opus-4-7. Filename kept for backwards compat (api.actions.gemini.*).
+ * Brand analysis and design-recipe generation. Historically called Gemini
+ * via an OpenAI-compat shim which 400'd on auth; migrated to Anthropic SDK
+ * using claude-haiku-4-5 (sufficient for structured JSON extraction, ~80%
+ * cheaper than Opus). Filename kept for backwards compat
+ * (api.actions.gemini.*).
  */
 
 interface BrandAnalysis {
@@ -79,7 +81,7 @@ async function callGemini(
   const anthropic = new Anthropic({ apiKey });
 
   const response = await anthropic.messages.create({
-    model: "claude-opus-4-7",
+    model: "claude-haiku-4-5",
     max_tokens: 8000,
     ...(systemPrompt ? { system: systemPrompt } : {}),
     messages: [{ role: "user", content: prompt }],
