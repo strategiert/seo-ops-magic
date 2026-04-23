@@ -1,5 +1,6 @@
-import { query, mutation } from "../_generated/server";
+import { query, mutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
+import { internal } from "../_generated/api";
 import { requireAuth } from "../auth";
 
 /**
@@ -186,7 +187,47 @@ export const update = mutation({
     }
 
     await ctx.db.patch(id, patchData);
+
+    // If the article just transitioned to 'published', schedule a vector
+    // store sync so the published content becomes part of the brand corpus
+    // (only when status actually flips, not on every edit).
+    if (
+      updates.status === "published" &&
+      article.status !== "published"
+    ) {
+      const brandProfile = await ctx.db
+        .query("brandProfiles")
+        .withIndex("by_project", (q) =>
+          q.eq("projectId", article.projectId)
+        )
+        .first();
+      if (brandProfile) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.actions.openai.syncVectorStoreInternal,
+          { brandProfileId: brandProfile._id }
+        );
+      }
+    }
+
     return id;
+  },
+});
+
+/**
+ * Internal: all published articles for a project (no auth — for scheduled
+ * vector store sync).
+ */
+export const listPublishedByProjectInternal = internalQuery({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, { projectId }) => {
+    const all = await ctx.db
+      .query("articles")
+      .withIndex("by_project_status", (q) =>
+        q.eq("projectId", projectId).eq("status", "published")
+      )
+      .collect();
+    return all;
   },
 });
 

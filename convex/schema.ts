@@ -238,18 +238,26 @@ export default defineSchema({
 
   /**
    * Brand vector documents - OpenAI Vector Store tracking
+   *
+   * Each row tracks one document uploaded to the OpenAI vector store for
+   * this brand. documentKey is the stable identifier used for incremental
+   * sync (e.g. "brand_profile", "page_<urlHash>", "article_<articleId>").
+   * contentHash lets the sync skip unchanged documents.
    */
   brandVectorDocuments: defineTable({
     brandProfileId: v.id("brandProfiles"),
     openaiFileId: v.string(),
-    documentType: v.string(), // 'brand_core' | 'brand_voice' | 'product' | etc.
+    documentKey: v.string(),       // stable identifier for incremental sync
+    documentType: v.string(),      // 'brand_profile' | 'page' | 'article'
+    contentHash: v.optional(v.string()), // fnv1a hash of doc content
     title: v.optional(v.string()),
     contentPreview: v.optional(v.string()),
     tokenCount: v.optional(v.number()),
     sourceUrl: v.optional(v.string()),
     uploadedAt: v.number(),
   })
-    .index("by_brand_profile", ["brandProfileId"]),
+    .index("by_brand_profile", ["brandProfileId"])
+    .index("by_brand_profile_key", ["brandProfileId", "documentKey"]),
 
   /**
    * Brand research jobs - long-running job tracking

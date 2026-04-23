@@ -2,33 +2,37 @@
 import { action, internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "../_generated/api";
+import * as crypto from "node:crypto";
 
 /**
  * OpenAI Vector Store sync.
  *
- * The vector store holds the full crawled brand corpus so downstream
- * content generation can retrieve and cite arbitrary passages of the
- * original website. It contains:
- *   - _brand_profile.md      — the structured brand profile overview
- *   - page_<NNN>_<slug>.md   — one file per crawled page, with the
- *                              page's original Markdown content intact
+ * The vector store holds the full brand corpus so downstream content
+ * generation can retrieve and cite arbitrary passages. It contains:
+ *   - _brand_profile.md          — structured brand profile overview
+ *   - page_<NNN>_<slug>.md       — one file per crawled page
+ *   - article_<NNN>_<slug>.md    — one file per published article
  *
- * Runs automatically at the end of brand analysis (scheduled from
- * gemini.analyzeBrandInternal). Also exposed as a public action for
- * manual re-sync.
+ * Sync is **incremental**:
+ *   - Each document has a stable `documentKey` and a content hash.
+ *   - On re-sync we diff the current set against what is already in the
+ *     store: only changed/new docs are re-embedded; deleted docs are
+ *     removed. Unchanged docs stay as-is (saves OpenAI cost + avoids
+ *     downtime for retrieval queries that might run concurrently).
  *
- * Strategy: clean slate per sync — delete the previous vector store for
- * this brand (if any), re-upload everything, create a fresh vector
- * store, store its ID on the brand profile. Keeps the retrieval index
- * in sync with the latest crawl + analysis without incremental diffing.
+ * Triggered automatically by:
+ *   - analyzeBrandInternal (at end of brand analysis)
+ *   - articles.update (when a draft flips to "published")
  *
- * Scope: one brand profile → one vector store, keyed in
+ * Scope: one brand profile → one vector store, ID on
  * `brandProfiles.openaiVectorStoreId`.
  */
 
 const OPENAI_FILES_URL = "https://api.openai.com/v1/files";
 const OPENAI_VS_URL = "https://api.openai.com/v1/vector_stores";
 const OPENAI_BETA_HEADER = "assistants=v2";
+
+// ──────────────────────────────────────────────────────────── OpenAI REST
 
 async function uploadFile(
   apiKey: string,
@@ -42,7 +46,6 @@ async function uploadFile(
     new Blob([content], { type: "text/markdown" }),
     filename
   );
-
   const res = await fetch(OPENAI_FILES_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
@@ -57,10 +60,20 @@ async function uploadFile(
   return data.id as string;
 }
 
+async function deleteFileSafe(apiKey: string, fileId: string): Promise<void> {
+  try {
+    await fetch(`${OPENAI_FILES_URL}/${fileId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+  } catch (err) {
+    console.warn(`OpenAI file delete ${fileId} failed:`, err);
+  }
+}
+
 async function createVectorStore(
   apiKey: string,
-  name: string,
-  fileIds: string[]
+  name: string
 ): Promise<string> {
   const res = await fetch(OPENAI_VS_URL, {
     method: "POST",
@@ -69,7 +82,7 @@ async function createVectorStore(
       "Content-Type": "application/json",
       "OpenAI-Beta": OPENAI_BETA_HEADER,
     },
-    body: JSON.stringify({ name, file_ids: fileIds }),
+    body: JSON.stringify({ name }),
   });
   if (!res.ok) {
     throw new Error(
@@ -80,9 +93,34 @@ async function createVectorStore(
   return data.id as string;
 }
 
-async function deleteVectorStoreSafe(apiKey: string, vsId: string): Promise<void> {
+async function attachFileToVectorStore(
+  apiKey: string,
+  vsId: string,
+  fileId: string
+): Promise<void> {
+  const res = await fetch(`${OPENAI_VS_URL}/${vsId}/files`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "OpenAI-Beta": OPENAI_BETA_HEADER,
+    },
+    body: JSON.stringify({ file_id: fileId }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `Attach ${fileId} → ${vsId} failed (${res.status}): ${await res.text()}`
+    );
+  }
+}
+
+async function detachFileFromVectorStoreSafe(
+  apiKey: string,
+  vsId: string,
+  fileId: string
+): Promise<void> {
   try {
-    await fetch(`${OPENAI_VS_URL}/${vsId}`, {
+    await fetch(`${OPENAI_VS_URL}/${vsId}/files/${fileId}`, {
       method: "DELETE",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -90,8 +128,55 @@ async function deleteVectorStoreSafe(apiKey: string, vsId: string): Promise<void
       },
     });
   } catch (err) {
-    console.warn(`Failed to delete old vector store ${vsId}:`, err);
+    console.warn(`Detach ${fileId} from ${vsId} failed:`, err);
   }
+}
+
+async function verifyVectorStoreExists(
+  apiKey: string,
+  vsId: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${OPENAI_VS_URL}/${vsId}`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "OpenAI-Beta": OPENAI_BETA_HEADER,
+      },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ────────────────────────────────────────────────────────── Content helpers
+
+function hashContent(s: string): string {
+  return crypto.createHash("sha256").update(s).digest("hex").substring(0, 16);
+}
+
+function slugFromUrl(url: string, fallback: string): string {
+  try {
+    const u = new URL(url);
+    const raw =
+      u.pathname === "/" || u.pathname === ""
+        ? "homepage"
+        : u.pathname.replace(/^\/+|\/+$/g, "").replace(/\//g, "_");
+    const slug = raw.replace(/[^a-zA-Z0-9_-]+/g, "-").substring(0, 60);
+    return slug || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function slugify(s: string, max = 60): string {
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .substring(0, max) || "untitled"
+  );
 }
 
 interface BrandDocFields {
@@ -119,9 +204,25 @@ interface CrawlPage {
   relevanceScore?: number;
 }
 
-/**
- * Turn the structured brand profile into a single overview document.
- */
+interface PublishedArticle {
+  _id: string;
+  title: string;
+  primaryKeyword?: string;
+  contentMarkdown?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  _creationTime: number;
+}
+
+interface Doc {
+  key: string;           // stable identifier, e.g. "brand_profile"
+  type: "brand_profile" | "page" | "article";
+  filename: string;      // display name in OpenAI dashboard
+  content: string;       // full markdown body
+  title?: string;
+  sourceUrl?: string;
+}
+
 function renderBrandProfileDoc(profile: BrandDocFields): string {
   const brand = profile.brandName || "Brand";
   const parts: string[] = [`# ${brand} — Brand Profile`];
@@ -223,45 +324,32 @@ function renderBrandProfileDoc(profile: BrandDocFields): string {
   return parts.join("\n\n");
 }
 
-function slugFromUrl(url: string, fallbackIndex: number): string {
-  try {
-    const u = new URL(url);
-    const raw =
-      u.pathname === "/" || u.pathname === ""
-        ? "homepage"
-        : u.pathname.replace(/^\/+|\/+$/g, "").replace(/\//g, "_");
-    const slug = raw.replace(/[^a-zA-Z0-9_-]+/g, "-").substring(0, 60);
-    return slug || `page_${fallbackIndex}`;
-  } catch {
-    return `page_${fallbackIndex}`;
-  }
-}
-
-/**
- * Build the full document set: 1 brand-profile overview + N crawled pages.
- */
-function renderDocs(
+function buildDocs(
   profile: BrandDocFields,
-  crawlPages: CrawlPage[]
-): Array<{ filename: string; content: string }> {
-  const docs: Array<{ filename: string; content: string }> = [];
+  crawlPages: CrawlPage[],
+  articles: PublishedArticle[]
+): Doc[] {
+  const docs: Doc[] = [];
 
-  // 1) Brand profile overview
+  // 1) Structured brand profile
   docs.push({
+    key: "brand_profile",
+    type: "brand_profile",
     filename: "_brand_profile.md",
     content: renderBrandProfileDoc(profile),
+    title: profile.brandName || "Brand Profile",
   });
 
-  // 2) One doc per crawled page, most relevant first
-  const sorted = [...crawlPages].sort(
+  // 2) Crawled pages (one per URL, stable key = URL hash)
+  const sortedPages = [...crawlPages].sort(
     (a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0)
   );
-  let index = 0;
-  for (const page of sorted) {
+  let pageIdx = 0;
+  for (const page of sortedPages) {
     if (!page.contentMarkdown || page.contentMarkdown.trim().length < 40) continue;
-    index += 1;
-    const slug = slugFromUrl(page.url, index);
-    const filename = `page_${String(index).padStart(3, "0")}_${slug}.md`;
+    pageIdx += 1;
+    const slug = slugFromUrl(page.url, `page_${pageIdx}`);
+    const urlKey = hashContent(page.url);
     const header: string[] = [
       `# ${page.title ?? page.url}`,
       `URL: ${page.url}`,
@@ -269,18 +357,46 @@ function renderDocs(
     if (page.pageType) header.push(`Typ: ${page.pageType}`);
     if (page.metaDescription) header.push(`Meta: ${page.metaDescription}`);
     docs.push({
-      filename,
+      key: `page_${urlKey}`,
+      type: "page",
+      filename: `page_${String(pageIdx).padStart(3, "0")}_${slug}.md`,
       content: `${header.join("\n")}\n\n---\n\n${page.contentMarkdown}`,
+      title: page.title,
+      sourceUrl: page.url,
+    });
+  }
+
+  // 3) Published articles (one per article, stable key = articleId)
+  const sortedArticles = [...articles].sort(
+    (a, b) => b._creationTime - a._creationTime
+  );
+  let articleIdx = 0;
+  for (const article of sortedArticles) {
+    if (!article.contentMarkdown || article.contentMarkdown.trim().length < 40)
+      continue;
+    articleIdx += 1;
+    const slug = slugify(article.title);
+    const header: string[] = [
+      `# ${article.title}`,
+      `Article ID: ${article._id}`,
+    ];
+    if (article.primaryKeyword)
+      header.push(`Primary Keyword: ${article.primaryKeyword}`);
+    if (article.metaDescription) header.push(`Meta: ${article.metaDescription}`);
+    docs.push({
+      key: `article_${article._id}`,
+      type: "article",
+      filename: `article_${String(articleIdx).padStart(3, "0")}_${slug}.md`,
+      content: `${header.join("\n")}\n\n---\n\n${article.contentMarkdown}`,
+      title: article.title,
     });
   }
 
   return docs;
 }
 
-/**
- * Internal action — sync brand profile to OpenAI vector store.
- * Idempotent: deletes previous vector store, creates fresh.
- */
+// ──────────────────────────────────────────────────────────────── Sync
+
 export const syncVectorStoreInternal = internalAction({
   args: { brandProfileId: v.id("brandProfiles") },
   handler: async (ctx, { brandProfileId }) => {
@@ -294,80 +410,166 @@ export const syncVectorStoreInternal = internalAction({
       internal.tables.brandProfiles.getInternal,
       { id: brandProfileId }
     );
-    if (!profile) {
-      return { success: false, error: "Brand profile not found" };
-    }
+    if (!profile) return { success: false, error: "Brand profile not found" };
 
     const crawlPages = (await ctx.runQuery(
       internal.tables.brandCrawlData.listByBrandProfileInternal,
       { brandProfileId }
     )) as CrawlPage[];
 
-    const docs = renderDocs(profile, crawlPages);
-    if (docs.length === 0) {
-      return { success: false, error: "No brand data to sync" };
+    const publishedArticles = (await ctx.runQuery(
+      internal.tables.articles.listPublishedByProjectInternal,
+      { projectId: profile.projectId }
+    )) as PublishedArticle[];
+
+    const existingDocs = await ctx.runQuery(
+      internal.tables.brandVectorDocuments.listByBrandProfileInternal,
+      { brandProfileId }
+    );
+    const existingByKey = new Map(
+      existingDocs.map((d: any) => [d.documentKey, d])
+    );
+
+    const currentDocs = buildDocs(profile, crawlPages, publishedArticles);
+    const currentKeys = new Set(currentDocs.map((d) => d.key));
+
+    // Classify what needs to happen
+    const toAdd: Doc[] = [];
+    const toUpdate: Array<{ doc: Doc; oldFileId: string; existingRowId: string }> = [];
+    const toRemove: Array<{ id: string; openaiFileId: string }> = [];
+    let unchanged = 0;
+
+    for (const doc of currentDocs) {
+      const newHash = hashContent(doc.content);
+      const existing = existingByKey.get(doc.key);
+      if (!existing) {
+        toAdd.push(doc);
+      } else if (existing.contentHash !== newHash) {
+        toUpdate.push({
+          doc,
+          oldFileId: existing.openaiFileId,
+          existingRowId: existing._id,
+        });
+      } else {
+        unchanged += 1;
+      }
+    }
+    for (const [key, existing] of existingByKey) {
+      if (!currentKeys.has(key)) {
+        toRemove.push({ id: (existing as any)._id, openaiFileId: (existing as any).openaiFileId });
+      }
     }
 
-    try {
-      // Delete previous vector store (if any) so we don't leak old files.
-      if (profile.openaiVectorStoreId) {
-        await deleteVectorStoreSafe(apiKey, profile.openaiVectorStoreId);
-      }
-
-      // Upload all docs. Chunked 5 parallel to avoid OpenAI file-upload bursts.
-      const fileIds: string[] = [];
-      const CHUNK = 5;
-      for (let i = 0; i < docs.length; i += CHUNK) {
-        const batch = docs.slice(i, i + CHUNK);
-        const uploads = await Promise.allSettled(
-          batch.map((d) => uploadFile(apiKey, d.filename, d.content))
-        );
-        for (let j = 0; j < uploads.length; j++) {
-          const r = uploads[j];
-          if (r.status === "fulfilled") {
-            fileIds.push(r.value);
-          } else {
-            console.error(
-              `Upload ${batch[j].filename} failed:`,
-              r.reason instanceof Error ? r.reason.message : r.reason
-            );
-          }
-        }
-      }
-
-      if (fileIds.length === 0) {
-        throw new Error("All file uploads failed");
-      }
-
-      // Create fresh vector store
+    // Ensure vector store exists
+    let vsId = profile.openaiVectorStoreId;
+    if (vsId) {
+      const ok = await verifyVectorStoreExists(apiKey, vsId);
+      if (!ok) vsId = undefined;
+    }
+    if (!vsId) {
       const vsName = `brand_${brandProfileId}_${Date.now()}`;
-      const vsId = await createVectorStore(apiKey, vsName, fileIds);
-
-      // Persist VS id on the profile
+      vsId = await createVectorStore(apiKey, vsName);
       await ctx.runMutation(internal.tables.brandProfiles.internalUpdate, {
         id: brandProfileId,
         updates: { openaiVectorStoreId: vsId },
       });
-
-      return {
-        success: true,
-        vectorStoreId: vsId,
-        docsUploaded: fileIds.length,
-        docsAttempted: docs.length,
-        pagesIncluded: crawlPages.length,
-      };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("Vector store sync failed:", message);
-      return { success: false, error: message };
     }
+
+    const report = {
+      vsId,
+      added: 0,
+      updated: 0,
+      removed: 0,
+      unchanged,
+      failed: 0,
+    };
+
+    // Removals
+    for (const item of toRemove) {
+      try {
+        await detachFileFromVectorStoreSafe(apiKey, vsId, item.openaiFileId);
+        await deleteFileSafe(apiKey, item.openaiFileId);
+        await ctx.runMutation(
+          internal.tables.brandVectorDocuments.deleteByIdInternal,
+          { id: item.id as any }
+        );
+        report.removed += 1;
+      } catch (err) {
+        console.error("Remove failed:", err);
+        report.failed += 1;
+      }
+    }
+
+    // Updates (replace): upload new → attach → detach+delete old → upsert row
+    for (const item of toUpdate) {
+      try {
+        const newFileId = await uploadFile(
+          apiKey,
+          item.doc.filename,
+          item.doc.content
+        );
+        await attachFileToVectorStore(apiKey, vsId, newFileId);
+        await detachFileFromVectorStoreSafe(apiKey, vsId, item.oldFileId);
+        await deleteFileSafe(apiKey, item.oldFileId);
+        await ctx.runMutation(
+          internal.tables.brandVectorDocuments.upsertInternal,
+          {
+            brandProfileId,
+            documentKey: item.doc.key,
+            documentType: item.doc.type,
+            openaiFileId: newFileId,
+            contentHash: hashContent(item.doc.content),
+            title: item.doc.title,
+            contentPreview: item.doc.content.slice(0, 500),
+            sourceUrl: item.doc.sourceUrl,
+          }
+        );
+        report.updated += 1;
+      } catch (err) {
+        console.error(`Update ${item.doc.key} failed:`, err);
+        report.failed += 1;
+      }
+    }
+
+    // Additions — chunked 5 parallel to stay under OpenAI burst limits
+    const CHUNK = 5;
+    for (let i = 0; i < toAdd.length; i += CHUNK) {
+      const batch = toAdd.slice(i, i + CHUNK);
+      const results = await Promise.allSettled(
+        batch.map(async (doc) => {
+          const fileId = await uploadFile(apiKey, doc.filename, doc.content);
+          await attachFileToVectorStore(apiKey, vsId!, fileId);
+          await ctx.runMutation(
+            internal.tables.brandVectorDocuments.upsertInternal,
+            {
+              brandProfileId,
+              documentKey: doc.key,
+              documentType: doc.type,
+              openaiFileId: fileId,
+              contentHash: hashContent(doc.content),
+              title: doc.title,
+              contentPreview: doc.content.slice(0, 500),
+              sourceUrl: doc.sourceUrl,
+            }
+          );
+        })
+      );
+      for (const r of results) {
+        if (r.status === "fulfilled") report.added += 1;
+        else {
+          console.error("Add failed:", r.reason);
+          report.failed += 1;
+        }
+      }
+    }
+
+    return { success: true, ...report };
   },
 });
 
 /**
- * Public action — manual re-sync trigger. Usually not needed: the sync runs
- * automatically at the end of brand analysis. Kept for explicit user-driven
- * resyncs from the UI.
+ * Public action — manual re-sync trigger. Not normally needed; analysis and
+ * article-publish both auto-trigger the sync.
  */
 export const syncVectorStore = action({
   args: {
@@ -376,12 +578,11 @@ export const syncVectorStore = action({
   },
   handler: async (
     ctx,
-    { projectId, brandProfileId }
+    { brandProfileId }
   ): Promise<{ success: boolean; error?: string }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { success: false, error: "Unauthorized" };
 
-    // Verify access (via public query — has requireAuth built in)
     const profile = await ctx.runQuery(api.tables.brandProfiles.get, {
       id: brandProfileId,
     });

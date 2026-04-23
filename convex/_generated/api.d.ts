@@ -28,6 +28,7 @@ import type * as tables_articles from "../tables/articles.js";
 import type * as tables_bodycam from "../tables/bodycam.js";
 import type * as tables_brandCrawlData from "../tables/brandCrawlData.js";
 import type * as tables_brandProfiles from "../tables/brandProfiles.js";
+import type * as tables_brandVectorDocuments from "../tables/brandVectorDocuments.js";
 import type * as tables_contentBriefs from "../tables/contentBriefs.js";
 import type * as tables_credits from "../tables/credits.js";
 import type * as tables_elementorTemplates from "../tables/elementorTemplates.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   "tables/bodycam": typeof tables_bodycam;
   "tables/brandCrawlData": typeof tables_brandCrawlData;
   "tables/brandProfiles": typeof tables_brandProfiles;
+  "tables/brandVectorDocuments": typeof tables_brandVectorDocuments;
   "tables/contentBriefs": typeof tables_contentBriefs;
   "tables/credits": typeof tables_credits;
   "tables/elementorTemplates": typeof tables_elementorTemplates;
