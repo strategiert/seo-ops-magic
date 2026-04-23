@@ -15,6 +15,7 @@ import type * as actions_gemini from "../actions/gemini.js";
 import type * as actions_htmlExport from "../actions/htmlExport.js";
 import type * as actions_jina from "../actions/jina.js";
 import type * as actions_neuronwriter from "../actions/neuronwriter.js";
+import type * as actions_openai from "../actions/openai.js";
 import type * as actions_wordpress from "../actions/wordpress.js";
 import type * as agents_actions from "../agents/actions.js";
 import type * as agents_internal from "../agents/internal.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   "actions/htmlExport": typeof actions_htmlExport;
   "actions/jina": typeof actions_jina;
   "actions/neuronwriter": typeof actions_neuronwriter;
+  "actions/openai": typeof actions_openai;
   "actions/wordpress": typeof actions_wordpress;
   "agents/actions": typeof agents_actions;
   "agents/internal": typeof agents_internal;

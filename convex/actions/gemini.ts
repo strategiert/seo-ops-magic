@@ -426,6 +426,15 @@ export const analyzeBrandInternal = internalAction({
           lastAnalysisAt: Date.now(),
         },
       });
+
+      // Auto-sync the full brand corpus (profile + all crawled pages)
+      // to the OpenAI vector store so content generation can retrieve
+      // and cite arbitrary passages later.
+      await ctx.scheduler.runAfter(
+        0,
+        internal.actions.openai.syncVectorStoreInternal,
+        { brandProfileId }
+      );
     } catch (error) {
       console.error("Internal brand analysis error:", error);
       await ctx.runMutation(internal.tables.brandProfiles.internalUpdate, {

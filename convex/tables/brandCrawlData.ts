@@ -91,6 +91,22 @@ export const getTopByRelevanceInternal = internalQuery({
 });
 
 /**
+ * Internal: all pages for a brand (no auth — for scheduled actions).
+ * Used by the vector store sync to push the entire crawled corpus into
+ * the OpenAI vector store so content generation can retrieve and cite
+ * arbitrary passages of the original website.
+ */
+export const listByBrandProfileInternal = internalQuery({
+  args: { brandProfileId: v.id("brandProfiles") },
+  handler: async (ctx, { brandProfileId }) => {
+    return await ctx.db
+      .query("brandCrawlData")
+      .withIndex("by_brand_profile", (q) => q.eq("brandProfileId", brandProfileId))
+      .collect();
+  },
+});
+
+/**
  * Insert crawl data (internal, called from webhook)
  */
 export const insertMany = internalMutation({
