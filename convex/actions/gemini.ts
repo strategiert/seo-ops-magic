@@ -54,12 +54,152 @@ interface BrandAnalysis {
     secondary: string[];
     long_tail: string[];
   };
+  competitors?: Array<{
+    name: string;
+    domain?: string;
+    strengths?: string[];
+    weaknesses?: string[];
+  }>;
   visual_identity?: {
     primary_color?: string;
     secondary_colors?: string[];
     logo_description?: string;
     imagery_style?: string;
   };
+  internal_links?: Array<{
+    url: string;
+    title?: string;
+    page_type?: string;
+    anchor_themes?: string[];
+  }>;
+}
+
+/**
+ * Build the system + user prompts for brand analysis from crawled pages.
+ * Ensures that Competitors, Voice details, Visual Identity, and Internal Links
+ * all get populated — either from the crawled content or from Claude's
+ * industry knowledge where the website itself does not spell things out.
+ */
+function buildBrandAnalysisPrompts(
+  crawlData: Array<{
+    url: string;
+    title?: string;
+    pageType?: string;
+    contentMarkdown?: string;
+    internalLinks?: string[];
+    metaDescription?: string;
+  }>
+): { systemPrompt: string; userPrompt: string } {
+  const typeOrder = [
+    "homepage",
+    "about",
+    "service",
+    "product",
+    "pricing",
+    "team",
+    "contact",
+    "blog",
+    "other",
+  ];
+  const sortedData = [...crawlData].sort(
+    (a, b) =>
+      typeOrder.indexOf(a.pageType || "other") -
+      typeOrder.indexOf(b.pageType || "other")
+  );
+
+  const pagesContent = sortedData
+    .map((page) => {
+      const content = (page.contentMarkdown || "").slice(0, 3500);
+      return `## ${page.title || page.url}\nURL: ${page.url}\nTyp: ${page.pageType}\n${
+        page.metaDescription ? `Meta: ${page.metaDescription}\n` : ""
+      }\n${content}`;
+    })
+    .join("\n\n---\n\n");
+
+  // Build internal-links sitemap: unique URLs with their anchor page context.
+  // Limited to the first ~80 to keep the prompt lean.
+  const linkPool = new Map<string, { sources: Set<string>; pageTypes: Set<string> }>();
+  for (const page of sortedData) {
+    for (const link of page.internalLinks ?? []) {
+      if (!linkPool.has(link)) {
+        linkPool.set(link, { sources: new Set(), pageTypes: new Set() });
+      }
+      const entry = linkPool.get(link)!;
+      if (page.url) entry.sources.add(page.url);
+      if (page.pageType) entry.pageTypes.add(page.pageType);
+    }
+  }
+  const linkSummary = Array.from(linkPool.entries())
+    .slice(0, 80)
+    .map(
+      ([url, meta]) =>
+        `- ${url} (referenced from: ${Array.from(meta.pageTypes).join(", ") || "?"})`
+    )
+    .join("\n");
+
+  const systemPrompt = `Du bist ein erfahrener Markenstratege und SEO-Analyst.
+Deine Aufgabe: aus gecrawlten Webseiten ein vollständiges, brauchbares Markenprofil erzeugen.
+
+Wichtige Regeln:
+- Antworte AUSSCHLIESSLICH mit validem JSON. Kein Markdown, keine Code-Blöcke, keine Erklärungen.
+- Leere Felder nur, wenn wirklich keine sinnvolle Antwort möglich ist.
+- Für Wettbewerber: Firmen nennen fast nie ihre Konkurrenz auf der eigenen Seite. Leite 3–6 realistische Wettbewerber aus der erkennbaren Branche, Produktkategorie und Region ab. Nenne konkrete Firmen, keine Platzhalter. Ordne ihnen plausible Stärken/Schwächen relativ zur analysierten Marke zu.
+- Für Visual Identity: Farbcodes stehen selten im Text. Leite die primäre Farbwelt und Bildsprache aus dem Markenkontext ab (Branche, Tonalität, Zielgruppe). Wenn du keine spezifischen Hex-Codes ableiten kannst, beschreibe die Farbwelt qualitativ (z. B. "industrielles Grau mit technischem Blau-Akzent").
+- Für Voice-Writing-Style: Immer alle vier Felder (formality, sentence_length, vocabulary_level, use_of_jargon) konkret füllen, niemals "-" oder leer.
+- Für Internal Links: aus der bereitgestellten Link-Liste die 8–15 thematisch wichtigsten URLs ausspielen (nicht Login, Impressum, AGB, Cookie etc.). Ergänze jeweils Titel/Page-Type/Anchor-Themes.`;
+
+  const userPrompt = `Analysiere diese Webseiteninhalte und erstelle ein detailliertes Markenprofil.
+
+${pagesContent}
+
+${
+  linkSummary
+    ? `\n---\n\nInterne Link-Struktur (aus dem Crawl, ${linkPool.size} einzigartige URLs, davon die ersten ${Math.min(
+        linkPool.size,
+        80
+      )} unten aufgelistet):\n${linkSummary}\n`
+    : ""
+}
+
+Liefere strikt dieses JSON-Schema (alle Felder ausfüllen, außer wirklich nicht ableitbar):
+{
+  "brand_name": "Name der Marke/Firma",
+  "tagline": "Slogan oder Kernbotschaft",
+  "mission_statement": "Mission oder Vision",
+  "brand_story": "Kurzform der Markengeschichte (2-3 Sätze)",
+  "brand_voice": {
+    "tone": ["professionell", "..."],
+    "personality_traits": ["innovativ", "..."],
+    "writing_style": {
+      "formality": "formell | informell | gemischt",
+      "sentence_length": "kurz | mittel | lang | gemischt",
+      "vocabulary_level": "einfach | fachlich | gemischt",
+      "use_of_jargon": "wenig | moderat | viel"
+    }
+  },
+  "products": [{"name":"...","description":"...","features":["..."],"category":"..."}],
+  "services": [{"name":"...","description":"...","target_audience":"..."}],
+  "personas": [{"name":"...","demographics":"...","pain_points":["..."],"goals":["..."],"preferred_channels":["..."]}],
+  "brand_keywords": {
+    "primary": ["..."],
+    "secondary": ["..."],
+    "long_tail": ["..."]
+  },
+  "competitors": [
+    {"name":"Konkurrent-Firmenname","domain":"konkurrent.de","strengths":["..."],"weaknesses":["..."]}
+  ],
+  "visual_identity": {
+    "primary_color": "#... oder qualitative Beschreibung",
+    "secondary_colors": ["#...", "..."],
+    "logo_description": "Beschreibung des Logos / der Wortmarke",
+    "imagery_style": "Bildsprache in 1-2 Sätzen"
+  },
+  "internal_links": [
+    {"url":"https://...","title":"...","page_type":"service|product|blog|...","anchor_themes":["Keyword1","Keyword2"]}
+  ]
+}`;
+
+  return { systemPrompt, userPrompt };
 }
 
 /**
@@ -81,7 +221,7 @@ async function callGemini(
   const anthropic = new Anthropic({ apiKey });
 
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5",
+    model: "claude-sonnet-4-6",
     max_tokens: 8000,
     ...(systemPrompt ? { system: systemPrompt } : {}),
     messages: [{ role: "user", content: prompt }],
@@ -143,80 +283,15 @@ export const analyzeBrand = action({
       // Get top crawled pages
       const crawlData = await ctx.runQuery(api.tables.brandCrawlData.getTopByRelevance, {
         brandProfileId,
-        limit: 15,
+        limit: 30,
       });
 
       if (crawlData.length === 0) {
         return { success: false, error: "No crawl data available for analysis" };
       }
 
-      // Sort pages by type priority
-      const typeOrder = [
-        "homepage",
-        "about",
-        "service",
-        "product",
-        "pricing",
-        "team",
-        "contact",
-        "blog",
-        "other",
-      ];
-      const sortedData = [...crawlData].sort(
-        (a, b) =>
-          typeOrder.indexOf(a.pageType || "other") -
-          typeOrder.indexOf(b.pageType || "other")
-      );
-
-      // Build analysis prompt
-      const pagesContent = sortedData
-        .map((page) => {
-          const content = (page.contentMarkdown || "").slice(0, 3000);
-          return `## ${page.title || page.url}\nURL: ${page.url}\nTyp: ${page.pageType}\n\n${content}`;
-        })
-        .join("\n\n---\n\n");
-
-      const systemPrompt = `Du bist ein Markenexperte, der Webseiteninhalte analysiert, um ein umfassendes Markenprofil zu erstellen.
-Analysiere die bereitgestellten Webseiteninhalte und extrahiere strukturierte Markeninformationen.
-Antworte AUSSCHLIESSLICH mit validem JSON ohne Markdown-Codeblöcke.`;
-
-      const userPrompt = `Analysiere diese Webseiteninhalte und erstelle ein detailliertes Markenprofil:
-
-${pagesContent}
-
-Extrahiere folgende Informationen als JSON:
-{
-  "brand_name": "Name der Marke/Firma",
-  "tagline": "Slogan oder Kernbotschaft",
-  "mission_statement": "Mission oder Vision",
-  "brand_story": "Kurzform der Markengeschichte (2-3 Sätze)",
-  "brand_voice": {
-    "tone": ["professionell", "freundlich", ...],
-    "personality_traits": ["innovativ", "zuverlässig", ...],
-    "writing_style": {
-      "formality": "formell/informell/gemischt",
-      "sentence_length": "kurz/mittel/lang",
-      "vocabulary_level": "einfach/fachlich/gemischt",
-      "use_of_jargon": "wenig/moderat/viel"
-    }
-  },
-  "products": [{"name": "...", "description": "...", "features": [...], "category": "..."}],
-  "services": [{"name": "...", "description": "...", "target_audience": "..."}],
-  "personas": [{"name": "...", "demographics": "...", "pain_points": [...], "goals": [...]}],
-  "brand_keywords": {
-    "primary": ["Hauptkeyword1", ...],
-    "secondary": ["Nebenkeyword1", ...],
-    "long_tail": ["Langes Keyword 1", ...]
-  },
-  "visual_identity": {
-    "primary_color": "#...",
-    "secondary_colors": ["#...", ...],
-    "logo_description": "...",
-    "imagery_style": "..."
-  }
-}`;
-
-      const response = await callGemini(userPrompt, systemPrompt, "gemini-2.0-flash");
+      const { systemPrompt, userPrompt } = buildBrandAnalysisPrompts(crawlData);
+      const response = await callGemini(userPrompt, systemPrompt);
 
       // Parse JSON response
       let analysis: BrandAnalysis;
@@ -244,7 +319,9 @@ Extrahiere folgende Informationen als JSON:
         services: analysis.services,
         personas: analysis.personas,
         brandKeywords: analysis.brand_keywords,
+        competitors: analysis.competitors,
         visualIdentity: analysis.visual_identity,
+        internalLinks: analysis.internal_links,
         crawlStatus: "completed",
       });
 
@@ -299,7 +376,7 @@ export const analyzeBrandInternal = internalAction({
     // Get top crawled pages (internal query)
     const crawlData = await ctx.runQuery(internal.tables.brandCrawlData.getTopByRelevanceInternal, {
       brandProfileId,
-      limit: 15,
+      limit: 30,
     });
 
     if (crawlData.length === 0) {
@@ -314,54 +391,8 @@ export const analyzeBrandInternal = internalAction({
     }
 
     try {
-      // Sort by type priority
-      const typeOrder = [
-        "homepage",
-        "about",
-        "service",
-        "product",
-        "pricing",
-        "team",
-        "contact",
-        "blog",
-        "other",
-      ];
-      const sortedData = [...crawlData].sort(
-        (a, b) =>
-          typeOrder.indexOf(a.pageType || "other") -
-          typeOrder.indexOf(b.pageType || "other")
-      );
-
-      // Build prompt (same as public action)
-      const pagesContent = sortedData
-        .map((page) => {
-          const content = (page.contentMarkdown || "").slice(0, 3000);
-          return `## ${page.title || page.url}\nURL: ${page.url}\nTyp: ${page.pageType}\n\n${content}`;
-        })
-        .join("\n\n---\n\n");
-
-      const systemPrompt = `Du bist ein Markenexperte, der Webseiteninhalte analysiert.
-Antworte AUSSCHLIESSLICH mit validem JSON ohne Markdown-Codeblöcke.`;
-
-      const userPrompt = `Analysiere diese Webseiteninhalte und erstelle ein Markenprofil als JSON:
-
-${pagesContent}
-
-JSON-Struktur:
-{
-  "brand_name": "...",
-  "tagline": "...",
-  "mission_statement": "...",
-  "brand_story": "...",
-  "brand_voice": {"tone": [], "personality_traits": [], "writing_style": {}},
-  "products": [],
-  "services": [],
-  "personas": [],
-  "brand_keywords": {"primary": [], "secondary": [], "long_tail": []},
-  "visual_identity": {}
-}`;
-
-      const response = await callGemini(userPrompt, systemPrompt, "gemini-2.0-flash");
+      const { systemPrompt, userPrompt } = buildBrandAnalysisPrompts(crawlData);
+      const response = await callGemini(userPrompt, systemPrompt);
 
       // Parse response
       let analysis: BrandAnalysis;
@@ -388,7 +419,9 @@ JSON-Struktur:
           services: analysis.services,
           personas: analysis.personas,
           brandKeywords: analysis.brand_keywords,
+          competitors: analysis.competitors,
           visualIdentity: analysis.visual_identity,
+          internalLinks: analysis.internal_links,
           crawlStatus: "completed",
           lastAnalysisAt: Date.now(),
         },

@@ -193,7 +193,9 @@ export const updateAnalysis = mutation({
     services: v.optional(v.any()),
     personas: v.optional(v.any()),
     brandKeywords: v.optional(v.any()),
+    competitors: v.optional(v.any()),
     visualIdentity: v.optional(v.any()),
+    internalLinks: v.optional(v.any()),
     crawlStatus: v.optional(v.string()),
   },
   handler: async (ctx, { id, ...updates }) => {

@@ -36,7 +36,7 @@ export const startCrawl = action({
   },
   handler: async (
     ctx,
-    { projectId, websiteUrl, maxPages = 20 }
+    { projectId, websiteUrl, maxPages = 100 }
   ): Promise<{
     success: boolean;
     brandProfileId?: string;
@@ -89,12 +89,18 @@ export const startCrawl = action({
         return { success: false, error: "No URLs discovered" };
       }
 
-      const results = await Promise.allSettled(
-        urls.map((u) => jinaRead(u, apiKey))
-      );
+      // Chunked parallel fetch — stay well under Jina's free-tier RPM
+      // even on large (100+ URL) crawls. Adjust CHUNK to tune throughput.
+      const CHUNK = 10;
       const pages: JinaPage[] = [];
-      for (const r of results) {
-        if (r.status === "fulfilled" && r.value) pages.push(r.value);
+      for (let i = 0; i < urls.length; i += CHUNK) {
+        const batch = urls.slice(i, i + CHUNK);
+        const results = await Promise.allSettled(
+          batch.map((u) => jinaRead(u, apiKey))
+        );
+        for (const r of results) {
+          if (r.status === "fulfilled" && r.value) pages.push(r.value);
+        }
       }
 
       if (pages.length === 0) {
@@ -164,20 +170,58 @@ async function discoverUrls(
   maxPages: number,
   apiKey: string | undefined
 ): Promise<string[]> {
+  // 1) Prefer sitemap.xml — fastest and most complete
   const sitemapUrls = await fetchSitemapUrls(baseUrl);
   if (sitemapUrls.length > 0) {
     return prioritizeUrls(sitemapUrls, baseUrl).slice(0, maxPages);
   }
 
-  const homepage = await jinaRead(baseUrl, apiKey);
-  if (homepage) {
-    const baseHost = safeHostname(baseUrl);
-    const internal = homepage.links.filter((l) => safeHostname(l) === baseHost);
-    const unique = Array.from(new Set([baseUrl, ...internal]));
-    return prioritizeUrls(unique, baseUrl).slice(0, maxPages);
+  // 2) Fallback: BFS via link graph (homepage → level 1 → level 2).
+  //    Stops early when maxPages worth of URLs is discovered, or when no new
+  //    links show up in a pass.
+  return bfsLinkCrawl(baseUrl, maxPages, apiKey);
+}
+
+async function bfsLinkCrawl(
+  baseUrl: string,
+  maxPages: number,
+  apiKey: string | undefined,
+  maxDepth = 2
+): Promise<string[]> {
+  const baseHost = safeHostname(baseUrl);
+  const skipExt = /\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp4|mp3|ico|css|js|xml)$/i;
+  const visited = new Set<string>([baseUrl]);
+  const discovered: string[] = [baseUrl];
+  let frontier: string[] = [baseUrl];
+
+  for (let depth = 0; depth < maxDepth; depth++) {
+    if (discovered.length >= maxPages) break;
+    if (frontier.length === 0) break;
+
+    // Fetch current frontier in parallel (cap to avoid hammering Jina)
+    const batch = frontier.slice(0, 12);
+    const fetched = await Promise.allSettled(batch.map((u) => jinaRead(u, apiKey)));
+
+    const nextFrontier: string[] = [];
+    for (const r of fetched) {
+      if (r.status !== "fulfilled" || !r.value) continue;
+      for (const link of r.value.links) {
+        if (skipExt.test(link)) continue;
+        if (safeHostname(link) !== baseHost) continue;
+        // Strip URL fragments; dedupe on normalized URL
+        const clean = link.split("#")[0].replace(/\/+$/, "") || baseUrl;
+        if (visited.has(clean)) continue;
+        visited.add(clean);
+        discovered.push(clean);
+        nextFrontier.push(clean);
+        if (discovered.length >= maxPages) break;
+      }
+      if (discovered.length >= maxPages) break;
+    }
+    frontier = nextFrontier;
   }
 
-  return [baseUrl];
+  return prioritizeUrls(discovered, baseUrl).slice(0, maxPages);
 }
 
 async function fetchSitemapUrls(baseUrl: string): Promise<string[]> {

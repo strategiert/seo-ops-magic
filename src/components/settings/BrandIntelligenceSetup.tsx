@@ -135,7 +135,7 @@ export function BrandIntelligenceSetup() {
     }
 
     setCrawling(true);
-    const result = await triggerCrawl(url, 20);
+    const result = await triggerCrawl(url, 100);
     setCrawling(false);
 
     if (result.success) {
@@ -364,7 +364,7 @@ export function BrandIntelligenceSetup() {
                   {crawlStatus === "crawling" ? "Website wird gecrawlt..." : "Daten werden analysiert..."}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Normalerweise 10–60 Sekunden. Wenn länger als ein paar Minuten — abbrechen und neu starten.
+                  Ausführlicher Crawl bis zu 100 Seiten — dauert 1–5 Minuten. Wenn deutlich länger — abbrechen und neu starten.
                 </p>
               </div>
               <Button
@@ -434,11 +434,6 @@ export function BrandIntelligenceSetup() {
                 {analyzing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 <Sparkles className="h-4 w-4 mr-2" />
                 Neu analysieren
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleSyncVectorStore} disabled={syncing}>
-                {syncing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                <Database className="h-4 w-4 mr-2" />
-                Vector Store sync
               </Button>
               <Button variant="outline" size="sm" onClick={handleReset} disabled={resetting} className="text-destructive hover:text-destructive">
                 {resetting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
