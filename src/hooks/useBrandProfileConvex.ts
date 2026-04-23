@@ -1,4 +1,4 @@
-import { useQuery, useAction } from "convex/react";
+import { useQuery, useAction, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { useWorkspaceConvex } from "./useWorkspaceConvex";
@@ -92,6 +92,7 @@ export function useBrandProfileConvex() {
   const startCrawlAction = useAction(api.actions.jina.startCrawl);
   const analyzeBrandAction = useAction(api.actions.gemini.analyzeBrand);
   const syncVectorStoreAction = useAction(api.actions.openai?.syncVectorStore);
+  const updateCrawlStatusMutation = useMutation(api.tables.brandProfiles.updateCrawlStatus);
 
   // Derived state
   const loading = brandProfile === undefined;
@@ -165,6 +166,32 @@ export function useBrandProfileConvex() {
   };
 
   /**
+   * Force-reset a stuck crawl/analyze status back to 'pending'.
+   * Used when a scheduled analyzer failed and the profile is wedged.
+   */
+  const resetCrawlStatus = async (): Promise<{
+    success: boolean;
+    error?: string;
+  }> => {
+    if (!brandProfile) {
+      return { success: false, error: "No brand profile" };
+    }
+    try {
+      await updateCrawlStatusMutation({
+        id: brandProfile._id,
+        crawlStatus: "pending",
+        crawlError: undefined,
+      });
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "Reset fehlgeschlagen",
+      };
+    }
+  };
+
+  /**
    * Get formatted brand context for content generation
    */
   const getBrandContext = (): string => {
@@ -225,6 +252,7 @@ export function useBrandProfileConvex() {
     triggerCrawl,
     triggerAnalysis,
     syncVectorStore,
+    resetCrawlStatus,
 
     // Helpers
     getBrandContext,

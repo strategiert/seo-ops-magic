@@ -72,6 +72,7 @@ export function BrandIntelligenceSetup() {
     triggerCrawl,
     triggerAnalysis,
     syncVectorStore,
+    resetCrawlStatus,
   } = useBrandProfileConvex();
 
   // Map Convex camelCase to component's expected snake_case format
@@ -358,14 +359,38 @@ export function BrandIntelligenceSetup() {
           <div className="p-4 bg-muted/30 rounded-lg space-y-3">
             <div className="flex items-center gap-3">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              <div>
+              <div className="flex-1">
                 <p className="font-medium">
                   {crawlStatus === "crawling" ? "Website wird gecrawlt..." : "Daten werden analysiert..."}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Das kann einige Minuten dauern.
+                  Normalerweise 10–60 Sekunden. Wenn länger als ein paar Minuten — abbrechen und neu starten.
                 </p>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={resetting}
+                onClick={async () => {
+                  setResetting(true);
+                  const result = await resetCrawlStatus();
+                  setResetting(false);
+                  if (result.success) {
+                    toast({
+                      title: "Zurückgesetzt",
+                      description: "Status ist jetzt bereit für einen neuen Crawl.",
+                    });
+                  } else {
+                    toast({
+                      title: "Fehler",
+                      description: result.error || "Reset fehlgeschlagen.",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Abbrechen"}
+              </Button>
             </div>
           </div>
         ) : (
