@@ -203,6 +203,63 @@ Liefere strikt dieses JSON-Schema (alle Felder ausfüllen, außer wirklich nicht
 }
 
 /**
+ * Fallback: if the LLM returns no internal_links (or the website had no
+ * cross-page links at all), aggregate a sensible list straight from the
+ * crawl data. Ranks URLs by how often they're linked to across pages and
+ * enriches with the title/pageType the crawler captured.
+ */
+function fallbackInternalLinks(
+  crawlData: Array<{
+    url: string;
+    title?: string;
+    pageType?: string;
+    internalLinks?: string[];
+  }>
+): Array<{
+  url: string;
+  title?: string;
+  page_type?: string;
+  anchor_themes?: string[];
+}> {
+  // Count inbound references per URL
+  const inbound = new Map<string, number>();
+  for (const page of crawlData) {
+    for (const link of page.internalLinks ?? []) {
+      const clean = link.split("#")[0].replace(/\/+$/, "");
+      inbound.set(clean, (inbound.get(clean) ?? 0) + 1);
+    }
+  }
+
+  // Build lookup for title/pageType per URL from the crawl pages themselves
+  const meta = new Map<string, { title?: string; pageType?: string }>();
+  for (const page of crawlData) {
+    if (page.url) {
+      meta.set(page.url.replace(/\/+$/, ""), {
+        title: page.title,
+        pageType: page.pageType,
+      });
+    }
+  }
+
+  // Prefer URLs that both exist in the crawl AND have inbound links
+  const skipPath = /\/(impressum|agb|datenschutz|cookie|login|terms|privacy)/i;
+  const candidates = Array.from(inbound.entries())
+    .filter(([url]) => !skipPath.test(url))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([url]) => {
+      const m = meta.get(url) ?? {};
+      return {
+        url,
+        title: m.title,
+        page_type: m.pageType,
+      };
+    });
+
+  return candidates;
+}
+
+/**
  * Call Anthropic API (Claude Opus 4.7).
  *
  * The third parameter is kept as a string for call-site compatibility —
@@ -307,6 +364,14 @@ export const analyzeBrand = action({
         return { success: false, error: "Failed to parse analysis response" };
       }
 
+      // Fallback: if LLM left internal_links empty, derive from crawl data
+      if (
+        !Array.isArray(analysis.internal_links) ||
+        analysis.internal_links.length === 0
+      ) {
+        analysis.internal_links = fallbackInternalLinks(crawlData);
+      }
+
       // Update brand profile with analysis
       await ctx.runMutation(api.tables.brandProfiles.updateAnalysis, {
         id: brandProfileId,
@@ -404,6 +469,14 @@ export const analyzeBrandInternal = internalAction({
         analysis = JSON.parse(jsonStr);
       } catch {
         throw new Error("Failed to parse analysis response");
+      }
+
+      // Fallback: if LLM left internal_links empty, derive from crawl data
+      if (
+        !Array.isArray(analysis.internal_links) ||
+        analysis.internal_links.length === 0
+      ) {
+        analysis.internal_links = fallbackInternalLinks(crawlData);
       }
 
       // Update profile

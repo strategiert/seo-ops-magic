@@ -121,8 +121,8 @@ export const startCrawl = action({
         metaDescription: p.description || undefined,
         pageType: detectPageType(p.url),
         headings: extractHeadings(p.content),
-        internalLinks: p.links.filter((l) => safeHostname(l) === baseHost),
-        externalLinks: p.links.filter((l) => safeHostname(l) !== baseHost),
+        internalLinks: p.links.filter((l) => sameDomain(safeHostname(l), baseHost)),
+        externalLinks: p.links.filter((l) => !sameDomain(safeHostname(l), baseHost)),
         images: p.images,
         relevanceScore: calculateRelevanceScore(p),
         crawledAt: Date.now(),
@@ -207,7 +207,7 @@ async function bfsLinkCrawl(
       if (r.status !== "fulfilled" || !r.value) continue;
       for (const link of r.value.links) {
         if (skipExt.test(link)) continue;
-        if (safeHostname(link) !== baseHost) continue;
+        if (!sameDomain(safeHostname(link), baseHost)) continue;
         // Strip URL fragments; dedupe on normalized URL
         const clean = link.split("#")[0].replace(/\/+$/, "") || baseUrl;
         if (visited.has(clean)) continue;
@@ -337,6 +337,15 @@ function safeHostname(u: string): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * Compare two hostnames ignoring a leading "www." — so links between
+ * www.example.com and example.com are treated as the same domain.
+ */
+function sameDomain(a: string, b: string): boolean {
+  const strip = (h: string) => h.replace(/^www\./i, "").toLowerCase();
+  return strip(a) === strip(b);
 }
 
 function detectPageType(url: string): string {
