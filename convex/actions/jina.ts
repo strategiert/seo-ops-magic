@@ -64,11 +64,11 @@ export const startCrawl = action({
       return { success: false, error: "Failed to create brand profile" };
     }
 
-    let baseUrl = websiteUrl.trim();
-    if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
-      baseUrl = `https://${baseUrl}`;
-    }
-    baseUrl = baseUrl.replace(/\/+$/, "");
+    // Normalize URL: strip any malformed or correct protocol prefix, then
+    // prepend a clean https://. Handles common typos: "https//x.de",
+    // "https:/x.de", "http://x.de", "x.de", "HTTPS://x.de/".
+    let baseUrl = websiteUrl.trim().replace(/^(https?:?\/*)+/i, "");
+    baseUrl = `https://${baseUrl}`.replace(/\/+$/, "");
 
     await ctx.runMutation(api.tables.brandProfiles.updateCrawlStatus, {
       id: brandProfile._id,
