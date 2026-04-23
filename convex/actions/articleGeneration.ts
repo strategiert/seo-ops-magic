@@ -2,12 +2,14 @@
 import { action } from "../_generated/server";
 import { v } from "convex/values";
 import { api } from "../_generated/api";
+import Anthropic from "@anthropic-ai/sdk";
 
 /**
  * Article Generation Action
  *
- * Generates full SEO-optimized articles from content briefs.
- * Converted from supabase/functions/generate-article/index.ts
+ * Generates full SEO-optimized articles from content briefs via Anthropic
+ * (claude-opus-4-7). Migrated from Gemini (OpenAI-compat) after persistent
+ * auth issues on Google's side.
  *
  * Flow:
  * 1. Load brief and brand context
@@ -18,9 +20,6 @@ import { api } from "../_generated/api";
  * 6. Generate FAQ
  * 7. Assemble and save article
  */
-
-const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 
 interface Outline {
   title: string;
@@ -73,7 +72,11 @@ interface GenerationProgress {
 }
 
 /**
- * Call Gemini API
+ * Call Anthropic API (Claude Opus 4.7).
+ *
+ * Kept the Gemini-era name for call-site compatibility. `options.model` and
+ * `options.temperature` are ignored (Opus 4.7 has no sampling params);
+ * `options.maxTokens` is respected.
  */
 async function callGemini(
   prompt: string,
@@ -84,35 +87,24 @@ async function callGemini(
     maxTokens?: number;
   }
 ): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY not configured");
+    throw new Error("ANTHROPIC_API_KEY not configured");
   }
+  const anthropic = new Anthropic({ apiKey });
 
-  const messages: Array<{ role: string; content: string }> = [];
-  if (systemPrompt) {
-    messages.push({ role: "system", content: systemPrompt });
-  }
-  messages.push({ role: "user", content: prompt });
-
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: options?.model || "gemini-2.0-flash",
-      messages,
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens,
-    }),
+  const response = await anthropic.messages.create({
+    model: "claude-opus-4-7",
+    max_tokens: options?.maxTokens ?? 8000,
+    ...(systemPrompt ? { system: systemPrompt } : {}),
+    messages: [{ role: "user", content: prompt }],
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Gemini API error: ${response.status} - ${error}`);
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("No text content in Claude response");
   }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
+  return textBlock.text;
 }
 
 /**

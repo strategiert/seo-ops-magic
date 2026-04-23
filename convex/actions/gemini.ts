@@ -2,16 +2,15 @@
 import { action, internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "../_generated/api";
+import Anthropic from "@anthropic-ai/sdk";
 
 /**
- * Gemini AI Actions
+ * AI Actions (Anthropic)
  *
- * Brand analysis and content generation using Google Gemini API.
- * Converted from supabase/functions/brand-analyze/index.ts
+ * Brand analysis and content generation. Historically called Gemini via an
+ * OpenAI-compat shim which 400'd on auth; migrated to Anthropic SDK using
+ * claude-opus-4-7. Filename kept for backwards compat (api.actions.gemini.*).
  */
-
-const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 
 interface BrandAnalysis {
   brand_name?: string;
@@ -62,53 +61,37 @@ interface BrandAnalysis {
 }
 
 /**
- * Get Gemini API key
- */
-function getGeminiApiKey(): string {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY not configured");
-  }
-  return apiKey;
-}
-
-/**
- * Call Gemini API
+ * Call Anthropic API (Claude Opus 4.7).
+ *
+ * The third parameter is kept as a string for call-site compatibility —
+ * legacy code passes a Gemini model name here (e.g. "gemini-2.0-flash").
+ * It is now ignored; the hardcoded model is claude-opus-4-7.
  */
 async function callGemini(
   prompt: string,
   systemPrompt?: string,
-  model: string = "gemini-2.0-flash"
+  _legacyModel?: string
 ): Promise<string> {
-  const apiKey = getGeminiApiKey();
-
-  const messages: Array<{ role: string; content: string }> = [];
-
-  if (systemPrompt) {
-    messages.push({ role: "system", content: systemPrompt });
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY not configured");
   }
-  messages.push({ role: "user", content: prompt });
+  const anthropic = new Anthropic({ apiKey });
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.7,
-    }),
+  const response = await anthropic.messages.create({
+    model: "claude-opus-4-7",
+    max_tokens: 8000,
+    ...(systemPrompt ? { system: systemPrompt } : {}),
+    messages: [{ role: "user", content: prompt }],
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Gemini API error: ${response.status} - ${error}`);
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("No text content in Claude response");
   }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
+  return textBlock.text;
 }
+
 
 /**
  * Analyze brand from crawled data (public action)
