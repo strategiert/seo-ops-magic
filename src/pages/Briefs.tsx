@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
+import { useProjectPrefix } from "@/hooks/useProjectPrefix";
 import { BriefCreationWizard } from "@/components/briefs/BriefCreationWizard";
 import { DataStateWrapper, EmptyState, CardGridSkeleton } from "@/components/data-state";
 import { api } from "../../convex/_generated/api";
@@ -29,6 +30,7 @@ const intentLabels: Record<string, string> = {
 export default function Briefs() {
   const navigate = useNavigate();
   const { currentProject } = useWorkspaceConvex();
+  const prefix = useProjectPrefix();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -132,7 +134,7 @@ export default function Briefs() {
                 <Card
                   key={brief._id}
                   className="cursor-pointer hover:border-primary/50 transition-colors"
-                  onClick={() => navigate(`/briefs/${brief._id}`)}
+                  onClick={() => navigate(`${prefix}/briefs/${brief._id}`)}
                 >
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">

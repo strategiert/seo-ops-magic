@@ -34,6 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
+import { useProjectPrefix } from "@/hooks/useProjectPrefix";
 import { useWordPressBulkPublish } from "@/hooks/useWordPress";
 import { CreateArticleDialog } from "@/components/articles/CreateArticleDialog";
 import { api } from "../../convex/_generated/api";
@@ -56,6 +57,7 @@ export default function Articles() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentProject } = useWorkspaceConvex();
+  const prefix = useProjectPrefix();
   const { publishing, results, publishMultiple } = useWordPressBulkPublish();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -182,7 +184,7 @@ export default function Articles() {
               description="Erstelle einen Content Brief für SEO-optimierte Artikel oder schreibe direkt."
             >
               <div className="flex flex-col sm:flex-row gap-3 mt-4">
-                <Button onClick={() => navigate("/briefs")}>
+                <Button onClick={() => navigate(`${prefix}/briefs`)}>
                   <FileText className="h-4 w-4 mr-2" />
                   Content Brief erstellen
                 </Button>
@@ -217,7 +219,7 @@ export default function Articles() {
                     <TableRow
                       key={article._id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => navigate(`/articles/${article._id}`)}
+                      onClick={() => navigate(`${prefix}/articles/${article._id}`)}
                     >
                       <TableCell onClick={(e) => toggleSelect(article._id, e)}>
                         <Checkbox checked={selectedIds.has(article._id)} />
@@ -332,7 +334,7 @@ export default function Articles() {
       <CreateArticleDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
-        onCreated={(articleId) => navigate(`/articles/${articleId}`)}
+        onCreated={(articleId) => navigate(`${prefix}/articles/${articleId}`)}
       />
     </AppLayout>
   );

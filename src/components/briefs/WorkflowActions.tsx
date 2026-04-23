@@ -5,6 +5,7 @@ import { useAction } from "convex/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useProjectPrefix } from "@/hooks/useProjectPrefix";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -27,6 +28,7 @@ export const WorkflowActions = memo(function WorkflowActions({
 }: WorkflowActionsProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const prefix = useProjectPrefix();
   const [generatingArticle, setGeneratingArticle] = useState(false);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
 
@@ -51,7 +53,7 @@ export const WorkflowActions = memo(function WorkflowActions({
 
       if (result.articleId) {
         onArticleGenerated?.(result.articleId);
-        navigate(`/articles/${result.articleId}`);
+        navigate(`${prefix}/articles/${result.articleId}`);
       }
     } catch (error) {
       console.error("Error generating article:", error);
@@ -106,7 +108,7 @@ export const WorkflowActions = memo(function WorkflowActions({
       actionLabel: articleId ? "Regenerieren" : "Generieren",
       disabled: !hasGuidelines,
       loading: generatingArticle,
-      secondaryAction: articleId ? () => navigate(`/articles/${articleId}`) : undefined,
+      secondaryAction: articleId ? () => navigate(`${prefix}/articles/${articleId}`) : undefined,
       secondaryLabel: articleId ? "Bearbeiten" : undefined,
     },
     {
@@ -114,7 +116,7 @@ export const WorkflowActions = memo(function WorkflowActions({
       label: "Elementor Template",
       icon: FileJson,
       completed: !!templateId,
-      action: templateId ? () => navigate(`/templates/${templateId}`) : handleGenerateTemplate,
+      action: templateId ? () => navigate(`${prefix}/templates/${templateId}`) : handleGenerateTemplate,
       actionLabel: templateId ? "Ansehen" : "Generieren",
       disabled: !articleId,
       loading: generatingTemplate,

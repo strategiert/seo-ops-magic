@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useProjectPrefix } from "@/hooks/useProjectPrefix";
 import { WordPressPublishDialog } from "@/components/articles/WordPressPublishDialog";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -33,6 +34,7 @@ export default function ArticleDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const prefix = useProjectPrefix();
 
   const [saving, setSaving] = useState(false);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
@@ -209,7 +211,7 @@ export default function ArticleDetail() {
       <AppLayout>
         <div className="text-center py-12">
           <h2 className="text-xl font-semibold">Artikel nicht gefunden</h2>
-          <Button className="mt-4" onClick={() => navigate("/articles")}>
+          <Button className="mt-4" onClick={() => navigate(`${prefix}/articles`)}>
             Zurück zur Übersicht
           </Button>
         </div>
@@ -223,7 +225,7 @@ export default function ArticleDetail() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/articles")}>
+            <Button variant="ghost" size="icon" onClick={() => navigate(`${prefix}/articles`)}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>

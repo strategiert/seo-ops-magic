@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
+import { useProjectPrefix } from "@/hooks/useProjectPrefix";
 import { DataStateWrapper, EmptyState, TableSkeleton } from "@/components/data-state";
 import { api } from "../../convex/_generated/api";
 
@@ -22,6 +23,7 @@ export default function Templates() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentProject } = useWorkspaceConvex();
+  const prefix = useProjectPrefix();
 
   // Use Convex query for real-time templates data
   const templatesData = useQuery(
@@ -79,7 +81,7 @@ export default function Templates() {
               description="Templates werden aus Artikeln generiert."
               action={{
                 label: "Zu den Artikeln",
-                onClick: () => navigate("/articles"),
+                onClick: () => navigate(`${prefix}/articles`),
               }}
             />
           }
@@ -100,7 +102,7 @@ export default function Templates() {
                     <TableRow
                       key={template._id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => navigate(`/templates/${template._id}`)}
+                      onClick={() => navigate(`${prefix}/templates/${template._id}`)}
                     >
                       <TableCell className="font-medium">{template.name}</TableCell>
                       <TableCell>

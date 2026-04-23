@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
+import { useProjectPrefix } from "@/hooks/useProjectPrefix";
 import {
   useProjectIntegrations,
   useUpdateNeuronWriterSyncTime,
@@ -41,6 +42,7 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentProject } = useWorkspaceConvex();
+  const prefix = useProjectPrefix();
   const { neuronwriter, loading: intLoading } = useProjectIntegrations();
   const updateSyncTime = useUpdateNeuronWriterSyncTime();
 
@@ -218,7 +220,7 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
   const handleOpenBrief = () => {
     if (createdBriefId) {
       onOpenChange(false);
-      navigate(`/briefs/${createdBriefId}`);
+      navigate(`${prefix}/briefs/${createdBriefId}`);
     }
   };
 
@@ -390,7 +392,7 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
           )}
 
           {step === "not-configured" && (
-            <Button onClick={() => navigate("/settings")}>
+            <Button onClick={() => navigate(`${prefix}/settings`)}>
               Zu Einstellungen
             </Button>
           )}

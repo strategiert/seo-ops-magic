@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useProjectPrefix } from "@/hooks/useProjectPrefix";
 import { FileJson, Upload, Loader2 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -13,6 +14,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 export default function ImportArticle() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const prefix = useProjectPrefix();
   const [searchParams] = useSearchParams();
   const briefId = searchParams.get("briefId");
 
@@ -82,7 +84,7 @@ export default function ImportArticle() {
         description: `"${articleData.title}" wurde erfolgreich gespeichert.`,
       });
 
-      navigate(`/articles/${articleId}`);
+      navigate(`${prefix}/articles/${articleId}`);
     } catch (error) {
       console.error("Import error:", error);
       toast({

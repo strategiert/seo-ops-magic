@@ -24,6 +24,7 @@ import { WorkflowActions } from "@/components/briefs/WorkflowActions";
 import type { NWGuidelines } from "@/lib/api/neuronwriter";
 import { transformNWGuidelines } from "@/lib/api/neuronwriter";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
+import { useProjectPrefix } from "@/hooks/useProjectPrefix";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -32,6 +33,7 @@ export default function BriefDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentProject } = useWorkspaceConvex();
+  const prefix = useProjectPrefix();
 
   const [saving, setSaving] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -119,7 +121,7 @@ export default function BriefDetail() {
         });
 
         toast({ title: "Erstellt", description: "Brief wurde angelegt." });
-        navigate(`/briefs/${newBriefId}`);
+        navigate(`${prefix}/briefs/${newBriefId}`);
       } else {
         // UPDATE
         await updateBrief({
@@ -193,7 +195,7 @@ export default function BriefDetail() {
       <AppLayout>
         <div className="text-center py-12">
           <h2 className="text-xl font-semibold">Brief nicht gefunden</h2>
-          <Button className="mt-4" onClick={() => navigate("/briefs")}>
+          <Button className="mt-4" onClick={() => navigate(`${prefix}/briefs`)}>
             Zurück zur Übersicht
           </Button>
         </div>
@@ -211,7 +213,7 @@ export default function BriefDetail() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/briefs")}>
+            <Button variant="ghost" size="icon" onClick={() => navigate(`${prefix}/briefs`)}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
