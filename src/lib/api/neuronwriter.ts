@@ -1,38 +1,16 @@
-import { ConvexHttpClient } from "convex/browser";
+import { convex } from "@/providers/ConvexClientProvider";
 import { api } from "../../../convex/_generated/api";
 
 /**
- * NeuronWriter API Client - Convex Version
+ * NeuronWriter API Client.
  *
- * Uses Convex actions for all NeuronWriter API calls.
- * API key must be passed from the project's stored credentials.
+ * Uses the shared ConvexReactClient from ConvexClientProvider, which is
+ * wrapped by ConvexProviderWithClerk and therefore carries the user's
+ * Clerk token on every request. A previous implementation created a
+ * *separate* ConvexHttpClient here without auth, which caused every
+ * NeuronWriter call to fail with "Unauthorized" inside the Convex
+ * action (requireAuth).
  */
-
-// Initialize Convex HTTP client for non-React contexts
-const convexUrl = import.meta.env.VITE_CONVEX_URL;
-let convexClient: ConvexHttpClient | null = null;
-
-function getConvexClient(): ConvexHttpClient {
-  if (!convexClient && convexUrl) {
-    convexClient = new ConvexHttpClient(convexUrl);
-  }
-  if (!convexClient) {
-    throw new Error("Convex nicht konfiguriert. Bitte VITE_CONVEX_URL setzen.");
-  }
-  return convexClient;
-}
-
-/**
- * Set auth token for Convex client (called from auth context)
- */
-export function setConvexAuthToken(token: string | null) {
-  const client = getConvexClient();
-  if (token) {
-    client.setAuth(token);
-  } else {
-    client.clearAuth();
-  }
-}
 
 export interface NWProject {
   id: string;
@@ -84,15 +62,13 @@ export interface NWGuidelines {
 }
 
 export async function listNWProjects(apiKey: string): Promise<NWProject[]> {
-  const client = getConvexClient();
-  const data = await client.action(api.actions.neuronwriter.listProjects, { apiKey });
+  const data = await convex.action(api.actions.neuronwriter.listProjects, { apiKey });
   return data.projects || data || [];
 }
 
 export async function listNWQueries(projectId: string, status?: string, apiKey?: string): Promise<NWQuery[]> {
   if (!apiKey) throw new Error("API Key erforderlich");
-  const client = getConvexClient();
-  const data = await client.action(api.actions.neuronwriter.listQueries, {
+  const data = await convex.action(api.actions.neuronwriter.listQueries, {
     apiKey,
     projectId,
     status,
@@ -120,8 +96,7 @@ export async function startNewQuery(
   const mappedLanguage = LANGUAGE_MAP[language] || language;
   console.log("Starting new query:", { projectId, keyword, language: mappedLanguage, engine });
 
-  const client = getConvexClient();
-  const data = await client.action(api.actions.neuronwriter.newQuery, {
+  const data = await convex.action(api.actions.neuronwriter.newQuery, {
     apiKey,
     projectId,
     keyword,
@@ -133,8 +108,7 @@ export async function startNewQuery(
 }
 
 export async function getQueryGuidelines(queryId: string, apiKey: string): Promise<NWGuidelines> {
-  const client = getConvexClient();
-  const data = await client.action(api.actions.neuronwriter.getQuery, {
+  const data = await convex.action(api.actions.neuronwriter.getQuery, {
     apiKey,
     queryId,
   });
@@ -215,8 +189,7 @@ export async function evaluateContent(
   content: string,
   apiKey: string
 ): Promise<{ score: number; details: unknown }> {
-  const client = getConvexClient();
-  const data = await client.action(api.actions.neuronwriter.evaluateContent, {
+  const data = await convex.action(api.actions.neuronwriter.evaluateContent, {
     apiKey,
     queryId,
     html: content,
