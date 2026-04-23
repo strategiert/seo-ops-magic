@@ -12,6 +12,7 @@ import type * as actions_articleGeneration from "../actions/articleGeneration.js
 import type * as actions_bodycam from "../actions/bodycam.js";
 import type * as actions_bodycamAI from "../actions/bodycamAI.js";
 import type * as actions_gemini from "../actions/gemini.js";
+import type * as actions_googleAuth from "../actions/googleAuth.js";
 import type * as actions_htmlExport from "../actions/htmlExport.js";
 import type * as actions_jina from "../actions/jina.js";
 import type * as actions_neuronwriter from "../actions/neuronwriter.js";
@@ -32,6 +33,8 @@ import type * as tables_brandVectorDocuments from "../tables/brandVectorDocument
 import type * as tables_contentBriefs from "../tables/contentBriefs.js";
 import type * as tables_credits from "../tables/credits.js";
 import type * as tables_elementorTemplates from "../tables/elementorTemplates.js";
+import type * as tables_googleAccounts from "../tables/googleAccounts.js";
+import type * as tables_gscConnections from "../tables/gscConnections.js";
 import type * as tables_htmlExports from "../tables/htmlExports.js";
 import type * as tables_integrations from "../tables/integrations.js";
 import type * as tables_profiles from "../tables/profiles.js";
@@ -49,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   "actions/bodycam": typeof actions_bodycam;
   "actions/bodycamAI": typeof actions_bodycamAI;
   "actions/gemini": typeof actions_gemini;
+  "actions/googleAuth": typeof actions_googleAuth;
   "actions/htmlExport": typeof actions_htmlExport;
   "actions/jina": typeof actions_jina;
   "actions/neuronwriter": typeof actions_neuronwriter;
@@ -69,6 +73,8 @@ declare const fullApi: ApiFromModules<{
   "tables/contentBriefs": typeof tables_contentBriefs;
   "tables/credits": typeof tables_credits;
   "tables/elementorTemplates": typeof tables_elementorTemplates;
+  "tables/googleAccounts": typeof tables_googleAccounts;
+  "tables/gscConnections": typeof tables_gscConnections;
   "tables/htmlExports": typeof tables_htmlExports;
   "tables/integrations": typeof tables_integrations;
   "tables/profiles": typeof tables_profiles;

@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import { NeuronWriterSetup } from "@/components/settings/NeuronWriterSetup";
 import { WordPressSetup } from "@/components/settings/WordPressSetup";
+import { GoogleSearchConsoleSetup } from "@/components/settings/GoogleSearchConsoleSetup";
 import { useTour, useUserOnboarding } from "@/components/onboarding";
 import { api } from "../../convex/_generated/api";
 
@@ -173,20 +174,8 @@ export default function Settings() {
             {/* NeuronWriter Integration */}
             <NeuronWriterSetup />
 
-            {/* Future integrations placeholder */}
-            <Card className="opacity-60">
-              <CardHeader>
-                <CardTitle className="text-muted-foreground">Google Search Console</CardTitle>
-                <CardDescription>
-                  Performance-Daten und Keyword-Rankings (Demnächst)
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button variant="outline" disabled>
-                  Bald verfügbar
-                </Button>
-              </CardContent>
-            </Card>
+            {/* Google Search Console Integration */}
+            <GoogleSearchConsoleSetup />
 
             {/* WordPress Integration */}
             <WordPressSetup />

@@ -237,6 +237,39 @@ export default defineSchema({
     .index("by_relevance", ["brandProfileId", "relevanceScore"]),
 
   /**
+   * Google OAuth accounts connected by the current user.
+   *
+   * One row per (Clerk user, Google email). Holds refresh + access tokens
+   * for Google APIs (currently Search Console). Tokens refresh transparently
+   * when access_token is close to expiry.
+   */
+  googleAccounts: defineTable({
+    userId: v.string(),                 // Clerk user ID (owner of this connection)
+    email: v.string(),                  // Google account email
+    accessToken: v.string(),
+    refreshToken: v.string(),
+    expiresAt: v.number(),              // Unix ms
+    grantedScopes: v.array(v.string()),
+    connectedAt: v.number(),
+    lastRefreshedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_email", ["userId", "email"]),
+
+  /**
+   * Per-project GSC binding: which Google account + which property
+   * should be used for Search Console analytics on this project.
+   */
+  gscConnections: defineTable({
+    projectId: v.id("projects"),
+    googleAccountId: v.id("googleAccounts"),
+    gscProperty: v.string(),            // e.g. "sc-domain:microvista.de" or URL
+    propertyPermissionLevel: v.optional(v.string()),
+    connectedAt: v.number(),
+  })
+    .index("by_project", ["projectId"]),
+
+  /**
    * Brand vector documents - OpenAI Vector Store tracking
    *
    * Each row tracks one document uploaded to the OpenAI vector store for

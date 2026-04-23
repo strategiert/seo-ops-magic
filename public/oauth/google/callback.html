@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Google Search Console — Verbinde…</title>
+    <meta name="robots" content="noindex" />
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      .card {
+        background: #fff;
+        padding: 2rem 2.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+        max-width: 28rem;
+        text-align: center;
+      }
+      h1 { font-size: 1.1rem; margin: 0 0 0.75rem 0; }
+      p  { margin: 0.25rem 0; color: #475569; font-size: 0.9rem; }
+      .err { color: #dc2626; }
+      .sp {
+        display: inline-block;
+        width: 22px; height: 22px;
+        border: 3px solid #cbd5e1;
+        border-top-color: #2563eb;
+        border-radius: 50%;
+        animation: r 0.8s linear infinite;
+        margin: 0.5rem 0 1rem;
+      }
+      @keyframes r { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="sp" id="spinner"></div>
+      <h1 id="title">Verbinde Google-Konto…</h1>
+      <p id="msg">Einen Moment bitte, das Fenster schließt sich gleich von selbst.</p>
+    </div>
+    <script>
+      (function () {
+        var url = new URL(window.location.href);
+        var code = url.searchParams.get("code");
+        var state = url.searchParams.get("state");
+        var err = url.searchParams.get("error");
+        var errDesc = url.searchParams.get("error_description");
+
+        var payload = err
+          ? { type: "google-oauth", error: err, errorDescription: errDesc, state: state }
+          : { type: "google-oauth", code: code, state: state };
+
+        function updateUi() {
+          var title = document.getElementById("title");
+          var msg = document.getElementById("msg");
+          var sp = document.getElementById("spinner");
+          if (err) {
+            if (sp) sp.remove();
+            title.textContent = "Verbindung abgebrochen";
+            msg.className = "err";
+            msg.textContent = errDesc || err;
+          } else {
+            title.textContent = "Verbunden";
+            msg.textContent = "Fenster kann geschlossen werden.";
+          }
+        }
+
+        try {
+          if (window.opener) {
+            // Post to any origin — the app-side listener verifies by type + state.
+            window.opener.postMessage(payload, "*");
+          }
+          updateUi();
+          setTimeout(function () {
+            try { window.close(); } catch (e) {}
+          }, err ? 2500 : 600);
+        } catch (e) {
+          updateUi();
+        }
+      })();
+    </script>
+  </body>
+</html>
