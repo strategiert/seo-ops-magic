@@ -8,8 +8,20 @@ import {
 } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { useAuth } from "@clerk/clerk-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
+
+/**
+ * Pull the current projectId out of the URL if we're on a project-scoped
+ * route like /projects/:projectId/... — so the WorkspaceProvider stays in
+ * sync with the router without every page having to pass it explicitly.
+ */
+function useProjectIdFromUrl(): Id<"projects"> | null {
+  const { pathname } = useLocation();
+  const match = pathname.match(/^\/projects\/([a-zA-Z0-9_]+)/);
+  return (match?.[1] ?? null) as Id<"projects"> | null;
+}
 
 /**
  * Convex-based Workspace Context
@@ -79,6 +91,8 @@ const STORAGE_KEYS = {
 export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
   // Check if Clerk auth is available
   const { isSignedIn, isLoaded: clerkLoaded } = useAuth();
+  const navigate = useNavigate();
+  const urlProjectId = useProjectIdFromUrl();
 
   // Track if we're creating the default workspace to prevent duplicates
   const [isCreatingDefaultWorkspace, setIsCreatingDefaultWorkspace] = useState(false);
@@ -91,12 +105,24 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
     return stored ? (stored as Id<"workspaces">) : null;
   });
 
-  const [currentProjectId, setCurrentProjectId] = useState<
+  // Project selection: the URL is the source of truth when on a project-scoped
+  // route; fall back to localStorage when we're on a global page so the user's
+  // last project is still available to "Return to project" UI elements.
+  const [lastKnownProjectId, setLastKnownProjectId] = useState<
     Id<"projects"> | null
   >(() => {
     const stored = localStorage.getItem(STORAGE_KEYS.projectId);
     return stored ? (stored as Id<"projects">) : null;
   });
+
+  const currentProjectId = urlProjectId ?? lastKnownProjectId;
+
+  // Keep lastKnownProjectId synced with the URL whenever the URL has one
+  useEffect(() => {
+    if (urlProjectId && urlProjectId !== lastKnownProjectId) {
+      setLastKnownProjectId(urlProjectId);
+    }
+  }, [urlProjectId, lastKnownProjectId]);
 
   // Convex queries - only run if Clerk is signed in
   // Skip queries if not authenticated to avoid server errors
@@ -166,10 +192,11 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
     createDefaultWorkspace();
   }, [clerkLoaded, isSignedIn, workspacesLoaded, workspaces.length, isCreatingDefaultWorkspace, createWorkspaceMutation]);
 
-  // Auto-select first project if none selected
+  // Auto-select first project if none selected (only for the localStorage
+  // fallback — URL selection is the source of truth on project pages)
   useEffect(() => {
     if (!currentProjectId && projects.length > 0) {
-      setCurrentProjectId(projects[0]._id);
+      setLastKnownProjectId(projects[0]._id);
     }
   }, [projects, currentProjectId]);
 
@@ -190,13 +217,23 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
   const setCurrentWorkspace = useCallback((workspace: Workspace | null) => {
     setCurrentWorkspaceId(workspace?._id ?? null);
     // Reset project when workspace changes
-    setCurrentProjectId(null);
+    setLastKnownProjectId(null);
     localStorage.removeItem(STORAGE_KEYS.projectId);
   }, []);
 
-  const setCurrentProject = useCallback((project: Project | null) => {
-    setCurrentProjectId(project?._id ?? null);
-  }, []);
+  // Selecting a project navigates to its project-scoped dashboard so the URL
+  // is always the authoritative source of truth.
+  const setCurrentProject = useCallback(
+    (project: Project | null) => {
+      if (project) {
+        setLastKnownProjectId(project._id);
+        navigate(`/projects/${project._id}`);
+      } else {
+        setLastKnownProjectId(null);
+      }
+    },
+    [navigate]
+  );
 
   const createWorkspace = useCallback(
     async (name: string): Promise<Id<"workspaces">> => {
@@ -223,10 +260,11 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
         domain,
         wpUrl,
       });
-      setCurrentProjectId(id);
+      setLastKnownProjectId(id);
+      navigate(`/projects/${id}`);
       return id;
     },
-    [createProjectMutation, currentWorkspaceId]
+    [createProjectMutation, currentWorkspaceId, navigate]
   );
 
   const updateProject = useCallback(

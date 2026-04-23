@@ -1,42 +1,37 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@clerk/clerk-react';
-import { AppLayout } from '@/components/layout/AppLayout';
-import { useWorkspaceConvex } from '@/hooks/useWorkspaceConvex';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { FileText, LayoutTemplate, PenTool, Plus, ArrowRight, Zap } from 'lucide-react';
-import { TOUR_IDS, useTour, useUserOnboarding } from '@/components/onboarding';
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth, useUser } from "@clerk/clerk-react";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FolderKanban, Plus, ArrowRight, Globe, Zap } from "lucide-react";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
-  const { currentProject, projects, isLoading: workspaceLoading } = useWorkspaceConvex();
-  const { isFirstTimeUser, isChecked, markComplete } = useUserOnboarding();
-  const { startTour } = useTour({ onComplete: markComplete });
+  const { user } = useUser();
+  const { projects, isLoading: workspaceLoading } = useWorkspaceConvex();
 
   useEffect(() => {
     if (authLoaded && !isSignedIn) {
-      navigate('/auth');
+      navigate("/auth");
     }
   }, [isSignedIn, authLoaded, navigate]);
 
-  // Start onboarding tour for first-time users
-  useEffect(() => {
-    if (isChecked && isFirstTimeUser && authLoaded && !workspaceLoading) {
-      // Small delay to ensure DOM is ready
-      const timer = setTimeout(() => {
-        startTour();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [isChecked, isFirstTimeUser, authLoaded, workspaceLoading, startTour]);
+  const firstName = user?.firstName ?? user?.fullName?.split(" ")[0];
 
   if (!authLoaded || workspaceLoading) {
     return (
       <AppLayout title="Dashboard">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-32" />
           ))}
@@ -45,19 +40,21 @@ export default function Dashboard() {
     );
   }
 
-  if (!currentProject) {
+  // Empty-state: no projects yet
+  if (projects.length === 0) {
     return (
-      <AppLayout title="Willkommen" breadcrumbs={[{ label: 'Dashboard' }]}>
+      <AppLayout title="Willkommen">
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 text-primary mb-6">
             <Zap className="h-8 w-8" />
           </div>
-          <h2 className="text-xl font-semibold mb-2">Erstelle dein erstes Projekt</h2>
+          <h2 className="text-xl font-semibold mb-2">
+            {firstName ? `Hallo ${firstName} — ` : ""}willkommen in der SEO Content Ops Suite
+          </h2>
           <p className="text-muted-foreground mb-6 max-w-md">
-            Ein Projekt repräsentiert eine Website oder Brand. Du kannst NeuronWriter-Guidelines,
-            Content Briefs und Elementor Templates pro Projekt verwalten.
+            Ein Projekt repräsentiert eine Website oder Brand. Erstelle dein erstes Projekt, um loszulegen.
           </p>
-          <Button onClick={() => navigate('/projects')}>
+          <Button onClick={() => navigate("/projects")}>
             <Plus className="mr-2 h-4 w-4" />
             Projekt erstellen
           </Button>
@@ -66,136 +63,70 @@ export default function Dashboard() {
     );
   }
 
-  const quickActions = [
-    {
-      title: 'Neuer Content Brief',
-      description: 'Keyword, Intent und Zielgruppe definieren',
-      icon: FileText,
-      href: '/briefs/new',
-      color: 'bg-chart-1/10 text-chart-1',
-    },
-    {
-      title: 'Artikel generieren',
-      description: 'SEO-Text mit KI erstellen',
-      icon: PenTool,
-      href: '/articles',
-      color: 'bg-chart-2/10 text-chart-2',
-    },
-    {
-      title: 'Template exportieren',
-      description: 'Elementor JSON erstellen',
-      icon: LayoutTemplate,
-      href: '/templates',
-      color: 'bg-chart-3/10 text-chart-3',
-    },
-  ];
-
   return (
     <AppLayout
-      title={`Projekt: ${currentProject.name}`}
-      breadcrumbs={[{ label: 'Dashboard' }]}
+      title={firstName ? `Hallo ${firstName}` : "Dashboard"}
+      breadcrumbs={[{ label: "Dashboard" }]}
     >
       <div className="space-y-6">
-        {/* Quick Actions */}
-        <div id={TOUR_IDS.DASHBOARD_QUICK_ACTIONS} className="grid gap-4 md:grid-cols-3">
-          {quickActions.map((action) => (
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Deine Projekte</h2>
+            <p className="text-sm text-muted-foreground">
+              {projects.length} {projects.length === 1 ? "Projekt" : "Projekte"} in diesem Workspace
+            </p>
+          </div>
+          <Button onClick={() => navigate("/projects")} variant="outline">
+            <Plus className="mr-2 h-4 w-4" />
+            Neues Projekt
+          </Button>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {projects.map((project) => (
             <Card
-              key={action.title}
+              key={project._id}
               className="group cursor-pointer transition-smooth hover:shadow-md hover:border-primary/20"
-              onClick={() => navigate(action.href)}
+              onClick={() => navigate(`/projects/${project._id}`)}
             >
-              <CardHeader className="pb-2">
-                <div className={`inline-flex items-center justify-center w-10 h-10 rounded-lg ${action.color} mb-2`}>
-                  <action.icon className="h-5 w-5" />
-                </div>
-                <CardTitle className="text-base flex items-center gap-2">
-                  {action.title}
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary mb-2">
+                    <FolderKanban className="h-5 w-5" />
+                  </div>
                   <ArrowRight className="h-4 w-4 opacity-0 -translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
-                </CardTitle>
-                <CardDescription className="text-sm">
-                  {action.description}
+                </div>
+                <CardTitle className="text-base">{project.name}</CardTitle>
+                <CardDescription className="flex items-center gap-1 text-xs">
+                  {project.domain ? (
+                    <>
+                      <Globe className="h-3 w-3" />
+                      <span className="font-mono truncate">{project.domain}</span>
+                    </>
+                  ) : (
+                    <span className="italic text-muted-foreground">Keine Domain gesetzt</span>
+                  )}
                 </CardDescription>
               </CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <span>
+                    Lang:{" "}
+                    <span className="font-medium">
+                      {project.defaultLanguage?.toUpperCase() ?? "DE"}
+                    </span>
+                  </span>
+                  <span>
+                    Land:{" "}
+                    <span className="font-medium">
+                      {project.defaultCountry ?? "DE"}
+                    </span>
+                  </span>
+                </div>
+              </CardContent>
             </Card>
           ))}
         </div>
-
-        {/* Stats Overview */}
-        <div id={TOUR_IDS.DASHBOARD_STATS} className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Content Briefs</CardDescription>
-              <CardTitle className="text-2xl">0</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Artikel</CardDescription>
-              <CardTitle className="text-2xl">0</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Templates</CardDescription>
-              <CardTitle className="text-2xl">0</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Projekt-Domain</CardDescription>
-              <CardTitle className="text-sm font-mono truncate">
-                {currentProject.domain || 'Nicht gesetzt'}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        </div>
-
-        {/* Getting Started Guide */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Erste Schritte</CardTitle>
-            <CardDescription>
-              So nutzt du die SEO Content Ops Suite optimal
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
-                  1
-                </div>
-                <div>
-                  <p className="font-medium text-sm">Content Brief erstellen</p>
-                  <p className="text-sm text-muted-foreground">
-                    Definiere Keyword, Search Intent und Zielgruppe
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
-                  2
-                </div>
-                <div>
-                  <p className="font-medium text-sm">Artikel mit KI generieren</p>
-                  <p className="text-sm text-muted-foreground">
-                    Die KI erstellt SEO-optimierte Texte inkl. Meta-Tags
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
-                  3
-                </div>
-                <div>
-                  <p className="font-medium text-sm">Elementor JSON exportieren</p>
-                  <p className="text-sm text-muted-foreground">
-                    Template in WordPress importieren
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </AppLayout>
   );
