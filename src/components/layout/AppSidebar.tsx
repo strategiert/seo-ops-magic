@@ -31,8 +31,6 @@ import {
   ChevronUp,
   LogOut,
   PenTool,
-  Globe,
-  Image,
   Building2,
   LayoutTemplate,
   LayoutDashboard,
@@ -64,7 +62,6 @@ export function AppSidebar() {
   // Detect which scope we're in based on the URL
   const inProjectScope = location.pathname.startsWith('/projects/') &&
     location.pathname.split('/').length >= 3;
-  const inBodycamScope = location.pathname.startsWith('/bodycam');
 
   const projectPrefix = currentProject ? `/projects/${currentProject._id}` : null;
 
@@ -93,11 +90,6 @@ export function AppSidebar() {
     { title: 'Dashboard', url: '/', icon: Home, exact: true },
     { title: 'Projekte', url: '/projects', icon: FolderKanban, tourId: TOUR_IDS.SIDEBAR_PROJECTS },
     { title: 'Einstellungen', url: '/settings', icon: Settings, tourId: TOUR_IDS.SIDEBAR_SETTINGS },
-  ];
-
-  const sitesNavItems = [
-    { title: 'Bodycam', url: '/bodycam', icon: Globe },
-    { title: 'Bilder', url: '/bodycam/media', icon: Image },
   ];
 
   return (
@@ -230,28 +222,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Bodycam CMS — separate product, not project-scoped */}
-        <SidebarGroup>
-          <SidebarGroupLabel>Sites</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {sitesNavItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink
-                      to={item.url}
-                      className="flex items-center gap-2"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">

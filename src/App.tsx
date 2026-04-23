@@ -19,6 +19,7 @@ import ImportArticle from "./pages/ImportArticle";
 import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
 import Settings from "./pages/Settings";
+import ProjectSettings from "./pages/ProjectSettings";
 import Brand from "./pages/Brand";
 import BodycamDashboard from "./pages/BodycamDashboard";
 import BodycamPagesList from "./pages/BodycamPagesList";
@@ -58,7 +59,7 @@ const App = () => (
             <Route path="/projects/:projectId/import" element={<P><ImportArticle /></P>} />
             <Route path="/projects/:projectId/templates" element={<P><Templates /></P>} />
             <Route path="/projects/:projectId/templates/:id" element={<P><TemplateDetail /></P>} />
-            <Route path="/projects/:projectId/settings" element={<P><Settings /></P>} />
+            <Route path="/projects/:projectId/settings" element={<P><ProjectSettings /></P>} />
 
             {/* Legacy redirects — old flat URLs to the new project-scoped tree */}
             <Route path="/brand" element={<P><LegacyRedirect suffix="brand" /></P>} />
