@@ -58,7 +58,11 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
   const [createdBriefId, setCreatedBriefId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Reset state when modal opens
+  // Reset form inputs when the modal opens. Intentionally depends ONLY
+  // on `open` — Convex hands us a fresh `neuronwriter` object reference
+  // on every re-render tick, and any other dep here would wipe the
+  // user's typing mid-keystroke. The step-evaluation effect below
+  // handles the not-configured/keyword transition separately.
   useEffect(() => {
     if (open) {
       setKeyword("");
@@ -67,17 +71,8 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
       setProgressText("");
       setCreatedBriefId(null);
       setErrorMessage("");
-      
-      // Check if NW is configured
-      if (!intLoading) {
-        if (!neuronwriter?.isConnected || !neuronwriter?.nwProjectId) {
-          setStep("not-configured");
-        } else {
-          setStep("keyword");
-        }
-      }
     }
-  }, [open, intLoading, neuronwriter]);
+  }, [open]);
 
   // Update step when integration loads
   useEffect(() => {
