@@ -63,7 +63,17 @@ export interface NWGuidelines {
 
 export async function listNWProjects(apiKey: string): Promise<NWProject[]> {
   const data = await convex.action(api.actions.neuronwriter.listProjects, { apiKey });
-  return data.projects || data || [];
+  // NW response shape: either `{ projects: [...] }` or a bare array.
+  // Each entry looks like `{ project: "<hash>", name, language, engine }` —
+  // the hash field is `project`, not `id`. Normalize it here so UI code
+  // can use `.id` consistently.
+  const raw: any[] = Array.isArray(data) ? data : data.projects || [];
+  return raw.map((p: any) => ({
+    id: p.project || p.id || p.hash || "",
+    name: p.name || "(kein Name)",
+    lang: p.language,
+    country: p.engine,
+  }));
 }
 
 export async function listNWQueries(projectId: string, status?: string, apiKey?: string): Promise<NWQuery[]> {
