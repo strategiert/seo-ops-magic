@@ -139,14 +139,13 @@ export function NeuronWriterSetup() {
     }
   }, [neuronwriter?.nwApiKey]);
 
-  // Pre-fill form when editing existing config
-  useEffect(() => {
-    if (neuronwriter && isConfiguring) {
-      setSelectedProject(neuronwriter.nwProjectId || "");
-      setSelectedLanguage(neuronwriter.nwLanguage || "de");
-      setSelectedEngine(neuronwriter.nwEngine || "google.de");
-    }
-  }, [neuronwriter, isConfiguring]);
+  // Pre-fill happens once inside startConfiguring(). A previous version
+  // of this component re-ran the pre-fill in a useEffect on every change
+  // of `neuronwriter`. Convex returns a new object reference on each
+  // re-render tick, so that effect wiped `selectedProject` back to the
+  // stored value (empty, for a fresh setup) the moment the user picked
+  // something in the dropdown — leaving the Save button permanently
+  // disabled. Do not reintroduce that effect.
 
   const startConfiguring = async () => {
     setLoadingProjects(true);

@@ -68,12 +68,16 @@ export async function listNWProjects(apiKey: string): Promise<NWProject[]> {
   // the hash field is `project`, not `id`. Normalize it here so UI code
   // can use `.id` consistently.
   const raw: any[] = Array.isArray(data) ? data : data.projects || [];
-  return raw.map((p: any) => ({
-    id: p.project || p.id || p.hash || "",
-    name: p.name || "(kein Name)",
-    lang: p.language,
-    country: p.engine,
-  }));
+  return raw
+    .map((p: any) => ({
+      id: String(p.project ?? p.id ?? p.hash ?? p.project_id ?? "").trim(),
+      name: p.name || "(kein Name)",
+      lang: p.language,
+      country: p.engine,
+    }))
+    // Radix Select rejects empty-string values; drop any entry that
+    // doesn't have a usable ID so the dropdown stays selectable.
+    .filter((p) => p.id.length > 0);
 }
 
 export async function listNWQueries(projectId: string, status?: string, apiKey?: string): Promise<NWQuery[]> {
