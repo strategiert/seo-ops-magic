@@ -134,13 +134,23 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
       });
 
       setProgress(25);
-      setProgressText("Analysiere Keyword bei NeuronWriter (ca. 60s)...");
+      setProgressText("Analysiere Keyword bei NeuronWriter (ca. 60–180s)...");
 
-      // Step 3: Poll for results with progress updates
+      // Step 3: Poll for results with progress updates.
+      // NeuronWriter's public "~60s" is an optimistic floor; long-tail
+      // keywords and their own transient 5xx/rate-limit responses
+      // routinely push real completion to 120–180s. Give the analysis
+      // a ~5-minute ceiling (40 polls × ~8s) so typical runs don't
+      // false-positive as "timeout".
       let pollCount = 0;
-      const maxPolls = 20;
+      const maxPolls = 40;
+      const pollIntervalMs = 7500;
 
       const pollWithProgress = async (): Promise<NWGuidelines> => {
+        // Wait a beat before the first poll — NeuronWriter almost never
+        // has results under 20s, so we skip the obvious miss.
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+
         for (let i = 0; i < maxPolls; i++) {
           pollCount++;
           // Update progress from 25% to 90%
@@ -149,7 +159,6 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
           setProgressText(`Analysiere Keyword... (${pollCount}/${maxPolls})`);
 
           try {
-            // Use the Convex-based API client
             const guidelines = await getQueryGuidelines(queryId, neuronwriter.nwApiKey!);
 
             if (guidelines.status === "ready" || (guidelines.terms && guidelines.terms.length > 0)) {
@@ -160,15 +169,18 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
               throw new Error("NeuronWriter Analyse fehlgeschlagen");
             }
           } catch (e) {
-            // Continue polling on temporary errors
+            // Continue polling on temporary errors (NW rate limits,
+            // Convex transient 5xx, etc.)
             console.log("Poll attempt failed, retrying...", e);
           }
 
-          // Wait 5 seconds before next poll
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
         }
 
-        throw new Error("Analyse-Timeout: Bitte versuche es erneut.");
+        throw new Error(
+          "Analyse-Timeout: NeuronWriter hat nach 5 Minuten noch kein Ergebnis geliefert. " +
+            "Das Brief wurde trotzdem erstellt — die Query läuft bei NeuronWriter oft noch weiter und du kannst sie dort abrufen."
+        );
       };
 
       const guidelines = await pollWithProgress();
