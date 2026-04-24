@@ -13,6 +13,7 @@ import type * as actions_bodycam from "../actions/bodycam.js";
 import type * as actions_bodycamAI from "../actions/bodycamAI.js";
 import type * as actions_gemini from "../actions/gemini.js";
 import type * as actions_googleAuth from "../actions/googleAuth.js";
+import type * as actions_gsc from "../actions/gsc.js";
 import type * as actions_htmlExport from "../actions/htmlExport.js";
 import type * as actions_jina from "../actions/jina.js";
 import type * as actions_neuronwriter from "../actions/neuronwriter.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   "actions/bodycamAI": typeof actions_bodycamAI;
   "actions/gemini": typeof actions_gemini;
   "actions/googleAuth": typeof actions_googleAuth;
+  "actions/gsc": typeof actions_gsc;
   "actions/htmlExport": typeof actions_htmlExport;
   "actions/jina": typeof actions_jina;
   "actions/neuronwriter": typeof actions_neuronwriter;

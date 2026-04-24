@@ -37,6 +37,7 @@ import {
   ChevronsUpDown,
   Check,
   Home,
+  BarChart3,
 } from 'lucide-react';
 import { useWorkspaceConvex } from '@/hooks/useWorkspaceConvex';
 import { TOUR_IDS } from '@/components/onboarding';
@@ -81,6 +82,7 @@ export function AppSidebar() {
           icon: PenTool,
           tourId: TOUR_IDS.SIDEBAR_ARTICLES,
         },
+        { title: 'Analytics', url: `${projectPrefix}/analytics`, icon: BarChart3 },
         { title: 'Templates', url: `${projectPrefix}/templates`, icon: LayoutTemplate },
         { title: 'Projekt-Einstellungen', url: `${projectPrefix}/settings`, icon: Settings },
       ]
