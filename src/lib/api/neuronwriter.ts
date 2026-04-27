@@ -225,21 +225,27 @@ export async function pollQueryUntilReady(
   await new Promise((resolve) => setTimeout(resolve, 10000));
 
   for (let i = 0; i < maxAttempts; i++) {
+    let guidelines: NWGuidelines | null = null;
     try {
-      const guidelines = await getQueryGuidelines(queryId, apiKey);
+      guidelines = await getQueryGuidelines(queryId, apiKey);
+    } catch (err) {
+      // Swallow transient errors (NW rate limit, Convex 5xx, network
+      // hiccup) and keep polling. The fetch itself failed — we have no
+      // status to inspect, so we just wait and retry.
+      console.log("Poll attempt failed, retrying...", err);
+    }
 
+    if (guidelines) {
       if (guidelines.status === "ready" || (guidelines.terms && guidelines.terms.length > 0)) {
         return guidelines;
       }
-
+      // A real `status: "error"` from NeuronWriter is terminal — bubble
+      // out instead of grinding the loop until the timeout. This `throw`
+      // sits OUTSIDE the catch above on purpose; if it were inside, the
+      // catch would swallow it and we'd silently keep polling.
       if (guidelines.status === "error") {
-        throw new Error("Query analysis failed");
+        throw new Error("NeuronWriter Analyse fehlgeschlagen.");
       }
-    } catch (err) {
-      // Swallow transient errors (NW rate limit, Convex 5xx, network
-      // hiccup) and keep polling. A real `status: "error"` from NW will
-      // re-throw above; here we just keep waiting.
-      console.log("Poll attempt failed, retrying...", err);
     }
 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));

@@ -158,20 +158,25 @@ export const BriefCreationWizard = memo(function BriefCreationWizard({
           setProgress(Math.min(pollProgress, 90));
           setProgressText(`Analysiere Keyword... (${pollCount}/${maxPolls})`);
 
+          let guidelines: NWGuidelines | null = null;
           try {
-            const guidelines = await getQueryGuidelines(queryId, neuronwriter.nwApiKey!);
+            guidelines = await getQueryGuidelines(queryId, neuronwriter.nwApiKey!);
+          } catch (e) {
+            // Transient error (NW rate limit, Convex 5xx, network blip)
+            // — keep polling. We have no status to inspect, so just wait.
+            console.log("Poll attempt failed, retrying...", e);
+          }
 
+          if (guidelines) {
             if (guidelines.status === "ready" || (guidelines.terms && guidelines.terms.length > 0)) {
               return guidelines;
             }
-
+            // Real terminal failure from NW — bubble out. Sits OUTSIDE
+            // the catch above on purpose, otherwise the catch would
+            // swallow it and we'd grind to the 5-min timeout.
             if (guidelines.status === "error") {
-              throw new Error("NeuronWriter Analyse fehlgeschlagen");
+              throw new Error("NeuronWriter Analyse fehlgeschlagen.");
             }
-          } catch (e) {
-            // Continue polling on temporary errors (NW rate limits,
-            // Convex transient 5xx, etc.)
-            console.log("Poll attempt failed, retrying...", e);
           }
 
           await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
