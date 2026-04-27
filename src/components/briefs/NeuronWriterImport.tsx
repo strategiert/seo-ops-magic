@@ -103,10 +103,12 @@ export function NeuronWriterImport({
         neuronwriter.nwApiKey
       );
 
-      setImportProgress("Analysiere Keyword (ca. 60 Sekunden)...");
+      setImportProgress("Analysiere Keyword (ca. 60–180 Sekunden)...");
 
-      // Poll until ready (note: apiKey is now second parameter)
-      const guidelines = await pollQueryUntilReady(queryId, neuronwriter.nwApiKey, 20, 5000);
+      // Use the function's defaults (40 polls × 7.5s = ~5min) — see
+      // pollQueryUntilReady. Forcing the old 20×5s killed long-tail
+      // keywords mid-analysis.
+      const guidelines = await pollQueryUntilReady(queryId, neuronwriter.nwApiKey);
 
       // Update sync time
       if (neuronwriter.id) {

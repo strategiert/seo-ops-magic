@@ -212,27 +212,41 @@ export async function evaluateContent(
   return { score: data.score || data.content_score || 0, details: data };
 }
 
-// Poll for query completion (after new-query, it takes ~60s)
+// Poll for query completion. NeuronWriter's "~60s" is a floor — long-tail
+// keywords plus their own transient 5xx/rate-limit responses regularly
+// push real completion to 120–180s. Defaults give a ~5-minute ceiling.
 export async function pollQueryUntilReady(
   queryId: string,
   apiKey: string,
-  maxAttempts = 20,
-  intervalMs = 5000
+  maxAttempts = 40,
+  intervalMs = 7500
 ): Promise<NWGuidelines> {
+  // NW is never ready under 20s; skip the obvious miss before polling.
+  await new Promise((resolve) => setTimeout(resolve, 10000));
+
   for (let i = 0; i < maxAttempts; i++) {
-    const guidelines = await getQueryGuidelines(queryId, apiKey);
+    try {
+      const guidelines = await getQueryGuidelines(queryId, apiKey);
 
-    if (guidelines.status === "ready" || (guidelines.terms && guidelines.terms.length > 0)) {
-      return guidelines;
+      if (guidelines.status === "ready" || (guidelines.terms && guidelines.terms.length > 0)) {
+        return guidelines;
+      }
+
+      if (guidelines.status === "error") {
+        throw new Error("Query analysis failed");
+      }
+    } catch (err) {
+      // Swallow transient errors (NW rate limit, Convex 5xx, network
+      // hiccup) and keep polling. A real `status: "error"` from NW will
+      // re-throw above; here we just keep waiting.
+      console.log("Poll attempt failed, retrying...", err);
     }
 
-    if (guidelines.status === "error") {
-      throw new Error("Query analysis failed");
-    }
-
-    // Wait before next poll
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
-  throw new Error("Query analysis timed out");
+  throw new Error(
+    "Analyse-Timeout: NeuronWriter hat nach 5 Minuten noch kein Ergebnis geliefert. " +
+      "Die Query läuft bei NeuronWriter oft noch weiter und kann dort abgerufen werden."
+  );
 }
