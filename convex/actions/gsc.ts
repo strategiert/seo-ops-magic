@@ -423,3 +423,222 @@ export const getTopPages = action({
     }
   },
 });
+
+// ─────────────────────────────────────────────────── Cannibalization
+
+interface CannibalPage {
+  page: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+interface CannibalGroup {
+  query: string;
+  totalClicks: number;
+  totalImpressions: number;
+  bestPosition: number;
+  pages: CannibalPage[];
+}
+
+/**
+ * Detect keyword cannibalization: queries where 2+ URLs from the same
+ * site rank in GSC. Multiple URLs competing on a single keyword usually
+ * splits CTR and confuses ranking signals — pick a canonical, redirect
+ * or de-optimize the rest.
+ */
+export const getCannibalization = action({
+  args: {
+    projectId: v.id("projects"),
+    days: v.optional(v.number()),
+    minImpressions: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    { projectId, days, minImpressions, limit }
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    range?: { startDate: string; endDate: string };
+    groups?: CannibalGroup[];
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { success: false, error: "Unauthorized" };
+
+    const n = days ?? 28;
+    const minImp = minImpressions ?? 10;
+    const top = limit ?? 50;
+    const range = rangeForLastDays(n);
+
+    const ctxGsc = await getGscContext(ctx, projectId);
+    if ("error" in ctxGsc) return { success: false, error: ctxGsc.error };
+    const { accessToken, siteUrl } = ctxGsc;
+
+    try {
+      // dimensions ["query","page"] gives one row per (query,page) pair.
+      // 25k rowLimit covers most properties; long-tail beyond that is
+      // not worth flagging as cannibalization anyway.
+      const rows = await gscQuery(accessToken, siteUrl, {
+        startDate: range.startDate,
+        endDate: range.endDate,
+        dimensions: ["query", "page"],
+        rowLimit: 25000,
+      });
+
+      const byQuery = new Map<string, CannibalPage[]>();
+      for (const r of rows) {
+        const query = r.keys?.[0];
+        const page = r.keys?.[1];
+        if (!query || !page) continue;
+        if (!byQuery.has(query)) byQuery.set(query, []);
+        byQuery.get(query)!.push({
+          page,
+          clicks: r.clicks,
+          impressions: r.impressions,
+          ctr: r.ctr,
+          position: r.position,
+        });
+      }
+
+      const groups: CannibalGroup[] = [];
+      for (const [query, pages] of byQuery.entries()) {
+        if (pages.length < 2) continue;
+        const totalImpressions = pages.reduce((s, p) => s + p.impressions, 0);
+        if (totalImpressions < minImp) continue;
+        pages.sort((a, b) => b.clicks - a.clicks);
+        groups.push({
+          query,
+          totalClicks: pages.reduce((s, p) => s + p.clicks, 0),
+          totalImpressions,
+          bestPosition: Math.min(...pages.map((p) => p.position)),
+          pages,
+        });
+      }
+
+      // Highest impact first (most impressions across competing pages).
+      groups.sort((a, b) => b.totalImpressions - a.totalImpressions);
+
+      return { success: true, range, groups: groups.slice(0, top) };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
+});
+
+// ─────────────────────────────────────────────────── Quick Wins
+
+interface QuickWinRow {
+  query: string;
+  page?: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  // Rough lift estimate: if this keyword moved to position 3, what
+  // additional clicks would the typical CTR curve imply?
+  potentialClicks: number;
+}
+
+/**
+ * Approximate CTR-by-position curve (organic SERP, blended across
+ * informational + commercial intent). Used to estimate lift if a
+ * keyword were pushed into the top 3.
+ */
+function ctrCurve(position: number): number {
+  if (position < 1.5) return 0.27;
+  if (position < 2.5) return 0.15;
+  if (position < 3.5) return 0.11;
+  if (position < 4.5) return 0.08;
+  if (position < 5.5) return 0.06;
+  if (position < 6.5) return 0.05;
+  if (position < 7.5) return 0.04;
+  if (position < 8.5) return 0.035;
+  if (position < 9.5) return 0.03;
+  if (position < 10.5) return 0.025;
+  return 0.015;
+}
+
+/**
+ * Quick wins: queries on positions 4–20 with enough impression volume
+ * to be worth optimizing. These are the keywords closest to page 1
+ * top-3, where small content/link improvements typically pay off
+ * fastest.
+ */
+export const getQuickWins = action({
+  args: {
+    projectId: v.id("projects"),
+    days: v.optional(v.number()),
+    minImpressions: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    { projectId, days, minImpressions, limit }
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    range?: { startDate: string; endDate: string };
+    rows?: QuickWinRow[];
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { success: false, error: "Unauthorized" };
+
+    const n = days ?? 28;
+    const minImp = minImpressions ?? 50;
+    const top = limit ?? 50;
+    const range = rangeForLastDays(n);
+
+    const ctxGsc = await getGscContext(ctx, projectId);
+    if ("error" in ctxGsc) return { success: false, error: ctxGsc.error };
+    const { accessToken, siteUrl } = ctxGsc;
+
+    try {
+      // (query,page) so users see WHICH URL needs the push.
+      const rows = await gscQuery(accessToken, siteUrl, {
+        startDate: range.startDate,
+        endDate: range.endDate,
+        dimensions: ["query", "page"],
+        rowLimit: 25000,
+      });
+
+      const wins: QuickWinRow[] = rows
+        .filter((r) => {
+          if (!r.keys?.[0]) return false;
+          if (r.position < 4 || r.position > 20) return false;
+          if (r.impressions < minImp) return false;
+          return true;
+        })
+        .map((r) => {
+          const targetCtr = ctrCurve(3); // assume push to pos 3
+          const potentialClicks = Math.max(
+            0,
+            Math.round(r.impressions * targetCtr - r.clicks)
+          );
+          return {
+            query: r.keys![0],
+            page: r.keys?.[1],
+            clicks: r.clicks,
+            impressions: r.impressions,
+            ctr: r.ctr,
+            position: r.position,
+            potentialClicks,
+          };
+        });
+
+      // Highest potential lift first.
+      wins.sort((a, b) => b.potentialClicks - a.potentialClicks);
+
+      return { success: true, range, rows: wins.slice(0, top) };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
+});

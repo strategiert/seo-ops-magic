@@ -83,6 +83,32 @@ interface TopRow {
   positionChange: number;
 }
 
+interface CannibalPage {
+  page: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+interface CannibalGroup {
+  query: string;
+  totalClicks: number;
+  totalImpressions: number;
+  bestPosition: number;
+  pages: CannibalPage[];
+}
+
+interface QuickWinRow {
+  query: string;
+  page?: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  potentialClicks: number;
+}
+
 function fmtInt(n: number): string {
   return new Intl.NumberFormat("de-DE").format(Math.round(n));
 }
@@ -308,6 +334,8 @@ export default function Analytics() {
   } | null>(null);
   const [topQueries, setTopQueries] = useState<TopRow[]>([]);
   const [topPages, setTopPages] = useState<TopRow[]>([]);
+  const [cannibals, setCannibals] = useState<CannibalGroup[]>([]);
+  const [quickWins, setQuickWins] = useState<QuickWinRow[]>([]);
 
   const connection = useQuery(
     api.tables.gscConnections.getByProject,
@@ -319,20 +347,26 @@ export default function Analytics() {
   const getPerformance = useAction(api.actions.gsc.getPerformance);
   const getTopQueries = useAction(api.actions.gsc.getTopQueries);
   const getTopPages = useAction(api.actions.gsc.getTopPages);
+  const getCannibalization = useAction(api.actions.gsc.getCannibalization);
+  const getQuickWins = useAction(api.actions.gsc.getQuickWins);
 
   const loadAll = async (n: Days) => {
     if (!currentProject?._id) return;
     setLoading(true);
     setError(null);
     try {
-      const [p, q, pages] = await Promise.all([
+      const [p, q, pages, cann, qw] = await Promise.all([
         getPerformance({ projectId: currentProject._id, days: n }),
         getTopQueries({ projectId: currentProject._id, days: n, limit: 50 }),
         getTopPages({ projectId: currentProject._id, days: n, limit: 50 }),
+        getCannibalization({ projectId: currentProject._id, days: n, limit: 50 }),
+        getQuickWins({ projectId: currentProject._id, days: n, limit: 50 }),
       ]);
       if (!p.success) throw new Error(p.error ?? "Performance konnte nicht geladen werden");
       if (!q.success) throw new Error(q.error ?? "Top Queries konnten nicht geladen werden");
       if (!pages.success) throw new Error(pages.error ?? "Top Pages konnten nicht geladen werden");
+      if (!cann.success) throw new Error(cann.error ?? "Kannibalisierung konnte nicht geladen werden");
+      if (!qw.success) throw new Error(qw.error ?? "Quick Wins konnten nicht geladen werden");
       setPerf({
         range: p.range!,
         previousRange: p.previousRange!,
@@ -342,6 +376,8 @@ export default function Analytics() {
       });
       setTopQueries(q.rows ?? []);
       setTopPages(pages.rows ?? []);
+      setCannibals(cann.groups ?? []);
+      setQuickWins(qw.rows ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -528,6 +564,22 @@ export default function Analytics() {
                 <TabsTrigger value="overview">Überblick</TabsTrigger>
                 <TabsTrigger value="queries">Top Keywords</TabsTrigger>
                 <TabsTrigger value="pages">Top URLs</TabsTrigger>
+                <TabsTrigger value="quickwins">
+                  Quick Wins
+                  {quickWins.length > 0 && (
+                    <span className="ml-1.5 text-xs text-muted-foreground">
+                      ({quickWins.length})
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="cannibalization">
+                  Kannibalisierung
+                  {cannibals.length > 0 && (
+                    <span className="ml-1.5 text-xs text-muted-foreground">
+                      ({cannibals.length})
+                    </span>
+                  )}
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="mt-4">
@@ -692,6 +744,188 @@ export default function Analytics() {
                         })}
                       </TableBody>
                     </Table>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="quickwins" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Quick Wins</CardTitle>
+                    <CardDescription>
+                      Keywords auf Position 4–20 mit ≥50 Impressions. „Potenzial"
+                      schätzt zusätzliche Klicks bei Push auf Position 3
+                      (typische Branchen-CTR-Kurve, kein Versprechen). Sortiert
+                      nach größtem Hebel.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Keyword</TableHead>
+                          <TableHead className="hidden lg:table-cell">URL</TableHead>
+                          <TableHead className="text-right">Pos.</TableHead>
+                          <TableHead className="text-right">Impr.</TableHead>
+                          <TableHead className="text-right">Clicks</TableHead>
+                          <TableHead className="text-right">CTR</TableHead>
+                          <TableHead className="text-right">Potenzial</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {quickWins.length === 0 && (
+                          <TableRow>
+                            <TableCell
+                              colSpan={7}
+                              className="text-center text-sm text-muted-foreground py-8"
+                            >
+                              Keine Quick Wins im Zeitraum (Pos 4–20, ≥50 Impr.).
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {quickWins.map((r, i) => {
+                          let shortUrl = r.page ?? "";
+                          try {
+                            if (r.page) {
+                              const u = new URL(r.page);
+                              shortUrl = u.pathname + u.search;
+                            }
+                          } catch {
+                            // keep raw
+                          }
+                          return (
+                            <TableRow key={`${r.query}__${r.page ?? i}`}>
+                              <TableCell className="font-medium max-w-[280px] truncate">
+                                {r.query}
+                              </TableCell>
+                              <TableCell className="hidden lg:table-cell max-w-[280px]">
+                                {r.page ? (
+                                  <a
+                                    href={r.page}
+                                    target="_blank"
+                                    rel="noreferrer noopener"
+                                    className="flex items-center gap-1 text-xs text-muted-foreground hover:underline truncate"
+                                    title={r.page}
+                                  >
+                                    <span className="truncate">{shortUrl}</span>
+                                    <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
+                                  </a>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {fmtPos(r.position)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {fmtInt(r.impressions)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {fmtInt(r.clicks)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {fmtPct(r.ctr)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <span className="inline-flex items-center gap-1 font-medium text-emerald-600">
+                                  <TrendingUp className="h-3 w-3" />
+                                  +{fmtInt(r.potentialClicks)}
+                                </span>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="cannibalization" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Kannibalisierung</CardTitle>
+                    <CardDescription>
+                      Keywords, auf denen 2+ URLs ranken. Splittet CTR und
+                      verwirrt Ranking-Signale. Ein Kandidat: Canonical setzen,
+                      Redirect oder Inhalt der schwächeren Seiten anpassen.
+                      Sortiert nach größter Impressions-Summe.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {cannibals.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-8 px-6">
+                        Keine Kannibalisierung im Zeitraum erkannt (≥10 Impressions, ≥2 URLs pro Query).
+                      </p>
+                    ) : (
+                      <div className="divide-y">
+                        {cannibals.map((g) => (
+                          <div key={g.query} className="px-6 py-4 space-y-2">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="min-w-0">
+                                <div className="font-medium truncate" title={g.query}>
+                                  {g.query}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {g.pages.length} URLs · {fmtInt(g.totalImpressions)} Impr.
+                                  · {fmtInt(g.totalClicks)} Clicks · best Pos. {fmtPos(g.bestPosition)}
+                                </div>
+                              </div>
+                            </div>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="h-8">URL</TableHead>
+                                  <TableHead className="h-8 text-right">Pos.</TableHead>
+                                  <TableHead className="h-8 text-right">Impr.</TableHead>
+                                  <TableHead className="h-8 text-right">Clicks</TableHead>
+                                  <TableHead className="h-8 text-right">CTR</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {g.pages.map((p) => {
+                                  let shortUrl = p.page;
+                                  try {
+                                    const u = new URL(p.page);
+                                    shortUrl = u.pathname + u.search;
+                                  } catch {
+                                    // keep raw
+                                  }
+                                  return (
+                                    <TableRow key={p.page}>
+                                      <TableCell className="max-w-[420px]">
+                                        <a
+                                          href={p.page}
+                                          target="_blank"
+                                          rel="noreferrer noopener"
+                                          className="flex items-center gap-1 text-xs hover:underline truncate"
+                                          title={p.page}
+                                        >
+                                          <span className="truncate">{shortUrl}</span>
+                                          <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
+                                        </a>
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        {fmtPos(p.position)}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        {fmtInt(p.impressions)}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        {fmtInt(p.clicks)}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        {fmtPct(p.ctr)}
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
