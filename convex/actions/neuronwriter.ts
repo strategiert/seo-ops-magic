@@ -22,6 +22,65 @@ function requireApiKey(apiKey: string | undefined): string {
 }
 
 /**
+ * Call NeuronWriter with built-in retry for transient failures.
+ *
+ * NeuronWriter routinely returns 5xx (or just times out the connection)
+ * while a query is still being analysed. Without a server-side retry,
+ * that bubbles all the way to the browser as a Convex "Server Error" and
+ * users see analysis aborts mid-poll. We retry up to 3 times with
+ * short backoff for 5xx and network errors. 4xx (real failures, bad
+ * keys, missing query) are returned immediately so callers get the
+ * real message instead of waiting through bogus retries.
+ */
+async function nwFetchWithRetry(
+  endpoint: string,
+  apiKey: string,
+  body: Record<string, any>
+): Promise<any> {
+  const maxAttempts = 3;
+  let lastErr: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await fetch(`${NW_BASE_URL}${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-KEY": apiKey,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      // 4xx: terminal — surface immediately, don't waste retries
+      if (response.status >= 400 && response.status < 500) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || `NeuronWriter API error: ${response.status}`);
+      }
+
+      // 5xx: transient, fall through to retry
+      lastErr = new Error(`NeuronWriter API ${response.status}`);
+    } catch (err) {
+      // Network errors, fetch aborts, JSON parse failures — treat as transient
+      lastErr = err;
+    }
+
+    if (attempt < maxAttempts) {
+      // 400ms, 1200ms exponential-ish backoff
+      const delayMs = 400 * Math.pow(3, attempt - 1);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error("NeuronWriter API: unbekannter Fehler nach mehreren Versuchen");
+}
+
+/**
  * List all NeuronWriter projects
  */
 export const listProjects = action({
@@ -35,22 +94,7 @@ export const listProjects = action({
     }
 
     const validApiKey = requireApiKey(apiKey);
-
-    const response = await fetch(`${NW_BASE_URL}/list-projects`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-KEY": validApiKey,
-      },
-      body: JSON.stringify({}),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || `NeuronWriter API error: ${response.status}`);
-    }
-
-    return await response.json();
+    return await nwFetchWithRetry("/list-projects", validApiKey, {});
   },
 });
 
@@ -78,21 +122,7 @@ export const listQueries = action({
     if (status) requestBody.status = status;
     if (tags) requestBody.tags = tags;
 
-    const response = await fetch(`${NW_BASE_URL}/list-queries`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-KEY": validApiKey,
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || `NeuronWriter API error: ${response.status}`);
-    }
-
-    return await response.json();
+    return await nwFetchWithRetry("/list-queries", validApiKey, requestBody);
   },
 });
 
@@ -114,27 +144,12 @@ export const newQuery = action({
     }
 
     const validApiKey = requireApiKey(apiKey);
-
-    const response = await fetch(`${NW_BASE_URL}/new-query`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-KEY": validApiKey,
-      },
-      body: JSON.stringify({
-        project: projectId,
-        keyword,
-        language,
-        engine,
-      }),
+    return await nwFetchWithRetry("/new-query", validApiKey, {
+      project: projectId,
+      keyword,
+      language,
+      engine,
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || `NeuronWriter API error: ${response.status}`);
-    }
-
-    return await response.json();
   },
 });
 
@@ -153,22 +168,7 @@ export const getQuery = action({
     }
 
     const validApiKey = requireApiKey(apiKey);
-
-    const response = await fetch(`${NW_BASE_URL}/get-query`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-KEY": validApiKey,
-      },
-      body: JSON.stringify({ query: queryId }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || `NeuronWriter API error: ${response.status}`);
-    }
-
-    return await response.json();
+    return await nwFetchWithRetry("/get-query", validApiKey, { query: queryId });
   },
 });
 
@@ -187,22 +187,7 @@ export const getContent = action({
     }
 
     const validApiKey = requireApiKey(apiKey);
-
-    const response = await fetch(`${NW_BASE_URL}/get-content`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-KEY": validApiKey,
-      },
-      body: JSON.stringify({ query: queryId }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || `NeuronWriter API error: ${response.status}`);
-    }
-
-    return await response.json();
+    return await nwFetchWithRetry("/get-content", validApiKey, { query: queryId });
   },
 });
 
@@ -233,21 +218,7 @@ export const evaluateContent = action({
     if (title) requestBody.title = title;
     if (description) requestBody.description = description;
 
-    const response = await fetch(`${NW_BASE_URL}/evaluate-content`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-KEY": validApiKey,
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || `NeuronWriter API error: ${response.status}`);
-    }
-
-    return await response.json();
+    return await nwFetchWithRetry("/evaluate-content", validApiKey, requestBody);
   },
 });
 
@@ -346,20 +317,6 @@ export const call = action({
         throw new Error(`Unknown action: ${args.action}`);
     }
 
-    const response = await fetch(`${NW_BASE_URL}${endpoint}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-KEY": validApiKey,
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || `NeuronWriter API error: ${response.status}`);
-    }
-
-    return await response.json();
+    return await nwFetchWithRetry(endpoint, validApiKey, requestBody);
   },
 });
