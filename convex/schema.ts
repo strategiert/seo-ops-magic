@@ -475,7 +475,147 @@ export default defineSchema({
     .index("by_type", ["assetType"])
     .index("by_platform", ["platform"]),
 
-  // ============ TIER 8: Utility Tables ============
+  // ============ TIER 8: Outreach Operating System ============
+
+  outreachCampaigns: defineTable({
+    projectId: v.id("projects"),
+    name: v.string(),
+    campaignType: v.string(), // 'linkbuilding' | 'pr' | 'sales' | 'partnership' | 'seeding'
+    targetDomain: v.optional(v.string()),
+    targetArticleIds: v.optional(v.array(v.id("articles"))),
+    competitors: v.optional(v.array(v.string())),
+    goalTargetsJson: v.optional(v.any()),
+    strategyJson: v.optional(v.any()),
+    status: v.string(), // 'draft' | 'ready' | 'active' | 'paused' | 'review' | 'done'
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_type", ["projectId", "campaignType"])
+    .index("by_project_status", ["projectId", "status"]),
+
+  outreachAnalyses: defineTable({
+    projectId: v.id("projects"),
+    status: v.string(), // 'running' | 'completed' | 'failed'
+    summary: v.optional(v.string()),
+    sourceCoverageJson: v.optional(v.any()),
+    opportunitiesJson: v.optional(v.any()),
+    recommendedCampaignJson: v.optional(v.any()),
+    createdCampaignId: v.optional(v.id("outreachCampaigns")),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_status", ["projectId", "status"]),
+
+  outreachAssets: defineTable({
+    projectId: v.id("projects"),
+    campaignId: v.id("outreachCampaigns"),
+    articleId: v.optional(v.id("articles")),
+    assetType: v.string(), // 'article' | 'study' | 'case_study' | 'tool' | 'infographic' | 'landing_page'
+    url: v.optional(v.string()),
+    title: v.string(),
+    pitchAngle: v.optional(v.string()),
+    status: v.string(), // 'draft' | 'approved' | 'archived'
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_campaign", ["campaignId"])
+    .index("by_article", ["articleId"]),
+
+  outreachProspects: defineTable({
+    projectId: v.id("projects"),
+    campaignId: v.id("outreachCampaigns"),
+    campaignType: v.string(),
+    domain: v.string(),
+    url: v.optional(v.string()),
+    method: v.optional(v.string()),
+    score: v.optional(v.number()),
+    tier: v.optional(v.string()), // 'A' | 'B' | 'C' | 'D'
+    status: v.string(), // 'new' | 'qualified' | 'contacted' | 'replied' | 'won' | 'lost' | 'suppressed'
+    reasoning: v.optional(v.string()),
+    contactStatus: v.optional(v.string()), // 'missing' | 'found' | 'verified' | 'bad'
+    lastTouchedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_campaign", ["campaignId"])
+    .index("by_campaign_status", ["campaignId", "status"])
+    .index("by_project_type_status", ["projectId", "campaignType", "status"])
+    .index("by_project_domain", ["projectId", "domain"]),
+
+  outreachContacts: defineTable({
+    projectId: v.id("projects"),
+    campaignId: v.id("outreachCampaigns"),
+    prospectId: v.id("outreachProspects"),
+    name: v.optional(v.string()),
+    role: v.optional(v.string()),
+    email: v.optional(v.string()),
+    contactPage: v.optional(v.string()),
+    source: v.optional(v.string()),
+    suppressed: v.boolean(),
+    suppressionReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_campaign", ["campaignId"])
+    .index("by_prospect", ["prospectId"])
+    .index("by_project_email", ["projectId", "email"]),
+
+  outreachSequences: defineTable({
+    projectId: v.id("projects"),
+    campaignId: v.id("outreachCampaigns"),
+    name: v.string(),
+    steps: v.array(v.any()),
+    variants: v.optional(v.any()),
+    approvalStatus: v.string(), // 'draft' | 'approved'
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_campaign", ["campaignId"]),
+
+  outreachGoals: defineTable({
+    projectId: v.id("projects"),
+    campaignId: v.id("outreachCampaigns"),
+    prospectId: v.optional(v.id("outreachProspects")),
+    goalType: v.string(), // 'backlink' | 'press_mention' | 'interview' | 'quote' | 'meeting' | 'opportunity' | 'partnership' | 'referral'
+    targetUrl: v.optional(v.string()),
+    sourceUrl: v.optional(v.string()),
+    description: v.optional(v.string()),
+    status: v.string(), // 'open' | 'won' | 'lost' | 'verified'
+    verifiedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_campaign", ["campaignId"])
+    .index("by_campaign_status", ["campaignId", "status"]),
+
+  linkPlacements: defineTable({
+    projectId: v.id("projects"),
+    campaignId: v.id("outreachCampaigns"),
+    prospectId: v.optional(v.id("outreachProspects")),
+    goalId: v.optional(v.id("outreachGoals")),
+    sourceUrl: v.string(),
+    targetUrl: v.string(),
+    anchorText: v.optional(v.string()),
+    rel: v.optional(v.string()),
+    firstSeenAt: v.optional(v.number()),
+    lastCheckedAt: v.optional(v.number()),
+    status: v.string(), // 'live' | 'changed' | 'lost' | 'manual'
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_campaign", ["campaignId"])
+    .index("by_goal", ["goalId"]),
+
+  // ============ TIER 9: Utility Tables ============
 
   /**
    * Research cache - keyword research and URL scraping cache

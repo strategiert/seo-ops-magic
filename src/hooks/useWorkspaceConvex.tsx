@@ -3,6 +3,7 @@ import {
   useContext,
   useState,
   useEffect,
+  useMemo,
   ReactNode,
   useCallback,
 } from "react";
@@ -132,7 +133,7 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
   );
   // Track if workspaces query has loaded (undefined = loading, array = loaded)
   const workspacesLoaded = workspacesQuery !== undefined;
-  const workspaces = workspacesQuery ?? [];
+  const workspaces = useMemo(() => workspacesQuery ?? [], [workspacesQuery]);
 
   const projectsQuery = useQuery(
     api.tables.projects.listByWorkspace,
@@ -140,7 +141,7 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
       ? { workspaceId: currentWorkspaceId }
       : "skip"
   );
-  const projects = projectsQuery ?? [];
+  const projects = useMemo(() => projectsQuery ?? [], [projectsQuery]);
 
   // Mutations
   const createWorkspaceMutation = useMutation(api.tables.workspaces.create);
@@ -153,12 +154,21 @@ export function WorkspaceProviderConvex({ children }: { children: ReactNode }) {
   const currentProject =
     projects.find((p) => p._id === currentProjectId) ?? null;
 
-  // Auto-select first workspace if none selected
+  // Auto-select first workspace if none selected or localStorage points to a
+  // workspace that no longer exists.
   useEffect(() => {
-    if (!currentWorkspaceId && workspaces.length > 0) {
+    const selectedWorkspaceExists = workspaces.some(
+      (workspace) => workspace._id === currentWorkspaceId
+    );
+
+    if (
+      workspacesLoaded &&
+      workspaces.length > 0 &&
+      (!currentWorkspaceId || !selectedWorkspaceExists)
+    ) {
       setCurrentWorkspaceId(workspaces[0]._id);
     }
-  }, [workspaces, currentWorkspaceId]);
+  }, [workspacesLoaded, workspaces, currentWorkspaceId]);
 
   // Auto-create default workspace for new users
   useEffect(() => {

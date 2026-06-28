@@ -17,20 +17,45 @@ interface LegacyRedirectProps {
   /** If true, the :id URL param is appended to the suffix path
    *  (e.g. /briefs/abc123 → /projects/<pid>/briefs/abc123). */
   passId?: boolean;
+  /** URL param to append when passId is true. */
+  paramName?: string;
 }
 
-export function LegacyRedirect({ suffix = "", passId = false }: LegacyRedirectProps) {
-  const { id } = useParams<{ id?: string }>();
-  const { currentProject } = useWorkspaceConvex();
+export function LegacyRedirect({
+  suffix = "",
+  passId = false,
+  paramName = "id",
+}: LegacyRedirectProps) {
+  const params = useParams<Record<string, string | undefined>>();
+  const {
+    workspaces,
+    currentWorkspace,
+    projects,
+    currentProject,
+    isLoading,
+    isLoadingProjects,
+  } = useWorkspaceConvex();
 
-  if (!currentProject) {
+  const targetProject = currentProject ?? projects[0] ?? null;
+  const isSelectingWorkspace = workspaces.length > 0 && !currentWorkspace;
+
+  if (isLoading || isLoadingProjects || isSelectingWorkspace) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!targetProject) {
     return <Navigate to="/projects" replace />;
   }
 
-  const tail = [suffix, passId && id ? id : ""].filter(Boolean).join("/");
+  const passthroughId = passId ? params[paramName] : "";
+  const tail = [suffix, passthroughId].filter(Boolean).join("/");
   const target = tail
-    ? `/projects/${currentProject._id}/${tail}`
-    : `/projects/${currentProject._id}`;
+    ? `/projects/${targetProject._id}/${tail}`
+    : `/projects/${targetProject._id}`;
 
   return <Navigate to={target} replace />;
 }

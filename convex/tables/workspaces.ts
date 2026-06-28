@@ -1,4 +1,4 @@
-import { query, mutation } from "../_generated/server";
+import { internalQuery, query, mutation } from "../_generated/server";
 import { v } from "convex/values";
 import { requireAuth } from "../auth";
 
@@ -44,6 +44,13 @@ export const get = query({
     }
 
     return workspace;
+  },
+});
+
+export const getInternal = internalQuery({
+  args: { id: v.id("workspaces") },
+  handler: async (ctx, { id }) => {
+    return await ctx.db.get(id);
   },
 });
 

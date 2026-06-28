@@ -16,6 +16,8 @@ import BriefDetail from "./pages/BriefDetail";
 import Articles from "./pages/Articles";
 import ArticleDetail from "./pages/ArticleDetail";
 import ImportArticle from "./pages/ImportArticle";
+import Outreach from "./pages/Outreach";
+import OutreachCampaignDetail from "./pages/OutreachCampaignDetail";
 import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
 import Settings from "./pages/Settings";
@@ -58,6 +60,8 @@ const App = () => (
             <Route path="/projects/:projectId/articles" element={<P><Articles /></P>} />
             <Route path="/projects/:projectId/articles/:id" element={<P><ArticleDetail /></P>} />
             <Route path="/projects/:projectId/import" element={<P><ImportArticle /></P>} />
+            <Route path="/projects/:projectId/outreach" element={<P><Outreach /></P>} />
+            <Route path="/projects/:projectId/outreach/:campaignId" element={<P><OutreachCampaignDetail /></P>} />
             <Route path="/projects/:projectId/templates" element={<P><Templates /></P>} />
             <Route path="/projects/:projectId/templates/:id" element={<P><TemplateDetail /></P>} />
             <Route path="/projects/:projectId/analytics" element={<P><Analytics /></P>} />
@@ -70,6 +74,8 @@ const App = () => (
             <Route path="/articles" element={<P><LegacyRedirect suffix="articles" /></P>} />
             <Route path="/articles/:id" element={<P><LegacyRedirect suffix="articles" passId /></P>} />
             <Route path="/import-article" element={<P><LegacyRedirect suffix="import" /></P>} />
+            <Route path="/outreach" element={<P><LegacyRedirect suffix="outreach" /></P>} />
+            <Route path="/outreach/:campaignId" element={<P><LegacyRedirect suffix="outreach" passId paramName="campaignId" /></P>} />
             <Route path="/templates" element={<P><LegacyRedirect suffix="templates" /></P>} />
             <Route path="/templates/:id" element={<P><LegacyRedirect suffix="templates" passId /></P>} />
 
