@@ -484,7 +484,7 @@ export default defineSchema({
     targetDomain: v.optional(v.string()),
     targetArticleIds: v.optional(v.array(v.id("articles"))),
     competitors: v.optional(v.array(v.string())),
-    goals: v.optional(v.any()),
+    goalTargetsJson: v.optional(v.any()),
     strategyJson: v.optional(v.any()),
     status: v.string(), // 'draft' | 'ready' | 'active' | 'paused' | 'review' | 'done'
     createdAt: v.number(),
@@ -529,10 +529,12 @@ export default defineSchema({
     .index("by_project", ["projectId"])
     .index("by_campaign", ["campaignId"])
     .index("by_campaign_status", ["campaignId", "status"])
+    .index("by_project_type_status", ["projectId", "campaignType", "status"])
     .index("by_project_domain", ["projectId", "domain"]),
 
   outreachContacts: defineTable({
     projectId: v.id("projects"),
+    campaignId: v.id("outreachCampaigns"),
     prospectId: v.id("outreachProspects"),
     name: v.optional(v.string()),
     role: v.optional(v.string()),
@@ -545,6 +547,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_project", ["projectId"])
+    .index("by_campaign", ["campaignId"])
     .index("by_prospect", ["prospectId"])
     .index("by_project_email", ["projectId", "email"]),
 
@@ -597,7 +600,7 @@ export default defineSchema({
     .index("by_campaign", ["campaignId"])
     .index("by_goal", ["goalId"]),
 
-  // ============ TIER 8: Utility Tables ============
+  // ============ TIER 9: Utility Tables ============
 
   /**
    * Research cache - keyword research and URL scraping cache
