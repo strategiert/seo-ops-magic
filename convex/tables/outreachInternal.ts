@@ -234,7 +234,10 @@ export const saveStrategyOutput = internalMutation({
           contactsByProspectId.set(existingProspect.id, existingProspectContacts);
         }
 
-        if (existingProspect.contactStatus !== "found") {
+        if (
+          existingProspect.contactStatus === undefined ||
+          existingProspect.contactStatus === "missing"
+        ) {
           await ctx.db.patch(existingProspect.id, {
             contactStatus: "found",
             updatedAt: now,
