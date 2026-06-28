@@ -114,11 +114,15 @@ function clampScore(value: unknown): number {
   return Math.max(0, Math.min(score, 1));
 }
 
-function sanitizePublicLabel(value: string): string {
+function sanitizePublicText(value: string): string {
   return forbiddenPublicTerms
     .reduce((label, term) => label.replace(term, "Ressource"), value)
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function sanitizePublicTextArray(values: string[]): string[] {
+  return values.map(sanitizePublicText);
 }
 
 export function hasForbiddenPublicTerm(value: string): boolean {
@@ -150,10 +154,12 @@ function normalizeOutreachRawMaterial(
   const material = isRecord(value) ? value : {};
 
   return {
-    whyThisSite: asString(material.whyThisSite) || "",
-    placementIdea: asString(material.placementIdea) || "",
-    pitchAngle: asString(material.pitchAngle) || "",
-    searchOperators: asStringArray(material.searchOperators),
+    whyThisSite: sanitizePublicText(asString(material.whyThisSite) || ""),
+    placementIdea: sanitizePublicText(asString(material.placementIdea) || ""),
+    pitchAngle: sanitizePublicText(asString(material.pitchAngle) || ""),
+    searchOperators: sanitizePublicTextArray(
+      asStringArray(material.searchOperators)
+    ),
   };
 }
 
@@ -162,29 +168,33 @@ export function normalizeResourcePlan(
   fallbackTitle: string
 ): ResourcePlan {
   const plan = isRecord(value) ? value : {};
-  const title = asString(plan.title) || fallbackTitle;
-  const publicName = sanitizePublicLabel(
+  const title = sanitizePublicText(asString(plan.title) || fallbackTitle);
+  const publicName = sanitizePublicText(
     asString(plan.publicName) || asString(plan.title) || fallbackTitle
   );
 
   return {
     title,
     publicName,
-    resourceType: asString(plan.resourceType) || RESOURCE_FORMATS[0],
-    alternativeTypes: asStringArray(plan.alternativeTypes).slice(0, 3),
-    readerAudience: asString(plan.readerAudience) || "",
-    linkAudiences: asStringArray(plan.linkAudiences),
-    readerProblem: asString(plan.readerProblem) || "",
-    editorialValue: asString(plan.editorialValue) || "",
-    linkReason: asString(plan.linkReason) || "",
-    decommercialization: asStringArray(plan.decommercialization),
-    credibilityPlan: asStringArray(plan.credibilityPlan),
+    resourceType: sanitizePublicText(asString(plan.resourceType) || RESOURCE_FORMATS[0]),
+    alternativeTypes: sanitizePublicTextArray(
+      asStringArray(plan.alternativeTypes).slice(0, 3)
+    ),
+    readerAudience: sanitizePublicText(asString(plan.readerAudience) || ""),
+    linkAudiences: sanitizePublicTextArray(asStringArray(plan.linkAudiences)),
+    readerProblem: sanitizePublicText(asString(plan.readerProblem) || ""),
+    editorialValue: sanitizePublicText(asString(plan.editorialValue) || ""),
+    linkReason: sanitizePublicText(asString(plan.linkReason) || ""),
+    decommercialization: sanitizePublicTextArray(
+      asStringArray(plan.decommercialization)
+    ),
+    credibilityPlan: sanitizePublicTextArray(asStringArray(plan.credibilityPlan)),
     formatScore: {
       ...defaultFormatScore,
       ...normalizeFormatScore(plan.formatScore),
     },
-    mvpScope: asStringArray(plan.mvpScope),
-    claudeCodeBrief: asString(plan.claudeCodeBrief) || "",
+    mvpScope: sanitizePublicTextArray(asStringArray(plan.mvpScope)),
+    claudeCodeBrief: sanitizePublicText(asString(plan.claudeCodeBrief) || ""),
     outreachRawMaterial: normalizeOutreachRawMaterial(plan.outreachRawMaterial),
   };
 }

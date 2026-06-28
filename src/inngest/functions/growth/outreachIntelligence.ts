@@ -3,63 +3,101 @@ import type { Tool } from "@anthropic-ai/sdk/resources/messages";
 import { inngest } from "../../client.js";
 import { api, convex, AGENT_CREDITS, calculateCostCents } from "../../lib/convex.js";
 import { extractToolInput } from "../../lib/anthropicToolInput.js";
+import {
+  RESOURCE_FORMATS,
+  normalizeResourcePlan,
+} from "../../../lib/outreach/resourcePlans.js";
+import type { ResourcePlan } from "../../../lib/outreach/resourcePlans.js";
 
 const AGENT_ID = "outreach-intelligence";
 const CREDITS_REQUIRED = AGENT_CREDITS[AGENT_ID];
 const OUTREACH_INTELLIGENCE_TOOL_NAME = "submit_outreach_intelligence";
 
-const SYSTEM_PROMPT = `Du bist der Outreach Intelligence Agent für SEO Ops Magic.
+const SYSTEM_PROMPT = [
+  "Du bist der Outreach Intelligence Agent für SEO Ops Magic.",
+  "",
+  "Deine Aufgabe: Verstehe zuerst die Marke, Website, vorhandenen Content und Sitemap. Danach planst du redaktionell verlinkbare Ressourcen, die fremde Websites ihren Lesern sinnvoll empfehlen können. Das Tool ist offen für SEO, PR, Sales und Partnerships; technisch ist es Outreach, die Positionierung unterscheidet sich je nach Ziel.",
+  "",
+  "Arbeite praktisch und kampagnenfähig:",
+  "- Bewerte vorhandene Artikel, gecrawlte Seiten, HTML-Exports, Briefs, Assets, Sitemap-URLs und Brand-Daten.",
+  "- Denke zuerst aus Sicht fremder Leser, Redaktionen, Vereine, Pädagogen, Portale, Fachblogs, Webmaster und Journalisten.",
+  "- Linkerati sind nicht zwingend Kunden. Baue Ressourcen für Menschen, die verlinken können oder sollen.",
+  "- Plane verlinkbare Ressourcen wie Ratgeber, Broschüren, Checklisten, Experteninterviews, Gruppeninterviews, Analysen, Umfragen, Whitepaper, Rechner, Tools, Vorlagen, Glossare, Presse-Ressourcen, Notfallkarten oder interaktive Visualisierungen.",
+  "- Nenne die Ressource nie Linkbait, Linkmagnet oder Link-Magnet in publicName, claudeCodeBrief oder Outreach-Rohmaterial.",
+  "- Intern darfst du Linkbait-Potenzial bewerten, aber extern nutzt du Begriffe wie Ressource, Ratgeber, Checkliste, Tool, Broschüre, PDF, Studie, Hilfsmittel oder weiterführende Information.",
+  "- Prüfe die entkommerzialisierte Zone: keine Salesbotschaft, kein Warenkorb, keine aggressive Lead-Mechanik, keine Produktwerbung als Hauptzweck.",
+  "- DACH-Linkaufbau braucht Tiefe, Seriosität, Quellen, Experten, echte Nützlichkeit und klare Leserhilfe.",
+  "- Wenn vorhandener Content schwach ist, plane neue Assets. Erzeuge mindestens zwei `new_asset` Ideen.",
+  "- Jede Opportunity braucht ein resourcePlan Objekt mit Formatentscheidung, Alternativen, Linkzielgruppen, Leserproblem, redaktionellem Wert, Linkgrund, Glaubwürdigkeitsplan, MVP-Scope, Claude-Code-Build-Brief und Outreach-Rohmaterial.",
+  "- Gib konkrete Platzierungsideen auf fremden Seiten an, z.B. \"als weiterführende Information im Abschnitt X\".",
+  "- Füll die Kampagne so weit wie möglich selbst aus. Keine Rückfragen, außer Daten fehlen komplett.",
+  "- Schreibe auf Deutsch, klar, konkret und handlungsorientiert.",
+  "- Vermeide rechtliche Belehrungen. Erwähne Risiken nur operativ, z.B. Relevanz, Spam-Signale, schwache Linkbarkeit.",
+  "",
+  "Antworte ausschließlich über das bereitgestellte Tool.",
+].join("\n");
 
-Deine Aufgabe: Verstehe zuerst die Marke, Website, vorhandenen Content und Sitemap. Danach identifizierst du die besten Content Pieces, die als Linkbait oder Outreach-Aufhänger funktionieren können. Das Tool ist offen für SEO, PR, Sales und Partnerships; technisch ist es Outreach, die Positionierung unterscheidet sich je nach Ziel.
-
-Arbeite praktisch und kampagnenfähig:
-- Bewerte vorhandene Artikel, gecrawlte Seiten, HTML-Exports, Briefs, Assets, Sitemap-URLs und Brand-Daten.
-- Priorisiere Linkbait-Chancen: Datenstudien, Tools, Templates, Checklisten, Vergleichsseiten, Glossare, Whitepaper, originelle Analysen, hilfreiche Ressourcen.
-- Denke auch an Upgrades: Ein normaler Blogartikel kann durch Rechner, Benchmark, PDF, Checkliste, Statistik-Abschnitt oder interaktives Tool linkwürdiger werden.
-- Füll die Kampagne so weit wie möglich selbst aus. Keine Rückfragen, außer Daten fehlen komplett.
-- Schreibe auf Deutsch, klar, konkret und handlungsorientiert.
-- Vermeide rechtliche Belehrungen. Erwähne Risiken nur operativ, z.B. Relevanz, Spam-Signale, schwache Linkbarkeit.
-
-Antworte ausschließlich als gültiges JSON:
-{
-  "summary": "string",
-  "sourceCoverage": {
-    "usedSources": ["string"],
-    "missingSources": ["string"],
-    "confidence": 0.82
+const FORMAT_SCORE_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    readerBenefit: { type: "number" },
+    editorialBenefit: { type: "number" },
+    linkReason: { type: "number" },
+    credibility: { type: "number" },
+    effort: { type: "number" },
+    evergreen: { type: "number" },
+    dachFit: { type: "number" },
+    outreachFit: { type: "number" },
+    total: { type: "number" },
   },
-  "opportunities": [
-    {
-      "title": "string",
-      "contentType": "blog|whitepaper|tool|study|template|landing_page|data_asset|other",
-      "sourceKind": "article|crawl_page|brief|html_export|content_asset|sitemap_url|new_asset",
-      "sourceId": "optional string",
-      "sourceUrl": "optional string",
-      "targetArticleId": "optional string",
-      "score": 0.87,
-      "effort": "low|medium|high",
-      "linkabilityReasons": ["string"],
-      "audiences": ["string"],
-      "recommendedAssetUpgrade": "string",
-      "outreachAngles": ["string"],
-      "searchOperators": ["string"],
-      "campaignName": "string"
-    }
+  additionalProperties: true,
+} as const;
+
+const OUTREACH_RAW_MATERIAL_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    whyThisSite: { type: "string" },
+    placementIdea: { type: "string" },
+    pitchAngle: { type: "string" },
+    searchOperators: { type: "array", items: { type: "string" } },
+  },
+  additionalProperties: true,
+} as const;
+
+const RESOURCE_PLAN_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    publicName: { type: "string" },
+    resourceType: { type: "string" },
+    alternativeTypes: { type: "array", items: { type: "string" } },
+    readerAudience: { type: "string" },
+    linkAudiences: { type: "array", items: { type: "string" } },
+    readerProblem: { type: "string" },
+    editorialValue: { type: "string" },
+    linkReason: { type: "string" },
+    decommercialization: { type: "array", items: { type: "string" } },
+    credibilityPlan: { type: "array", items: { type: "string" } },
+    formatScore: FORMAT_SCORE_TOOL_SCHEMA,
+    mvpScope: { type: "array", items: { type: "string" } },
+    claudeCodeBrief: { type: "string" },
+    outreachRawMaterial: OUTREACH_RAW_MATERIAL_TOOL_SCHEMA,
+  },
+  required: [
+    "publicName",
+    "resourceType",
+    "readerAudience",
+    "linkAudiences",
+    "readerProblem",
+    "editorialValue",
+    "linkReason",
+    "formatScore",
+    "mvpScope",
+    "claudeCodeBrief",
+    "outreachRawMaterial",
   ],
-  "recommendedCampaign": {
-    "name": "string",
-    "targetDomain": "string",
-    "goals": "string",
-    "strategy": {
-      "summary": "string",
-      "positioning": "string",
-      "recommendedMethods": ["string"],
-      "searchOperators": ["string"],
-      "risks": ["string"],
-      "nextActions": ["string"]
-    }
-  }
-}`;
+  additionalProperties: true,
+} as const;
 
 const OUTREACH_INTELLIGENCE_TOOL: Tool = {
   name: OUTREACH_INTELLIGENCE_TOOL_NAME,
@@ -97,8 +135,9 @@ const OUTREACH_INTELLIGENCE_TOOL: Tool = {
             outreachAngles: { type: "array", items: { type: "string" } },
             searchOperators: { type: "array", items: { type: "string" } },
             campaignName: { type: "string" },
+            resourcePlan: RESOURCE_PLAN_TOOL_SCHEMA,
           },
-          required: ["title"],
+          required: ["title", "resourcePlan"],
           additionalProperties: true,
         },
       },
@@ -192,6 +231,7 @@ type GeneratedOpportunity = {
   outreachAngles: string[];
   searchOperators: string[];
   campaignName: string;
+  resourcePlan: ResourcePlan;
 };
 
 type CampaignStrategy = {
@@ -429,7 +469,7 @@ function fallbackOpportunity(context: IntelligenceContext): GeneratedOpportunity
     ],
     audiences: ["Redaktionen", "Branchenblogs", "Ressourcenseiten"],
     recommendedAssetUpgrade:
-      "Aus dem Content ein konkretes Linkbait-Asset bauen, z.B. Checkliste, Mini-Studie, Template oder interaktives Tool.",
+      "Aus dem Content eine konkrete redaktionelle Ressource bauen, z.B. Checkliste, Mini-Studie, Template oder interaktives Tool.",
     outreachAngles: [
       "Hilfreiche Ressource für bestehende Artikel und Ressourcenseiten.",
       "Ergänzung für Inhalte, die praktische Tools oder aktuelle Beispiele sammeln.",
@@ -440,12 +480,73 @@ function fallbackOpportunity(context: IntelligenceContext): GeneratedOpportunity
       '"Gastbeitrag" + Keyword',
     ],
     campaignName: `${title} Outreach`,
+    resourcePlan: normalizeResourcePlan(
+      {
+        title,
+        publicName: title,
+        resourceType: article ? "Ratgeber / Broschüre" : "Checkliste",
+        alternativeTypes: ["PDF zum Ausdrucken", "FAQ"],
+        readerAudience: "Leser der relevanten Fach- und Ratgeberseiten",
+        linkAudiences: ["Redaktionen", "Branchenblogs", "Ressourcenseiten"],
+        readerProblem:
+          "Leser brauchen eine konkrete, neutrale und gut nutzbare Vertiefung zum Thema.",
+        editorialValue:
+          "Die Ressource kann bestehende Artikel als weiterführende Information ergänzen.",
+        linkReason:
+          "Kostenlose Ressource mit praktischem Nutzen für Leser und klarer thematischer Nähe.",
+        decommercialization: [
+          "Keine Produktwerbung im Hauptinhalt",
+          "Ressource als neutrale Hilfeseite aufbauen",
+        ],
+        credibilityPlan: [
+          "Quellen sichtbar machen",
+          "Methodik oder fachliche Grundlage kurz erklären",
+        ],
+        formatScore: {
+          readerBenefit: 0.62,
+          editorialBenefit: 0.58,
+          linkReason: 0.6,
+          credibility: 0.52,
+          effort: 0.45,
+          evergreen: 0.66,
+          dachFit: 0.62,
+          outreachFit: 0.58,
+          total: 0.6,
+        },
+        mvpScope: [
+          "Entkommerzialisierte Ressourcen-Seite",
+          "Klares Leserproblem",
+          "Quellenbox",
+          "Weiterführende PDF- oder Checklisten-Version",
+        ],
+        claudeCodeBrief:
+          "Baue eine entkommerzialisierte Ressourcen-Seite mit klarem Leserproblem, neutraler Einordnung, praktischen Schritten, Quellenbox und optionalem PDF-Download.",
+        outreachRawMaterial: {
+          whyThisSite:
+            "Die Zielseite behandelt ein thematisch passendes Leserproblem.",
+          placementIdea:
+            "Als weiterführende Information in einem bestehenden Ratgeberabschnitt.",
+          pitchAngle:
+            "Kostenlose Ressource als praktische Ergänzung für Leser.",
+          searchOperators: [
+            '"Ressourcen" + Keyword',
+            '"hilfreiche Links" + Keyword',
+            '"Ratgeber" + Keyword',
+          ],
+        },
+      },
+      title
+    ),
   };
 }
 
 function normalizeOpportunity(value: Record<string, unknown>): GeneratedOpportunity | null {
   const title = asString(value.title);
   if (!title) return null;
+  const resourcePlan = normalizeResourcePlan(
+    isRecord(value.resourcePlan) ? value.resourcePlan : value,
+    title
+  );
 
   return {
     title,
@@ -458,10 +559,18 @@ function normalizeOpportunity(value: Record<string, unknown>): GeneratedOpportun
     effort: asString(value.effort) || "medium",
     linkabilityReasons: asStringArray(value.linkabilityReasons),
     audiences: asStringArray(value.audiences),
-    recommendedAssetUpgrade: asString(value.recommendedAssetUpgrade) || "",
-    outreachAngles: asStringArray(value.outreachAngles),
-    searchOperators: asStringArray(value.searchOperators),
-    campaignName: asString(value.campaignName) || `${title} Outreach`,
+    recommendedAssetUpgrade:
+      asString(value.recommendedAssetUpgrade) || resourcePlan.editorialValue,
+    outreachAngles:
+      asStringArray(value.outreachAngles).length > 0
+        ? asStringArray(value.outreachAngles)
+        : [resourcePlan.outreachRawMaterial.pitchAngle].filter(Boolean),
+    searchOperators:
+      asStringArray(value.searchOperators).length > 0
+        ? asStringArray(value.searchOperators)
+        : resourcePlan.outreachRawMaterial.searchOperators,
+    campaignName: asString(value.campaignName) || `${resourcePlan.publicName} Outreach`,
+    resourcePlan,
   };
 }
 
@@ -479,7 +588,7 @@ function normalizeStrategy(value: unknown, topOpportunity: GeneratedOpportunity)
     recommendedMethods:
       asStringArray(strategy.recommendedMethods).length > 0
         ? asStringArray(strategy.recommendedMethods)
-        : ["resource_page", "expert_quote", "linkbait_promotion"],
+        : ["resource_page", "expert_quote", "resource_promotion"],
     searchOperators:
       asStringArray(strategy.searchOperators).length > 0
         ? asStringArray(strategy.searchOperators)
@@ -600,6 +709,15 @@ function formatPromptContext(
   return `Projekt- und Content-Kontext:
 ${safeStringify(context, 62000)}
 
+Verfügbare Ressourcenformate:
+${RESOURCE_FORMATS.map((format) => `- ${format}`).join("\n")}
+
+Bewertungslogik:
+- Wähle pro Idee ein Hauptformat und zwei plausible Alternativen.
+- Bewerte Leser-Nutzen, Redaktions-Nutzen, Linkgrund, Glaubwürdigkeit, Aufwand, Evergreen-Faktor, DACH-Tauglichkeit und Outreach-Fit.
+- Plane mindestens zwei neue Ressourcen mit sourceKind "new_asset".
+- Öffentliche Namen und Pitches dürfen nicht Linkbait, Linkmagnet oder Link-Magnet enthalten.
+
 Live-Sitemap-Discovery:
 ${safeStringify(sitemap, 14000)}
 
@@ -715,7 +833,7 @@ export const outreachIntelligence = inngest.createFunction(
       const generated = (await step.run("generate-outreach-intelligence", async () => {
         await convex.action(api.agents.actions.updateAgentJob, {
           inngestEventId,
-          currentStep: "Linkbait-Chancen und Kampagne generieren",
+          currentStep: "Ressourcen-Chancen und Kampagne generieren",
           progress: 50,
         });
 
@@ -775,12 +893,16 @@ export const outreachIntelligence = inngest.createFunction(
               source: AGENT_ID,
               goals: generated.recommendedCampaign.goals,
               topOpportunity: generated.opportunities[0],
+              resourcePlan: generated.opportunities[0]?.resourcePlan,
             },
             strategyJson: {
               ...generated.recommendedCampaign.strategy,
               intelligenceSummary: generated.summary,
               sourceCoverage: generated.sourceCoverage,
               opportunities: generated.opportunities,
+              resourcePlans: generated.opportunities.map(
+                (opportunity) => opportunity.resourcePlan
+              ),
             },
             status: "ready",
             workerSecret,

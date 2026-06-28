@@ -67,15 +67,15 @@ const plan = normalizeResourcePlan(
       total: 85,
     },
     mvpScope: ["Ratgeberseite", "druckbares PDF", "5 konkrete Sätze"],
-    claudeCodeBrief: "Baue eine entkommerzialisierte Ressourcen-Seite.",
+    claudeCodeBrief: "Baue eine entkommerzialisierte Linkbait-Seite.",
     outreachRawMaterial: {
       whyThisSite: "Die Zielseite behandelt bereits Wutanfälle bei Kindern.",
       placementIdea:
         "Als weiterführende Information im Abschnitt zu akuten Situationen.",
-      pitchAngle: "kostenlose Notfallkarte als praktische Ergänzung für Eltern",
+      pitchAngle: "Linkmagnet als praktische Ergänzung für Eltern",
       searchOperators: [
         "Wutanfall Kind Eltern Tipps",
-        "site:.de Wutanfälle Kinder Eltern Ratgeber",
+        "Link-Magnet Wutanfälle Kinder Eltern Ratgeber",
       ],
     },
   },
@@ -93,8 +93,14 @@ assert.equal(plan.formatScore.readerBenefit, 0.92);
 assert.equal(plan.formatScore.total, 0.85);
 assert.deepEqual(plan.outreachRawMaterial.searchOperators, [
   "Wutanfall Kind Eltern Tipps",
-  "site:.de Wutanfälle Kinder Eltern Ratgeber",
+  "Ressource Wutanfälle Kinder Eltern Ratgeber",
 ]);
+assert.doesNotMatch(plan.claudeCodeBrief, /Linkbait/);
+assert.doesNotMatch(plan.outreachRawMaterial.pitchAngle, /Linkmagnet/);
+assert.doesNotMatch(
+  plan.outreachRawMaterial.searchOperators.join("\n"),
+  /Link-Magnet/
+);
 
 const fallbackPlan = normalizeResourcePlan({}, "Fallback-Ratgeber");
 assert.equal(fallbackPlan.publicName, "Fallback-Ratgeber");
@@ -106,5 +112,7 @@ assert.match(brief, /Eltern-Notfallkarte/);
 assert.match(brief, /Claude-Code-Build-Brief/);
 assert.match(brief, /Outreach-Rohmaterial/);
 assert.doesNotMatch(brief, /Linkbait/);
+assert.doesNotMatch(brief, /Linkmagnet/);
+assert.doesNotMatch(brief, /Link-Magnet/);
 
 console.log("resource-plan-normalization tests passed");
