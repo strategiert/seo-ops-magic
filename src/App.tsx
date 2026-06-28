@@ -74,6 +74,8 @@ const App = () => (
             <Route path="/articles" element={<P><LegacyRedirect suffix="articles" /></P>} />
             <Route path="/articles/:id" element={<P><LegacyRedirect suffix="articles" passId /></P>} />
             <Route path="/import-article" element={<P><LegacyRedirect suffix="import" /></P>} />
+            <Route path="/outreach" element={<P><LegacyRedirect suffix="outreach" /></P>} />
+            <Route path="/outreach/:campaignId" element={<P><LegacyRedirect suffix="outreach" passId paramName="campaignId" /></P>} />
             <Route path="/templates" element={<P><LegacyRedirect suffix="templates" /></P>} />
             <Route path="/templates/:id" element={<P><LegacyRedirect suffix="templates" passId /></P>} />
 

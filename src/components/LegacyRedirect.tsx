@@ -17,17 +17,24 @@ interface LegacyRedirectProps {
   /** If true, the :id URL param is appended to the suffix path
    *  (e.g. /briefs/abc123 → /projects/<pid>/briefs/abc123). */
   passId?: boolean;
+  /** URL param to append when passId is true. */
+  paramName?: string;
 }
 
-export function LegacyRedirect({ suffix = "", passId = false }: LegacyRedirectProps) {
-  const { id } = useParams<{ id?: string }>();
+export function LegacyRedirect({
+  suffix = "",
+  passId = false,
+  paramName = "id",
+}: LegacyRedirectProps) {
+  const params = useParams<Record<string, string | undefined>>();
   const { currentProject } = useWorkspaceConvex();
 
   if (!currentProject) {
     return <Navigate to="/projects" replace />;
   }
 
-  const tail = [suffix, passId && id ? id : ""].filter(Boolean).join("/");
+  const passthroughId = passId ? params[paramName] : "";
+  const tail = [suffix, passthroughId].filter(Boolean).join("/");
   const target = tail
     ? `/projects/${currentProject._id}/${tail}`
     : `/projects/${currentProject._id}`;
