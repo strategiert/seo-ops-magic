@@ -31,7 +31,7 @@ function getConvexClient(): ConvexHttpClient {
 export const convex = new Proxy({} as ConvexHttpClient, {
   get(_, prop) {
     const client = getConvexClient();
-    const value = (client as any)[prop];
+    const value = Reflect.get(client, prop);
     return typeof value === "function" ? value.bind(client) : value;
   },
 });
@@ -67,6 +67,7 @@ export const AGENT_CREDITS = {
   "video-creator": 10,
   "carousel-designer": 6,
   "press-outreach": 4,
+  "outreach-strategy": 4,
   "link-building": 4,
   "editorial-researcher": 3,
   "content-translator": 7,

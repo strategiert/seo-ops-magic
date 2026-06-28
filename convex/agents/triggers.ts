@@ -24,6 +24,7 @@ const AGENT_CREDITS: Record<string, number> = {
   "press-release": 6,
   "newsletter": 5,
   "image-generator": 8,
+  "outreach-strategy": 4,
 };
 
 // Event types for each agent
@@ -35,6 +36,7 @@ const AGENT_EVENTS: Record<string, string> = {
   "social-creator": "content/generate-social-posts",
   "ad-copy-writer": "content/generate-ad-copies",
   "press-release": "content/generate-press-release",
+  "outreach-strategy": "outreach/strategy",
 };
 
 // ============ Event Sender ============
@@ -45,7 +47,7 @@ const AGENT_EVENTS: Record<string, string> = {
  */
 async function sendInngestEvent(
   eventName: string,
-  data: Record<string, any>,
+  data: Record<string, unknown>,
   eventKey: string
 ): Promise<{ success: boolean; eventId?: string; error?: string }> {
   try {
@@ -401,6 +403,73 @@ export const triggerSocialPosts = action({
       success: true,
       eventId: eventResult.eventId,
       message: `Social post generation started for ${platforms.join(", ")}`,
+      creditsReserved: requiredCredits,
+    };
+  },
+});
+
+/**
+ * Trigger outreach strategy generation for a campaign
+ */
+export const triggerOutreachStrategy = action({
+  args: {
+    campaignId: v.id("outreachCampaigns"),
+  },
+  handler: async (ctx, { campaignId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const campaign = await ctx.runQuery(
+      internal.tables.outreachInternal.getCampaignContext,
+      { campaignId }
+    );
+    if (!campaign?.campaign) {
+      throw new Error("Campaign not found");
+    }
+
+    const { project, workspace } = campaign;
+    if (!project) {
+      throw new Error("Project not found");
+    }
+    if (!workspace) {
+      throw new Error("Workspace not found");
+    }
+
+    if (workspace.ownerId !== identity.subject) {
+      throw new Error("Unauthorized: No access to this campaign");
+    }
+
+    const agentId = "outreach-strategy";
+    const requiredCredits = AGENT_CREDITS[agentId];
+    const workspaceId = project.workspaceId;
+
+    const eventKey = process.env.INNGEST_EVENT_KEY;
+    if (!eventKey) {
+      throw new Error("INNGEST_EVENT_KEY not configured");
+    }
+
+    const eventResult = await sendInngestEvent(
+      AGENT_EVENTS[agentId],
+      {
+        campaignId,
+        projectId: campaign.campaign.projectId,
+        userId: identity.subject,
+        customerId: workspaceId,
+        workspaceId,
+      },
+      eventKey
+    );
+
+    if (!eventResult.success) {
+      return { success: false, error: eventResult.error };
+    }
+
+    return {
+      success: true,
+      eventId: eventResult.eventId,
+      message: "Outreach strategy generation started",
       creditsReserved: requiredCredits,
     };
   },
