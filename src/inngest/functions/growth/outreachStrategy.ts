@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { inngest } from "../../client";
-import { api, convex, AGENT_CREDITS, calculateCostCents } from "../../lib/convex";
+import { inngest } from "../../client.js";
+import { api, convex, AGENT_CREDITS, calculateCostCents } from "../../lib/convex.js";
 
 const AGENT_ID = "outreach-strategy";
 const CREDITS_REQUIRED = AGENT_CREDITS[AGENT_ID];

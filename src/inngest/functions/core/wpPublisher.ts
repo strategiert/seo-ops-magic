@@ -1,5 +1,5 @@
-import { inngest } from "../../client";
-import { convex, api, AGENT_CREDITS } from "../../lib/convex";
+import { inngest } from "../../client.js";
+import { convex, api, AGENT_CREDITS } from "../../lib/convex.js";
 
 /**
  * WordPress Publisher Agent
@@ -109,7 +109,7 @@ export const wordpressPublisher = inngest.createFunction(
       const content = data.contentHtml || data.contentMarkdown || "";
 
       // Build WordPress post payload
-      const postPayload: Record<string, any> = {
+      const postPayload: Record<string, unknown> = {
         title: data.title,
         content: content,
         status: status,

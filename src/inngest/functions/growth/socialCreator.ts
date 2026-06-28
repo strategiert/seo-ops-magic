@@ -1,5 +1,5 @@
-import { inngest } from "../../client";
-import { convex, api, AGENT_CREDITS, calculateCostCents } from "../../lib/convex";
+import { inngest } from "../../client.js";
+import { convex, api, AGENT_CREDITS, calculateCostCents } from "../../lib/convex.js";
 import Anthropic from "@anthropic-ai/sdk";
 
 /**

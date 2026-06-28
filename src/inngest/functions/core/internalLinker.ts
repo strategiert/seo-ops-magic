@@ -1,5 +1,5 @@
-import { inngest } from "../../client";
-import { convex, api, AGENT_CREDITS, calculateCostCents } from "../../lib/convex";
+import { inngest } from "../../client.js";
+import { convex, api, AGENT_CREDITS, calculateCostCents } from "../../lib/convex.js";
 import Anthropic from "@anthropic-ai/sdk";
 
 /**
@@ -70,6 +70,21 @@ interface LinkAnalysis {
   };
 }
 
+interface ProjectArticleSummary {
+  _id: string;
+  title: string;
+  primaryKeyword?: string;
+}
+
+interface ProjectArticlesContext {
+  currentArticle: {
+    id: string;
+    content: string;
+    keyword: string;
+  };
+  otherArticles: ProjectArticleSummary[];
+}
+
 export const internalLinker = inngest.createFunction(
   {
     id: "internal-linker",
@@ -125,7 +140,7 @@ export const internalLinker = inngest.createFunction(
     });
 
     // Step 3: Fetch all project articles for link analysis
-    const projectData = await step.run("fetch-project-articles", async () => {
+    const projectData = await step.run("fetch-project-articles", async (): Promise<ProjectArticlesContext> => {
       // Get current article if content not provided in event
       let article = null;
       if (!contentMarkdown) {
@@ -133,9 +148,9 @@ export const internalLinker = inngest.createFunction(
       }
 
       // Get all articles in project
-      const articles = await convex.action(api.agents.actions.getProjectArticles, {
+      const articles = (await convex.action(api.agents.actions.getProjectArticles, {
         projectId,
-      });
+      })) as ProjectArticleSummary[];
 
       await convex.action(api.agents.actions.updateAgentJob, {
         inngestEventId: event.id || `${Date.now()}`,

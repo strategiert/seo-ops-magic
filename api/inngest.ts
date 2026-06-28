@@ -1,12 +1,13 @@
-import { serve } from "inngest/vercel";
-import { inngest } from "../src/inngest/client";
+import { serve } from "inngest/express";
+import { inngest } from "../src/inngest/client.js";
 
 // Import implemented agent functions
-import { seoContentWriter } from "../src/inngest/functions/core/seoWriter";
-import { htmlDesigner } from "../src/inngest/functions/core/htmlDesigner";
-import { wordpressPublisher } from "../src/inngest/functions/core/wpPublisher";
-import { internalLinker } from "../src/inngest/functions/core/internalLinker";
-import { socialPostCreator } from "../src/inngest/functions/growth/socialCreator";
+import { seoContentWriter } from "../src/inngest/functions/core/seoWriter.js";
+import { htmlDesigner } from "../src/inngest/functions/core/htmlDesigner.js";
+import { wordpressPublisher } from "../src/inngest/functions/core/wpPublisher.js";
+import { internalLinker } from "../src/inngest/functions/core/internalLinker.js";
+import { socialPostCreator } from "../src/inngest/functions/growth/socialCreator.js";
+import { outreachStrategy } from "../src/inngest/functions/growth/outreachStrategy.js";
 
 // NOTE: adCopyWriter, pressReleaseWriter and fullContentPipeline are stubs
 // (TODOs: Convex persistence, credit handling, agentJobs status updates).
@@ -21,5 +22,6 @@ export default serve({
     wordpressPublisher,
     internalLinker,
     socialPostCreator,
+    outreachStrategy,
   ],
 });
