@@ -56,6 +56,7 @@ export const TIERS = {
       "newsletter",
       "image-generator",
       "press-release",
+      "outreach-strategy",
       "press-outreach",
       "link-building",
       "editorial-researcher",
@@ -273,6 +274,52 @@ export const initialize = mutation({
     });
 
     return creditId;
+  },
+});
+
+/**
+ * Sync enabled agents and concurrency limit for an existing workspace credit record
+ */
+export const syncEnabledAgentsForWorkspace = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+  },
+  handler: async (ctx, { workspaceId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const workspace = await ctx.db.get(workspaceId);
+    if (!workspace) {
+      throw new Error("Workspace not found");
+    }
+
+    if (workspace.ownerId !== identity.subject) {
+      throw new Error("Unauthorized: No access to this workspace");
+    }
+
+    const credits = await ctx.db
+      .query("credits")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+      .first();
+
+    if (!credits) {
+      throw new Error("No credit record found");
+    }
+
+    const tierConfig = TIERS[credits.tier as TierName] || TIERS.free;
+
+    await ctx.db.patch(credits._id, {
+      enabledAgents: tierConfig.enabledAgents,
+      concurrencyLimit: tierConfig.concurrencyLimit,
+    });
+
+    return {
+      success: true,
+      tier: credits.tier,
+      enabledAgents: tierConfig.enabledAgents,
+    };
   },
 });
 

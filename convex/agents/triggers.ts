@@ -470,7 +470,7 @@ export const triggerOutreachStrategy = action({
       success: true,
       eventId: eventResult.eventId,
       message: "Outreach strategy generation started",
-      creditsReserved: requiredCredits,
+      creditsRequired: requiredCredits,
     };
   },
 });
