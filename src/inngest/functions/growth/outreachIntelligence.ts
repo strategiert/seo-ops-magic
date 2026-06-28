@@ -8,19 +8,19 @@ const AGENT_ID = "outreach-intelligence";
 const CREDITS_REQUIRED = AGENT_CREDITS[AGENT_ID];
 const OUTREACH_INTELLIGENCE_TOOL_NAME = "submit_outreach_intelligence";
 
-const SYSTEM_PROMPT = `Du bist der Outreach Intelligence Agent fuer SEO Ops Magic.
+const SYSTEM_PROMPT = `Du bist der Outreach Intelligence Agent für SEO Ops Magic.
 
-Deine Aufgabe: Verstehe zuerst die Marke, Website, vorhandenen Content und Sitemap. Danach identifizierst du die besten Content Pieces, die als Linkbait oder Outreach-Aufhaenger funktionieren koennen. Das Tool ist offen fuer SEO, PR, Sales und Partnerships; technisch ist es Outreach, die Positionierung unterscheidet sich je nach Ziel.
+Deine Aufgabe: Verstehe zuerst die Marke, Website, vorhandenen Content und Sitemap. Danach identifizierst du die besten Content Pieces, die als Linkbait oder Outreach-Aufhänger funktionieren können. Das Tool ist offen für SEO, PR, Sales und Partnerships; technisch ist es Outreach, die Positionierung unterscheidet sich je nach Ziel.
 
-Arbeite praktisch und kampagnenfaehig:
+Arbeite praktisch und kampagnenfähig:
 - Bewerte vorhandene Artikel, gecrawlte Seiten, HTML-Exports, Briefs, Assets, Sitemap-URLs und Brand-Daten.
 - Priorisiere Linkbait-Chancen: Datenstudien, Tools, Templates, Checklisten, Vergleichsseiten, Glossare, Whitepaper, originelle Analysen, hilfreiche Ressourcen.
-- Denke auch an Upgrades: Ein normaler Blogartikel kann durch Rechner, Benchmark, PDF, Checkliste, Statistik-Abschnitt oder interaktives Tool linkwuerdiger werden.
-- Fuell die Kampagne so weit wie moeglich selbst aus. Keine Rueckfragen, ausser Daten fehlen komplett.
+- Denke auch an Upgrades: Ein normaler Blogartikel kann durch Rechner, Benchmark, PDF, Checkliste, Statistik-Abschnitt oder interaktives Tool linkwürdiger werden.
+- Füll die Kampagne so weit wie möglich selbst aus. Keine Rückfragen, außer Daten fehlen komplett.
 - Schreibe auf Deutsch, klar, konkret und handlungsorientiert.
 - Vermeide rechtliche Belehrungen. Erwähne Risiken nur operativ, z.B. Relevanz, Spam-Signale, schwache Linkbarkeit.
 
-Antworte ausschliesslich als gueltiges JSON:
+Antworte ausschließlich als gültiges JSON:
 {
   "summary": "string",
   "sourceCoverage": {
@@ -64,7 +64,7 @@ Antworte ausschliesslich als gueltiges JSON:
 const OUTREACH_INTELLIGENCE_TOOL: Tool = {
   name: OUTREACH_INTELLIGENCE_TOOL_NAME,
   description:
-    "Gibt die Outreach-Intelligence als strukturierte Daten zurueck.",
+    "Gibt die Outreach-Intelligence als strukturierte Daten zurück.",
   input_schema: {
     type: "object",
     properties: {
@@ -424,15 +424,15 @@ function fallbackOpportunity(context: IntelligenceContext): GeneratedOpportunity
     score: 0.62,
     effort: "medium",
     linkabilityReasons: [
-      "Vorhandener Content kann als Outreach-Aufhaenger weiterentwickelt werden.",
-      "Die Datenlage reicht fuer eine erste Kampagnenstruktur.",
+      "Vorhandener Content kann als Outreach-Aufhänger weiterentwickelt werden.",
+      "Die Datenlage reicht für eine erste Kampagnenstruktur.",
     ],
     audiences: ["Redaktionen", "Branchenblogs", "Ressourcenseiten"],
     recommendedAssetUpgrade:
       "Aus dem Content ein konkretes Linkbait-Asset bauen, z.B. Checkliste, Mini-Studie, Template oder interaktives Tool.",
     outreachAngles: [
-      "Hilfreiche Ressource fuer bestehende Artikel und Ressourcenseiten.",
-      "Ergaenzung fuer Inhalte, die praktische Tools oder aktuelle Beispiele sammeln.",
+      "Hilfreiche Ressource für bestehende Artikel und Ressourcenseiten.",
+      "Ergänzung für Inhalte, die praktische Tools oder aktuelle Beispiele sammeln.",
     ],
     searchOperators: [
       '"Ressourcen" + Keyword',
@@ -491,7 +491,7 @@ function normalizeStrategy(value: unknown, topOpportunity: GeneratedOpportunity)
         : [
             "Asset-Upgrade finalisieren",
             "Prospect-Recherche mit den Suchoperatoren starten",
-            "Outreach-Sequenz fuer die wichtigsten Zielgruppen generieren",
+            "Outreach-Sequenz für die wichtigsten Zielgruppen generieren",
           ],
   };
 }
@@ -605,7 +605,7 @@ ${safeStringify(sitemap, 14000)}
 
 Wichtig:
 - Wenn ein vorhandener Artikel geeignet ist, nutze dessen id als targetArticleId.
-- Wenn ein crawled page, Brief oder Asset besser ist, erklaere das konkrete Upgrade.
+- Wenn eine gecrawlte Seite, ein Brief oder Asset besser ist, erkläre das konkrete Upgrade.
 - Erstelle eine Kampagne, die sofort als Outreach-Ausgangspunkt taugt.
 - Nutze alle Daten, nicht nur manuelle CRM-Felder.`;
 }

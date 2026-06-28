@@ -10,7 +10,7 @@ const toolInput = {
   },
   opportunities: [
     {
-      title: "Ratgeber fuer Rueckenwindeltern",
+      title: "Ratgeber für Rückenwindeltern",
       score: 0.87,
     },
   ],

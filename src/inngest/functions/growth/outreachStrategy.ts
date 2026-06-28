@@ -8,18 +8,18 @@ const AGENT_ID = "outreach-strategy";
 const CREDITS_REQUIRED = AGENT_CREDITS[AGENT_ID];
 const OUTREACH_STRATEGY_TOOL_NAME = "submit_outreach_strategy";
 
-const SYSTEM_PROMPT = `Du bist der Outreach Strategy Agent fuer SEO Ops Magic.
+const SYSTEM_PROMPT = `Du bist der Outreach Strategy Agent für SEO Ops Magic.
 
-Du erstellst Outreach-Kampagnen fuer unterschiedliche Kampagnentypen. In dieser Version ist nur campaignType="linkbuilding" aktiv.
+Du erstellst Outreach-Kampagnen für unterschiedliche Kampagnentypen. In dieser Version ist nur campaignType="linkbuilding" aktiv.
 
-Fuer Linkbuilding:
-- Priorisiere thematische Relevanz, Linkwahrscheinlichkeit und natuerliche Outreach-Argumente.
+Für Linkbuilding:
+- Priorisiere thematische Relevanz, Linkwahrscheinlichkeit und natürliche Outreach-Argumente.
 - Nutze Methoden wie Resource Page Outreach, Broken Link Building, Guest Posting, Competitor Replication, Unlinked Mentions, Expert Quote Outreach, Partner Links und Linkbait Promotion.
-- Scoring: Relevanz 30%, Domain-/Seitenqualitaet 25%, Linkwahrscheinlichkeit 20%, Kontaktierbarkeit 15%, Aufwand 10%.
+- Scoring: Relevanz 30%, Domain-/Seitenqualität 25%, Linkwahrscheinlichkeit 20%, Kontaktierbarkeit 15%, Aufwand 10%.
 - Tier A = 0.8-1.0, B = 0.6-0.79, C = 0.4-0.59, D = unter 0.4.
 - Schreibe auf Deutsch, klar, professionell und konkret.
 
-Antworte ausschliesslich als gueltiges JSON:
+Antworte ausschließlich als gültiges JSON:
 {
   "strategy": {
     "summary": "string",
@@ -57,15 +57,15 @@ Antworte ausschliesslich als gueltiges JSON:
       }
     ],
     "variants": {
-      "resource_page": "Hinweis fuer Resource Pages",
-      "broken_link": "Hinweis fuer Broken Link Outreach"
+      "resource_page": "Hinweis für Resource Pages",
+      "broken_link": "Hinweis für Broken Link Outreach"
     }
   }
 }`;
 
 const OUTREACH_STRATEGY_TOOL: Tool = {
   name: OUTREACH_STRATEGY_TOOL_NAME,
-  description: "Gibt Outreach-Strategie, Prospects und Sequenz strukturiert zurueck.",
+  description: "Gibt Outreach-Strategie, Prospects und Sequenz strukturiert zurück.",
   input_schema: {
     type: "object",
     properties: {
@@ -208,17 +208,17 @@ function defaultSequence(): GeneratedSequence {
         dayOffset: 0,
         subject: "Kurzer Hinweis zu {{siteName}}",
         body:
-          "Hallo {{firstName}},\n\nich bin auf {{siteName}} gestossen und dachte, unsere Ressource zu {{topic}} koennte fuer Ihre Leser hilfreich sein.\n\nViele Gruesse\n{{senderName}}",
+          "Hallo {{firstName}},\n\nich bin auf {{siteName}} gestoßen und dachte, unsere Ressource zu {{topic}} könnte für Ihre Leser hilfreich sein.\n\nViele Grüße\n{{senderName}}",
       },
       {
         dayOffset: 4,
         subject: "Re: Kurzer Hinweis zu {{siteName}}",
         body:
-          "Hallo {{firstName}},\n\nich wollte kurz nachhaken, ob die Ressource zu {{topic}} fuer Ihre Seite interessant sein koennte.\n\nViele Gruesse\n{{senderName}}",
+          "Hallo {{firstName}},\n\nich wollte kurz nachhaken, ob die Ressource zu {{topic}} für Ihre Seite interessant sein könnte.\n\nViele Grüße\n{{senderName}}",
       },
     ],
     variants: {
-      resource_page: "Als hilfreiche Ressource fuer eine bestehende Link-/Ressourcenseite positionieren.",
+      resource_page: "Als hilfreiche Ressource für eine bestehende Link-/Ressourcenseite positionieren.",
       broken_link: "Auf einen kaputten oder veralteten Link hinweisen und die eigene Ressource als Ersatz anbieten.",
     },
   };
@@ -281,7 +281,7 @@ function normalizeGeneratedStrategy(value: unknown): GeneratedStrategy {
 
 function formatArticleSummaries(articles: ArticleContext[] | undefined): string {
   if (!articles || articles.length === 0) {
-    return "Keine Zielartikel ausgewaehlt.";
+    return "Keine Zielartikel ausgewählt.";
   }
 
   return articles
@@ -378,7 +378,7 @@ export const outreachStrategy = inngest.createFunction(
         messages: [
           {
             role: "user",
-            content: `Erstelle eine Outreach-Strategie fuer diese Kampagne.
+            content: `Erstelle eine Outreach-Strategie für diese Kampagne.
 
 Kampagne:
 ${safeStringify(context.campaign, 4000)}
@@ -395,7 +395,7 @@ ${formatArticleSummaries(context.articles)}
 Bereits importierte Prospects:
 ${safeStringify(context.prospects || [], 5000)}
 
-Gib nur JSON im geforderten Format zurueck.`,
+Gib nur JSON im geforderten Format zurück.`,
           },
         ],
       });

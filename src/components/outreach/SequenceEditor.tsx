@@ -33,14 +33,14 @@ const defaultStep: SequenceStep = {
   dayOffset: 0,
   subject: "Kurzer Hinweis zu {{siteName}}",
   body:
-    "Hallo {{firstName}},\n\nich bin auf {{siteName}} gestossen und dachte, unsere Ressource zu {{topic}} koennte fuer Ihre Leser hilfreich sein.\n\nViele Gruesse\n{{senderName}}",
+    "Hallo {{firstName}},\n\nich bin auf {{siteName}} gestoßen und dachte, unsere Ressource zu {{topic}} könnte für Ihre Leser hilfreich sein.\n\nViele Grüße\n{{senderName}}",
 };
 
 const followUpStep: SequenceStep = {
   dayOffset: 4,
   subject: "Re: Kurzer Hinweis zu {{siteName}}",
   body:
-    "Hallo {{firstName}},\n\nich wollte kurz nachhaken, ob die Ressource zu {{topic}} fuer Ihre Seite interessant sein koennte.\n\nViele Gruesse\n{{senderName}}",
+    "Hallo {{firstName}},\n\nich wollte kurz nachhaken, ob die Ressource zu {{topic}} für Ihre Seite interessant sein könnte.\n\nViele Grüße\n{{senderName}}",
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -183,7 +183,7 @@ export function SequenceEditor({ campaignId, sequence }: SequenceEditorProps) {
       <div className="flex items-center justify-between">
         <Button variant="outline" onClick={addStep} disabled={isSaving}>
           <Plus className="h-4 w-4 mr-2" />
-          Schritt hinzufuegen
+          Schritt hinzufügen
         </Button>
         <Button onClick={handleSave} disabled={isSaving}>
           {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

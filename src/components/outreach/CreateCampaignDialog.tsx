@@ -65,8 +65,8 @@ export function CreateCampaignDialog({
   const handleCreate = async () => {
     if (!currentProject?._id) {
       toast({
-        title: "Kein Projekt ausgewaehlt",
-        description: "Bitte waehle zuerst ein Projekt aus.",
+        title: "Kein Projekt ausgewählt",
+        description: "Bitte wähle zuerst ein Projekt aus.",
         variant: "destructive",
       });
       return;
@@ -120,7 +120,7 @@ export function CreateCampaignDialog({
         <DialogHeader>
           <DialogTitle>Outreach-Kampagne erstellen</DialogTitle>
           <DialogDescription>
-            Lege die erste Linkbuilding-Kampagne fuer dieses Projekt an.
+            Lege die erste Linkbuilding-Kampagne für dieses Projekt an.
           </DialogDescription>
         </DialogHeader>
 

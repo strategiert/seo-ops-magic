@@ -103,7 +103,7 @@ export function ProspectImportDialog({
     if (parsedProspects.length === 0) {
       toast({
         title: "Keine Prospects erkannt",
-        description: "Bitte fuege mindestens eine Domain oder URL ein.",
+        description: "Bitte füge mindestens eine Domain oder URL ein.",
         variant: "destructive",
       });
       return;
@@ -118,7 +118,7 @@ export function ProspectImportDialog({
 
       toast({
         title: "Prospects importiert",
-        description: `${parsedProspects.length} Eintraege wurden hinzugefuegt.`,
+        description: `${parsedProspects.length} Einträge wurden hinzugefügt.`,
       });
 
       setInput("");
@@ -141,7 +141,7 @@ export function ProspectImportDialog({
         <DialogHeader>
           <DialogTitle>Prospects importieren</DialogTitle>
           <DialogDescription>
-            Eine Zeile pro Prospect. Spalten koennen mit Komma, Semikolon oder Tab getrennt sein.
+            Eine Zeile pro Prospect. Spalten können mit Komma, Semikolon oder Tab getrennt sein.
           </DialogDescription>
         </DialogHeader>
 
