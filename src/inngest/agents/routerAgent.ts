@@ -268,7 +268,7 @@ export const routerAgent = inngest.createFunction(
       userPrompt += "Erstelle einen Ausführungsplan im JSON-Format.";
 
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 2000,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
@@ -300,7 +300,7 @@ export const routerAgent = inngest.createFunction(
     });
 
     // Step 5: Plan ausführen (wenn autoExecute)
-    let executionResults: Record<string, any> = {};
+    let executionResults: Record<string, unknown> = {};
     
     if (input.autoExecute) {
       executionResults = await step.run("execute-plan", async () => {
@@ -310,7 +310,7 @@ export const routerAgent = inngest.createFunction(
           progress: 50,
         });
 
-        const results: Record<string, any> = {};
+        const results: Record<string, unknown> = {};
         
         const stepsByOrder = new Map<number, typeof plan.steps>();
         for (const s of plan.steps) {
@@ -329,7 +329,7 @@ export const routerAgent = inngest.createFunction(
               return;
             }
 
-            const eventData: Record<string, any> = {
+            const eventData: Record<string, unknown> = {
               projectId,
               userId,
               customerId,
