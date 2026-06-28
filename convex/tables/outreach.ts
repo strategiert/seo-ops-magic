@@ -1,4 +1,10 @@
-import { mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
+import {
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { v } from "convex/values";
 import { requireAuth } from "../auth";
@@ -165,6 +171,41 @@ export const createCampaign = mutation({
         targetArticleIds: args.targetArticleIds,
         competitors: args.competitors,
         goalTargetsJson: args.goalTargetsJson,
+      }),
+    });
+  },
+});
+
+export const createGeneratedCampaignInternal = internalMutation({
+  args: {
+    projectId: v.id("projects"),
+    name: v.string(),
+    campaignType: v.string(),
+    targetDomain: v.optional(v.string()),
+    targetArticleIds: v.optional(v.array(v.id("articles"))),
+    competitors: v.optional(v.array(v.string())),
+    goalTargetsJson: v.optional(v.any()),
+    strategyJson: v.optional(v.any()),
+    status: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await validateTargetArticleIds(ctx, args.targetArticleIds, args.projectId);
+
+    const now = Date.now();
+
+    return await ctx.db.insert("outreachCampaigns", {
+      projectId: args.projectId,
+      name: args.name,
+      campaignType: args.campaignType,
+      status: args.status ?? "ready",
+      createdAt: now,
+      updatedAt: now,
+      ...stripUndefined({
+        targetDomain: args.targetDomain,
+        targetArticleIds: args.targetArticleIds,
+        competitors: args.competitors,
+        goalTargetsJson: args.goalTargetsJson,
+        strategyJson: args.strategyJson,
       }),
     });
   },

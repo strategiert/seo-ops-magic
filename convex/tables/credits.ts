@@ -56,6 +56,7 @@ export const TIERS = {
       "newsletter",
       "image-generator",
       "press-release",
+      "outreach-intelligence",
       "outreach-strategy",
       "press-outreach",
       "link-building",

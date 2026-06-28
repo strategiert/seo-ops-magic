@@ -494,6 +494,21 @@ export default defineSchema({
     .index("by_project_type", ["projectId", "campaignType"])
     .index("by_project_status", ["projectId", "status"]),
 
+  outreachAnalyses: defineTable({
+    projectId: v.id("projects"),
+    status: v.string(), // 'running' | 'completed' | 'failed'
+    summary: v.optional(v.string()),
+    sourceCoverageJson: v.optional(v.any()),
+    opportunitiesJson: v.optional(v.any()),
+    recommendedCampaignJson: v.optional(v.any()),
+    createdCampaignId: v.optional(v.id("outreachCampaigns")),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_status", ["projectId", "status"]),
+
   outreachAssets: defineTable({
     projectId: v.id("projects"),
     campaignId: v.id("outreachCampaigns"),

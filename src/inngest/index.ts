@@ -18,6 +18,7 @@ export { wordpressPublisher } from "./functions/core/wordpressPublisher";
 export { socialPostCreator } from "./functions/growth/socialCreator";
 export { adCopyWriter } from "./functions/growth/adCopyWriter";
 export { outreachStrategy } from "./functions/growth/outreachStrategy";
+export { outreachIntelligence } from "./functions/growth/outreachIntelligence";
 
 // Enterprise Agents
 export { pressReleaseWriter } from "./functions/enterprise/pressRelease";
@@ -34,6 +35,7 @@ import { wordpressPublisher } from "./functions/core/wordpressPublisher";
 import { socialPostCreator } from "./functions/growth/socialCreator";
 import { adCopyWriter } from "./functions/growth/adCopyWriter";
 import { outreachStrategy } from "./functions/growth/outreachStrategy";
+import { outreachIntelligence } from "./functions/growth/outreachIntelligence";
 import { pressReleaseWriter } from "./functions/enterprise/pressRelease";
 import { fullContentPipeline } from "./workflows/fullContentPipeline";
 
@@ -46,6 +48,7 @@ export const allAgentFunctions = [
   socialPostCreator,
   adCopyWriter,
   outreachStrategy,
+  outreachIntelligence,
   pressReleaseWriter,
   fullContentPipeline,
 ];

@@ -66,6 +66,7 @@ export const AGENT_CREDITS = {
   "image-generator": 8,
   "video-creator": 10,
   "carousel-designer": 6,
+  "outreach-intelligence": 6,
   "press-outreach": 4,
   "outreach-strategy": 4,
   "link-building": 4,

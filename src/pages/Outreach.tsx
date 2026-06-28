@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { EmptyState, TableSkeleton } from "@/components/data-state";
 import { CreateCampaignDialog } from "@/components/outreach/CreateCampaignDialog";
+import { OutreachIntelligencePanel } from "@/components/outreach/OutreachIntelligencePanel";
 import { useWorkspaceConvex } from "@/hooks/useWorkspaceConvex";
 import { useProjectPrefix } from "@/hooks/useProjectPrefix";
 import { api } from "../../convex/_generated/api";
@@ -70,16 +71,24 @@ export default function Outreach() {
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Outreach</h1>
+            <h1 className="text-2xl font-bold">KI Outreach</h1>
             <p className="text-muted-foreground">
-              Kampagnen, Prospects, Sequenzen und Ziele
+              Die KI findet Linkbait-, PR- und Sales-Aufhänger aus vorhandenem Content.
             </p>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button variant="outline" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            Neue Kampagne
+            Manuell
           </Button>
         </div>
+
+        {currentProject?._id && (
+          <OutreachIntelligencePanel
+            projectId={currentProject._id}
+            onOpenCampaign={(campaignId) => navigate(`${prefix}/outreach/${campaignId}`)}
+            onManualCreate={() => setCreateOpen(true)}
+          />
+        )}
 
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="border rounded-lg p-4">
@@ -101,13 +110,8 @@ export default function Outreach() {
         ) : sortedCampaigns.length === 0 ? (
           <EmptyState
             icon={Send}
-            title="Keine Outreach-Kampagnen"
-            description="Starte mit einer Linkbuilding-Kampagne fuer vorhandene Artikel."
-            action={{
-              label: "Kampagne erstellen",
-              onClick: () => setCreateOpen(true),
-              icon: Plus,
-            }}
+            title="Noch keine generierten Kampagnen"
+            description="Starte oben die KI-Analyse. Der Agent bewertet Content, Sitemap und Brand-Daten und legt danach eine Kampagne an."
           />
         ) : (
           <div className="border rounded-lg">

@@ -25,6 +25,7 @@ const AGENT_CREDITS: Record<string, number> = {
   "newsletter": 5,
   "image-generator": 8,
   "outreach-strategy": 4,
+  "outreach-intelligence": 6,
 };
 
 // Event types for each agent
@@ -37,6 +38,7 @@ const AGENT_EVENTS: Record<string, string> = {
   "ad-copy-writer": "content/generate-ad-copies",
   "press-release": "content/generate-press-release",
   "outreach-strategy": "outreach/strategy",
+  "outreach-intelligence": "outreach/intelligence",
 };
 
 // ============ Event Sender ============
@@ -470,6 +472,68 @@ export const triggerOutreachStrategy = action({
       success: true,
       eventId: eventResult.eventId,
       message: "Outreach strategy generation started",
+      creditsRequired: requiredCredits,
+    };
+  },
+});
+
+/**
+ * Trigger AI-first outreach intelligence for a project.
+ */
+export const triggerOutreachIntelligence = action({
+  args: {
+    projectId: v.id("projects"),
+  },
+  handler: async (ctx, { projectId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const project = await ctx.runQuery(internal.tables.projects.getInternal, {
+      id: projectId,
+    });
+    if (!project) {
+      throw new Error("Project not found");
+    }
+
+    const workspace = await ctx.runQuery(internal.tables.workspaces.getInternal, {
+      id: project.workspaceId,
+    });
+    if (!workspace) {
+      throw new Error("Workspace not found");
+    }
+
+    if (workspace.ownerId !== identity.subject) {
+      throw new Error("Unauthorized: No access to this project");
+    }
+
+    const agentId = "outreach-intelligence";
+    const requiredCredits = AGENT_CREDITS[agentId];
+    const eventKey = process.env.INNGEST_EVENT_KEY;
+    if (!eventKey) {
+      throw new Error("INNGEST_EVENT_KEY not configured");
+    }
+
+    const eventResult = await sendInngestEvent(
+      AGENT_EVENTS[agentId],
+      {
+        projectId,
+        userId: identity.subject,
+        customerId: project.workspaceId,
+        workspaceId: project.workspaceId,
+      },
+      eventKey
+    );
+
+    if (!eventResult.success) {
+      return { success: false, error: eventResult.error };
+    }
+
+    return {
+      success: true,
+      eventId: eventResult.eventId,
+      message: "Outreach intelligence started",
       creditsRequired: requiredCredits,
     };
   },
