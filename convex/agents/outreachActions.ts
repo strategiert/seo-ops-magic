@@ -3,11 +3,27 @@ import { action } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 
+function assertWorkerAuthorized(workerSecret: string): void {
+  const expectedSecret =
+    process.env.OUTREACH_WORKER_SECRET || process.env.INNGEST_EVENT_KEY;
+
+  if (!expectedSecret) {
+    throw new Error("OUTREACH_WORKER_SECRET is not configured");
+  }
+
+  if (workerSecret !== expectedSecret) {
+    throw new Error("Unauthorized outreach worker");
+  }
+}
+
 export const getCampaignContext = action({
   args: {
     campaignId: v.string(),
+    workerSecret: v.string(),
   },
-  handler: async (ctx, { campaignId }) => {
+  handler: async (ctx, { campaignId, workerSecret }) => {
+    assertWorkerAuthorized(workerSecret);
+
     return await ctx.runQuery(internal.tables.outreachInternal.getCampaignContext, {
       campaignId: campaignId as Id<"outreachCampaigns">,
     });
@@ -17,6 +33,7 @@ export const getCampaignContext = action({
 export const saveStrategyOutput = action({
   args: {
     campaignId: v.string(),
+    workerSecret: v.string(),
     strategyJson: v.any(),
     prospects: v.array(
       v.object({
@@ -37,7 +54,9 @@ export const saveStrategyOutput = action({
       variants: v.optional(v.any()),
     }),
   },
-  handler: async (ctx, { campaignId, ...strategyOutput }) => {
+  handler: async (ctx, { campaignId, workerSecret, ...strategyOutput }) => {
+    assertWorkerAuthorized(workerSecret);
+
     return await ctx.runMutation(
       internal.tables.outreachInternal.saveStrategyOutput,
       {

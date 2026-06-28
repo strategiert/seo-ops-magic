@@ -15,8 +15,50 @@ function stripUndefined<T extends object>(value: T): Partial<T> {
   return cleaned;
 }
 
-function normalizeDomain(domain: string): string {
-  return domain.trim().toLowerCase();
+function canonicalizeDomain(input: string): string {
+  const normalizedInput = input.trim().toLowerCase();
+  if (normalizedInput === "") return normalizedInput;
+
+  let domain = normalizedInput;
+
+  if (domain.startsWith("http://") || domain.startsWith("https://")) {
+    try {
+      domain = new URL(domain).hostname;
+    } catch {
+      domain = domain.replace(/^https?:\/\//, "");
+    }
+  }
+
+  domain = domain.split(/[/?#]/)[0];
+  domain = domain.split(":")[0];
+
+  if (domain.startsWith("www.")) {
+    domain = domain.slice(4);
+  }
+
+  return domain;
+}
+
+function normalizeContactValue(value: string | undefined): string | undefined {
+  const normalizedValue = value?.trim().toLowerCase();
+  return normalizedValue === "" ? undefined : normalizedValue;
+}
+
+function hasGeneratedContact(prospect: {
+  contactEmail?: string;
+  contactName?: string;
+  contactPage?: string;
+}): boolean {
+  return Boolean(
+    prospect.contactEmail || prospect.contactName || prospect.contactPage
+  );
+}
+
+function hasContactLocation(prospect: {
+  contactEmail?: string;
+  contactPage?: string;
+}): boolean {
+  return Boolean(prospect.contactEmail || prospect.contactPage);
 }
 
 export const getCampaignContext = internalQuery({
@@ -103,38 +145,113 @@ export const saveStrategyOutput = internalMutation({
       updatedAt: now,
     });
 
-    const existingProspects = await ctx.db
-      .query("outreachProspects")
-      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
-      .collect();
+    const [existingProspects, existingContacts, existingSequences] =
+      await Promise.all([
+        ctx.db
+          .query("outreachProspects")
+          .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+          .collect(),
+        ctx.db
+          .query("outreachContacts")
+          .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+          .collect(),
+        ctx.db
+          .query("outreachSequences")
+          .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+          .collect(),
+      ]);
 
-    const seenDomains = new Set(
-      existingProspects.map((prospect) => normalizeDomain(prospect.domain))
-    );
+    const prospectsByDomain = new Map<
+      string,
+      { id: Id<"outreachProspects">; contactStatus?: string }
+    >();
+    for (const prospect of existingProspects) {
+      prospectsByDomain.set(canonicalizeDomain(prospect.domain), {
+        id: prospect._id,
+        contactStatus: prospect.contactStatus,
+      });
+    }
+
+    const contactsByProspectId = new Map<
+      Id<"outreachProspects">,
+      typeof existingContacts
+    >();
+    for (const contact of existingContacts) {
+      const prospectContacts = contactsByProspectId.get(contact.prospectId) ?? [];
+      prospectContacts.push(contact);
+      contactsByProspectId.set(contact.prospectId, prospectContacts);
+    }
+
     const insertedProspectIds: Id<"outreachProspects">[] = [];
 
     for (const prospect of prospects) {
-      const normalizedDomain = normalizeDomain(prospect.domain);
-      if (seenDomains.has(normalizedDomain)) {
+      const canonicalDomain = canonicalizeDomain(prospect.domain);
+      const existingProspect = prospectsByDomain.get(canonicalDomain);
+
+      if (existingProspect) {
+        if (!hasGeneratedContact(prospect)) {
+          continue;
+        }
+
+        const existingProspectContacts =
+          contactsByProspectId.get(existingProspect.id) ?? [];
+        const contactEmail = normalizeContactValue(prospect.contactEmail);
+        const contactPage = normalizeContactValue(prospect.contactPage);
+        const contactName = normalizeContactValue(prospect.contactName);
+        const contactExists = existingProspectContacts.some((contact) => {
+          if (contactEmail !== undefined) {
+            return normalizeContactValue(contact.email) === contactEmail;
+          }
+
+          return (
+            normalizeContactValue(contact.contactPage) === contactPage &&
+            normalizeContactValue(contact.name) === contactName
+          );
+        });
+
+        if (contactExists) {
+          continue;
+        }
+
+        const contactId = await ctx.db.insert("outreachContacts", {
+          projectId: campaign.projectId,
+          campaignId,
+          prospectId: existingProspect.id,
+          source: "ai_strategy",
+          suppressed: false,
+          createdAt: now,
+          updatedAt: now,
+          ...stripUndefined({
+            name: prospect.contactName,
+            email: prospect.contactEmail,
+            contactPage: prospect.contactPage,
+          }),
+        });
+
+        const createdContact = await ctx.db.get(contactId);
+        if (createdContact) {
+          existingProspectContacts.push(createdContact);
+          contactsByProspectId.set(existingProspect.id, existingProspectContacts);
+        }
+
+        if (existingProspect.contactStatus !== "found") {
+          await ctx.db.patch(existingProspect.id, {
+            contactStatus: "found",
+            updatedAt: now,
+          });
+          existingProspect.contactStatus = "found";
+        }
+
         continue;
       }
-
-      seenDomains.add(normalizedDomain);
-
-      const hasContactLocation = Boolean(
-        prospect.contactEmail || prospect.contactPage
-      );
-      const hasContactInfo = Boolean(
-        prospect.contactEmail || prospect.contactName || prospect.contactPage
-      );
 
       const prospectId = await ctx.db.insert("outreachProspects", {
         projectId: campaign.projectId,
         campaignId,
         campaignType: campaign.campaignType,
-        domain: prospect.domain,
+        domain: canonicalDomain,
         status: prospect.score !== undefined ? "qualified" : "new",
-        contactStatus: hasContactLocation ? "found" : "missing",
+        contactStatus: hasContactLocation(prospect) ? "found" : "missing",
         createdAt: now,
         updatedAt: now,
         ...stripUndefined({
@@ -147,9 +264,13 @@ export const saveStrategyOutput = internalMutation({
       });
 
       insertedProspectIds.push(prospectId);
+      prospectsByDomain.set(canonicalDomain, {
+        id: prospectId,
+        contactStatus: hasContactLocation(prospect) ? "found" : "missing",
+      });
 
-      if (hasContactInfo) {
-        await ctx.db.insert("outreachContacts", {
+      if (hasGeneratedContact(prospect)) {
+        const contactId = await ctx.db.insert("outreachContacts", {
           projectId: campaign.projectId,
           campaignId,
           prospectId,
@@ -163,21 +284,42 @@ export const saveStrategyOutput = internalMutation({
             contactPage: prospect.contactPage,
           }),
         });
+
+        const createdContact = await ctx.db.get(contactId);
+        if (createdContact) {
+          contactsByProspectId.set(prospectId, [createdContact]);
+        }
       }
     }
 
-    const sequenceId = await ctx.db.insert("outreachSequences", {
-      projectId: campaign.projectId,
-      campaignId,
-      name: sequence.name,
-      steps: sequence.steps,
-      approvalStatus: "draft",
-      createdAt: now,
-      updatedAt: now,
-      ...stripUndefined({
-        variants: sequence.variants,
-      }),
-    });
+    const draftSequence = existingSequences.find(
+      (existingSequence) => existingSequence.approvalStatus === "draft"
+    );
+    const sequenceId = draftSequence
+      ? draftSequence._id
+      : await ctx.db.insert("outreachSequences", {
+          projectId: campaign.projectId,
+          campaignId,
+          name: sequence.name,
+          steps: sequence.steps,
+          approvalStatus: "draft",
+          createdAt: now,
+          updatedAt: now,
+          ...stripUndefined({
+            variants: sequence.variants,
+          }),
+        });
+
+    if (draftSequence) {
+      await ctx.db.patch(draftSequence._id, {
+        name: sequence.name,
+        steps: sequence.steps,
+        updatedAt: now,
+        ...stripUndefined({
+          variants: sequence.variants,
+        }),
+      });
+    }
 
     return { insertedProspectIds, sequenceId };
   },
