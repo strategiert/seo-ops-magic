@@ -39,6 +39,7 @@ import type * as tables_googleAccounts from "../tables/googleAccounts.js";
 import type * as tables_gscConnections from "../tables/gscConnections.js";
 import type * as tables_htmlExports from "../tables/htmlExports.js";
 import type * as tables_integrations from "../tables/integrations.js";
+import type * as tables_linkBuilding from "../tables/linkBuilding.js";
 import type * as tables_outreach from "../tables/outreach.js";
 import type * as tables_outreachInternal from "../tables/outreachInternal.js";
 import type * as tables_profiles from "../tables/profiles.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   "tables/gscConnections": typeof tables_gscConnections;
   "tables/htmlExports": typeof tables_htmlExports;
   "tables/integrations": typeof tables_integrations;
+  "tables/linkBuilding": typeof tables_linkBuilding;
   "tables/outreach": typeof tables_outreach;
   "tables/outreachInternal": typeof tables_outreachInternal;
   "tables/profiles": typeof tables_profiles;

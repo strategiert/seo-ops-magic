@@ -149,6 +149,13 @@ export default function OutreachCampaignDetail() {
     sourceUrl: "",
     description: "",
   });
+  const [placementForm, setPlacementForm] = useState({
+    goalId: "none",
+    sourceUrl: "",
+    targetUrl: "",
+    anchorText: "",
+    rel: "",
+  });
 
   const typedCampaignId = campaignId as Id<"outreachCampaigns"> | undefined;
 
@@ -160,10 +167,15 @@ export default function OutreachCampaignDetail() {
     api.tables.outreach.prospectStats,
     typedCampaignId ? { campaignId: typedCampaignId } : "skip"
   );
+  const placements = useQuery(
+    api.tables.linkBuilding.listPlacements,
+    typedCampaignId ? { campaignId: typedCampaignId } : "skip"
+  );
 
   const triggerOutreachStrategy = useAction(api.agents.triggers.triggerOutreachStrategy);
   const updateProspect = useMutation(api.tables.outreach.updateProspect);
   const createGoal = useMutation(api.tables.outreach.createGoal);
+  const createPlacement = useMutation(api.tables.linkBuilding.createPlacement);
 
   const sortedProspects = useMemo(() => {
     return [...(bundle?.prospects ?? [])].sort((a, b) => {
@@ -249,6 +261,45 @@ export default function OutreachCampaignDetail() {
     toast({
       title: "Ziel erfasst",
       description: "Das Outreach-Ziel wurde angelegt.",
+    });
+  };
+
+  const handleCreatePlacement = async () => {
+    const sourceUrl = placementForm.sourceUrl.trim();
+    const targetUrl = placementForm.targetUrl.trim();
+
+    if (!sourceUrl || !targetUrl) {
+      toast({
+        title: "URLs erforderlich",
+        description: "Bitte gib Quell-URL und Ziel-URL ein.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await createPlacement({
+      campaignId: typedCampaignId,
+      goalId:
+        placementForm.goalId === "none"
+          ? undefined
+          : (placementForm.goalId as Id<"outreachGoals">),
+      sourceUrl,
+      targetUrl,
+      anchorText: placementForm.anchorText.trim() || undefined,
+      rel: placementForm.rel.trim() || undefined,
+    });
+
+    setPlacementForm({
+      goalId: "none",
+      sourceUrl: "",
+      targetUrl: "",
+      anchorText: "",
+      rel: "",
+    });
+
+    toast({
+      title: "Placement erfasst",
+      description: "Der Link wurde gespeichert.",
     });
   };
 
@@ -359,33 +410,65 @@ export default function OutreachCampaignDetail() {
 
           <TabsContent value="goals">
             <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-              <div className="border rounded-lg">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Typ</TableHead>
-                      <TableHead>Ziel</TableHead>
-                      <TableHead>Quelle</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {bundle.goals.map((goal) => (
-                      <TableRow key={goal._id}>
-                        <TableCell>{goal.goalType}</TableCell>
-                        <TableCell>{goal.targetUrl || goal.description || "-"}</TableCell>
-                        <TableCell>{goal.sourceUrl || "-"}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{goal.status}</Badge>
-                        </TableCell>
+              <div className="space-y-4">
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Typ</TableHead>
+                        <TableHead>Ziel</TableHead>
+                        <TableHead>Quelle</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {bundle.goals.map((goal) => (
+                        <TableRow key={goal._id}>
+                          <TableCell>{goal.goalType}</TableCell>
+                          <TableCell>{goal.targetUrl || goal.description || "-"}</TableCell>
+                          <TableCell>{goal.sourceUrl || "-"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{goal.status}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Quell-URL</TableHead>
+                        <TableHead>Ziel-URL</TableHead>
+                        <TableHead>Anchor</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(placements ?? []).map((placement) => (
+                        <TableRow key={placement._id}>
+                          <TableCell className="max-w-[260px] truncate">
+                            {placement.sourceUrl}
+                          </TableCell>
+                          <TableCell className="max-w-[260px] truncate">
+                            {placement.targetUrl}
+                          </TableCell>
+                          <TableCell>{placement.anchorText || "-"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{placement.status}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
 
+              <div className="space-y-4">
               <div className="border rounded-lg p-4 space-y-3">
-                <h3 className="font-semibold">Ziel erfassen</h3>
+                  <h3 className="font-semibold">Ziel erfassen</h3>
                 <div className="space-y-2">
                   <Label htmlFor="goal-type">Typ</Label>
                   <Select
@@ -449,6 +532,89 @@ export default function OutreachCampaignDetail() {
                   <Plus className="h-4 w-4 mr-2" />
                   Ziel anlegen
                 </Button>
+              </div>
+
+                <div className="border rounded-lg p-4 space-y-3">
+                  <h3 className="font-semibold">Placement erfassen</h3>
+                  <div className="space-y-2">
+                    <Label htmlFor="placement-goal">Ziel</Label>
+                    <Select
+                      value={placementForm.goalId}
+                      onValueChange={(goalId) =>
+                        setPlacementForm((current) => ({ ...current, goalId }))
+                      }
+                    >
+                      <SelectTrigger id="placement-goal">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Ohne Ziel verknuepfen</SelectItem>
+                        {bundle.goals.map((goal) => (
+                          <SelectItem key={goal._id} value={goal._id}>
+                            {goal.goalType} - {goal.targetUrl || goal.description || goal.status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="placement-source">Quell-URL</Label>
+                    <Input
+                      id="placement-source"
+                      value={placementForm.sourceUrl}
+                      onChange={(event) =>
+                        setPlacementForm((current) => ({
+                          ...current,
+                          sourceUrl: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="placement-target">Ziel-URL</Label>
+                    <Input
+                      id="placement-target"
+                      value={placementForm.targetUrl}
+                      onChange={(event) =>
+                        setPlacementForm((current) => ({
+                          ...current,
+                          targetUrl: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="placement-anchor">Anchor</Label>
+                    <Input
+                      id="placement-anchor"
+                      value={placementForm.anchorText}
+                      onChange={(event) =>
+                        setPlacementForm((current) => ({
+                          ...current,
+                          anchorText: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="placement-rel">Rel</Label>
+                    <Input
+                      id="placement-rel"
+                      value={placementForm.rel}
+                      onChange={(event) =>
+                        setPlacementForm((current) => ({
+                          ...current,
+                          rel: event.target.value,
+                        }))
+                      }
+                      placeholder="dofollow, nofollow, sponsored"
+                    />
+                  </div>
+                  <Button onClick={handleCreatePlacement} className="w-full">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Placement speichern
+                  </Button>
+                </div>
               </div>
             </div>
           </TabsContent>
