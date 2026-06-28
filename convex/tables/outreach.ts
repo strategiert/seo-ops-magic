@@ -21,16 +21,39 @@ async function verifyProjectAccess(
   return workspace.ownerId === userId;
 }
 
-function stripUndefined<T extends Record<string, any>>(value: T): Partial<T> {
-  const cleaned: Record<string, any> = {};
+function stripUndefined<T extends object>(value: T): Partial<T> {
+  const cleaned: Partial<T> = {};
 
-  for (const [key, entryValue] of Object.entries(value)) {
+  for (const key of Object.keys(value) as Array<keyof T>) {
+    const entryValue = value[key];
     if (entryValue !== undefined) {
       cleaned[key] = entryValue;
     }
   }
 
-  return cleaned as Partial<T>;
+  return cleaned;
+}
+
+async function validateTargetArticleIds(
+  ctx: QueryCtx | MutationCtx,
+  targetArticleIds: Id<"articles">[] | undefined,
+  projectId: Id<"projects">
+): Promise<void> {
+  if (targetArticleIds === undefined) return;
+
+  for (const articleId of targetArticleIds) {
+    const article = await ctx.db.get(articleId);
+
+    if (!article) {
+      throw new Error(`Invalid targetArticleIds: Article ${articleId} not found`);
+    }
+
+    if (article.projectId !== projectId) {
+      throw new Error(
+        `Invalid targetArticleIds: Article ${articleId} belongs to another project`
+      );
+    }
+  }
 }
 
 export const listCampaigns = query({
@@ -126,6 +149,8 @@ export const createCampaign = mutation({
       throw new Error("Unauthorized: No access to this project");
     }
 
+    await validateTargetArticleIds(ctx, args.targetArticleIds, args.projectId);
+
     const now = Date.now();
 
     return await ctx.db.insert("outreachCampaigns", {
@@ -166,6 +191,12 @@ export const updateCampaign = mutation({
     if (!(await verifyProjectAccess(ctx, campaign.projectId, userId))) {
       throw new Error("Unauthorized: No access to this project");
     }
+
+    await validateTargetArticleIds(
+      ctx,
+      updates.targetArticleIds,
+      campaign.projectId
+    );
 
     await ctx.db.patch(campaignId, {
       ...stripUndefined(updates),
@@ -286,6 +317,38 @@ export const updateProspect = mutation({
   },
 });
 
+export const updateContact = mutation({
+  args: {
+    contactId: v.id("outreachContacts"),
+    name: v.optional(v.string()),
+    role: v.optional(v.string()),
+    email: v.optional(v.string()),
+    contactPage: v.optional(v.string()),
+    source: v.optional(v.string()),
+    suppressed: v.optional(v.boolean()),
+    suppressionReason: v.optional(v.string()),
+  },
+  handler: async (ctx, { contactId, ...updates }) => {
+    const userId = await requireAuth(ctx);
+
+    const contact = await ctx.db.get(contactId);
+    if (!contact) {
+      throw new Error("Contact not found");
+    }
+
+    if (!(await verifyProjectAccess(ctx, contact.projectId, userId))) {
+      throw new Error("Unauthorized: No access to this project");
+    }
+
+    await ctx.db.patch(contactId, {
+      ...stripUndefined(updates),
+      updatedAt: Date.now(),
+    });
+
+    return contactId;
+  },
+});
+
 export const upsertSequence = mutation({
   args: {
     campaignId: v.id("outreachCampaigns"),
@@ -315,7 +378,10 @@ export const upsertSequence = mutation({
         throw new Error("Sequence not found");
       }
 
-      if (sequence.campaignId !== args.campaignId) {
+      if (
+        sequence.campaignId !== args.campaignId ||
+        sequence.projectId !== campaign.projectId
+      ) {
         throw new Error("Unauthorized: Sequence does not belong to this campaign");
       }
 
@@ -394,6 +460,56 @@ export const createGoal = mutation({
         verifiedAt: status === "verified" ? now : undefined,
       }),
     });
+  },
+});
+
+export const updateGoal = mutation({
+  args: {
+    goalId: v.id("outreachGoals"),
+    prospectId: v.optional(v.id("outreachProspects")),
+    goalType: v.optional(v.string()),
+    targetUrl: v.optional(v.string()),
+    sourceUrl: v.optional(v.string()),
+    description: v.optional(v.string()),
+    status: v.optional(v.string()),
+  },
+  handler: async (ctx, { goalId, ...updates }) => {
+    const userId = await requireAuth(ctx);
+
+    const goal = await ctx.db.get(goalId);
+    if (!goal) {
+      throw new Error("Goal not found");
+    }
+
+    if (!(await verifyProjectAccess(ctx, goal.projectId, userId))) {
+      throw new Error("Unauthorized: No access to this project");
+    }
+
+    if (updates.prospectId !== undefined) {
+      const prospect = await ctx.db.get(updates.prospectId);
+      if (
+        !prospect ||
+        prospect.projectId !== goal.projectId ||
+        prospect.campaignId !== goal.campaignId
+      ) {
+        throw new Error("Invalid prospectId: Prospect does not belong to this goal");
+      }
+    }
+
+    const now = Date.now();
+
+    await ctx.db.patch(goalId, {
+      ...stripUndefined(updates),
+      updatedAt: now,
+      ...stripUndefined({
+        verifiedAt:
+          updates.status === "verified" && goal.verifiedAt === undefined
+            ? now
+            : undefined,
+      }),
+    });
+
+    return goalId;
   },
 });
 
