@@ -1,9 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { Tool } from "@anthropic-ai/sdk/resources/messages";
 import { inngest } from "../../client.js";
 import { api, convex, AGENT_CREDITS, calculateCostCents } from "../../lib/convex.js";
+import { extractToolInput } from "../../lib/anthropicToolInput.js";
 
 const AGENT_ID = "outreach-intelligence";
 const CREDITS_REQUIRED = AGENT_CREDITS[AGENT_ID];
+const OUTREACH_INTELLIGENCE_TOOL_NAME = "submit_outreach_intelligence";
 
 const SYSTEM_PROMPT = `Du bist der Outreach Intelligence Agent fuer SEO Ops Magic.
 
@@ -57,6 +60,74 @@ Antworte ausschliesslich als gueltiges JSON:
     }
   }
 }`;
+
+const OUTREACH_INTELLIGENCE_TOOL: Tool = {
+  name: OUTREACH_INTELLIGENCE_TOOL_NAME,
+  description:
+    "Gibt die Outreach-Intelligence als strukturierte Daten zurueck.",
+  input_schema: {
+    type: "object",
+    properties: {
+      summary: { type: "string" },
+      sourceCoverage: {
+        type: "object",
+        properties: {
+          usedSources: { type: "array", items: { type: "string" } },
+          missingSources: { type: "array", items: { type: "string" } },
+          confidence: { type: "number" },
+        },
+        additionalProperties: true,
+      },
+      opportunities: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            contentType: { type: "string" },
+            sourceKind: { type: "string" },
+            sourceId: { type: "string" },
+            sourceUrl: { type: "string" },
+            targetArticleId: { type: "string" },
+            score: { type: "number" },
+            effort: { type: "string" },
+            linkabilityReasons: { type: "array", items: { type: "string" } },
+            audiences: { type: "array", items: { type: "string" } },
+            recommendedAssetUpgrade: { type: "string" },
+            outreachAngles: { type: "array", items: { type: "string" } },
+            searchOperators: { type: "array", items: { type: "string" } },
+            campaignName: { type: "string" },
+          },
+          required: ["title"],
+          additionalProperties: true,
+        },
+      },
+      recommendedCampaign: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          targetDomain: { type: "string" },
+          goals: { type: "string" },
+          strategy: {
+            type: "object",
+            properties: {
+              summary: { type: "string" },
+              positioning: { type: "string" },
+              recommendedMethods: { type: "array", items: { type: "string" } },
+              searchOperators: { type: "array", items: { type: "string" } },
+              risks: { type: "array", items: { type: "string" } },
+              nextActions: { type: "array", items: { type: "string" } },
+            },
+            additionalProperties: true,
+          },
+        },
+        additionalProperties: true,
+      },
+    },
+    required: ["summary", "sourceCoverage", "opportunities", "recommendedCampaign"],
+    additionalProperties: true,
+  },
+};
 
 type OutreachIntelligenceEventData = {
   projectId: string;
@@ -157,14 +228,6 @@ function getWorkerSecret(): string {
 function safeStringify(value: unknown, maxLength: number): string {
   const text = JSON.stringify(value, null, 2) || "";
   return text.slice(0, maxLength);
-}
-
-function parseJsonObject(text: string): unknown {
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("Could not parse JSON response");
-  }
-  return JSON.parse(jsonMatch[0]) as unknown;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -664,6 +727,11 @@ export const outreachIntelligence = inngest.createFunction(
           model: "claude-sonnet-4-6",
           max_tokens: 6500,
           system: SYSTEM_PROMPT,
+          tools: [OUTREACH_INTELLIGENCE_TOOL],
+          tool_choice: {
+            type: "tool",
+            name: OUTREACH_INTELLIGENCE_TOOL_NAME,
+          },
           messages: [
             {
               role: "user",
@@ -675,13 +743,8 @@ export const outreachIntelligence = inngest.createFunction(
         inputTokens = response.usage.input_tokens;
         outputTokens = response.usage.output_tokens;
 
-        const textContent = response.content.find((item) => item.type === "text");
-        if (!textContent || textContent.type !== "text") {
-          throw new Error("No text response from Anthropic");
-        }
-
         return normalizeGeneratedIntelligence(
-          parseJsonObject(textContent.text),
+          extractToolInput(response.content, OUTREACH_INTELLIGENCE_TOOL_NAME),
           context,
           sitemap
         );

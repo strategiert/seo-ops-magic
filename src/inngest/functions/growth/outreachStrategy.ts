@@ -1,9 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { Tool } from "@anthropic-ai/sdk/resources/messages";
 import { inngest } from "../../client.js";
 import { api, convex, AGENT_CREDITS, calculateCostCents } from "../../lib/convex.js";
+import { extractToolInput } from "../../lib/anthropicToolInput.js";
 
 const AGENT_ID = "outreach-strategy";
 const CREDITS_REQUIRED = AGENT_CREDITS[AGENT_ID];
+const OUTREACH_STRATEGY_TOOL_NAME = "submit_outreach_strategy";
 
 const SYSTEM_PROMPT = `Du bist der Outreach Strategy Agent fuer SEO Ops Magic.
 
@@ -59,6 +62,65 @@ Antworte ausschliesslich als gueltiges JSON:
     }
   }
 }`;
+
+const OUTREACH_STRATEGY_TOOL: Tool = {
+  name: OUTREACH_STRATEGY_TOOL_NAME,
+  description: "Gibt Outreach-Strategie, Prospects und Sequenz strukturiert zurueck.",
+  input_schema: {
+    type: "object",
+    properties: {
+      strategy: {
+        type: "object",
+        additionalProperties: true,
+      },
+      prospects: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            domain: { type: "string" },
+            url: { type: "string" },
+            method: { type: "string" },
+            score: { type: "number" },
+            tier: { type: "string" },
+            reasoning: { type: "string" },
+            contactEmail: { type: "string" },
+            contactName: { type: "string" },
+            contactPage: { type: "string" },
+          },
+          required: ["domain"],
+          additionalProperties: true,
+        },
+      },
+      sequence: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          steps: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                dayOffset: { type: "number" },
+                subject: { type: "string" },
+                body: { type: "string" },
+              },
+              required: ["dayOffset", "subject", "body"],
+              additionalProperties: true,
+            },
+          },
+          variants: {
+            type: "object",
+            additionalProperties: { type: "string" },
+          },
+        },
+        additionalProperties: true,
+      },
+    },
+    required: ["strategy", "prospects", "sequence"],
+    additionalProperties: true,
+  },
+};
 
 type OutreachEventData = {
   campaignId: string;
@@ -124,14 +186,6 @@ function getWorkerSecret(): string {
 function safeStringify(value: unknown, maxLength: number): string {
   const text = JSON.stringify(value, null, 2) || "";
   return text.slice(0, maxLength);
-}
-
-function parseJsonObject(text: string): unknown {
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("Could not parse JSON response");
-  }
-  return JSON.parse(jsonMatch[0]) as unknown;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -316,6 +370,11 @@ export const outreachStrategy = inngest.createFunction(
         model: "claude-sonnet-4-6",
         max_tokens: 5000,
         system: SYSTEM_PROMPT,
+        tools: [OUTREACH_STRATEGY_TOOL],
+        tool_choice: {
+          type: "tool",
+          name: OUTREACH_STRATEGY_TOOL_NAME,
+        },
         messages: [
           {
             role: "user",
@@ -344,12 +403,9 @@ Gib nur JSON im geforderten Format zurueck.`,
       inputTokens = response.usage.input_tokens;
       outputTokens = response.usage.output_tokens;
 
-      const textContent = response.content.find((item) => item.type === "text");
-      if (!textContent || textContent.type !== "text") {
-        throw new Error("No text response from Anthropic");
-      }
-
-      return normalizeGeneratedStrategy(parseJsonObject(textContent.text));
+      return normalizeGeneratedStrategy(
+        extractToolInput(response.content, OUTREACH_STRATEGY_TOOL_NAME)
+      );
     });
 
     const saved = await step.run("save-strategy", async () => {
