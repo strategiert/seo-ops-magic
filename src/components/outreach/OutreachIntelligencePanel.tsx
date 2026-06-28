@@ -152,7 +152,8 @@ export function OutreachIntelligencePanel({
     () => getObservedCounts(analysis?.sourceCoverageJson),
     [analysis?.sourceCoverageJson]
   );
-  const isRunning = isStarting || analysis?.status === "running";
+  const isQueued = analysis?.status === "queued";
+  const isRunning = isStarting || isQueued || analysis?.status === "running";
   const hasCompletedAnalysis = analysis?.status === "completed";
 
   const handleStart = async () => {
@@ -229,11 +230,12 @@ export function OutreachIntelligencePanel({
           <div className="flex items-center gap-3 text-sm">
             <FileSearch className="h-4 w-4 text-muted-foreground" />
             <span>
-              Die KI sammelt Website-Struktur, vorhandene Inhalte und mögliche
-              Linkbait-Assets.
+              {isQueued
+                ? "Die Analyse steht in der Warteschlange und wird vom Outreach-Worker übernommen."
+                : "Die KI sammelt Website-Struktur, vorhandene Inhalte und mögliche Linkbait-Assets."}
             </span>
           </div>
-          <Progress value={42} />
+          <Progress value={isQueued ? 12 : 42} />
         </div>
       ) : analysis?.status === "failed" ? (
         <div className="flex flex-col gap-3 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">

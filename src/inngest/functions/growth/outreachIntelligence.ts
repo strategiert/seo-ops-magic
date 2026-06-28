@@ -60,6 +60,7 @@ Antworte ausschliesslich als gueltiges JSON:
 
 type OutreachIntelligenceEventData = {
   projectId: string;
+  analysisId?: string;
   userId: string;
   workspaceId: string;
   customerId: string;
@@ -558,14 +559,14 @@ export const outreachIntelligence = inngest.createFunction(
   },
   { event: "outreach/intelligence" },
   async ({ event, step }) => {
-    const { projectId, userId, workspaceId } =
+    const { projectId, userId, workspaceId, analysisId: incomingAnalysisId } =
       event.data as OutreachIntelligenceEventData;
     const workerSecret = getWorkerSecret();
     const inngestEventId = event.id || `outreach-intelligence-${Date.now()}`;
     const startTime = Date.now();
     let inputTokens = 0;
     let outputTokens = 0;
-    let analysisId: string | undefined;
+    let analysisId: string | undefined = incomingAnalysisId;
 
     try {
       await step.run("check-credits", async () => {
@@ -593,7 +594,19 @@ export const outreachIntelligence = inngest.createFunction(
         });
       });
 
-      analysisId = (await step.run("create-analysis-record", async () => {
+      analysisId = (await step.run("prepare-analysis-record", async () => {
+        if (incomingAnalysisId) {
+          await convex.action(
+            api.agents.outreachIntelligenceActions.markRunning,
+            {
+              analysisId: incomingAnalysisId,
+              workerSecret,
+            }
+          );
+
+          return incomingAnalysisId;
+        }
+
         return await convex.action(
           api.agents.outreachIntelligenceActions.createRunning,
           {

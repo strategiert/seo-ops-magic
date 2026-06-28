@@ -515,10 +515,18 @@ export const triggerOutreachIntelligence = action({
       throw new Error("INNGEST_EVENT_KEY not configured");
     }
 
+    const analysisId = await ctx.runMutation(
+      internal.tables.outreachIntelligence.createQueued,
+      {
+        projectId,
+      }
+    );
+
     const eventResult = await sendInngestEvent(
       AGENT_EVENTS[agentId],
       {
         projectId,
+        analysisId,
         userId: identity.subject,
         customerId: project.workspaceId,
         workspaceId: project.workspaceId,
@@ -527,11 +535,18 @@ export const triggerOutreachIntelligence = action({
     );
 
     if (!eventResult.success) {
+      await ctx.runMutation(internal.tables.outreachIntelligence.saveFailed, {
+        analysisId,
+        errorMessage:
+          eventResult.error || "Inngest konnte die Analyse nicht starten.",
+      });
+
       return { success: false, error: eventResult.error };
     }
 
     return {
       success: true,
+      analysisId,
       eventId: eventResult.eventId,
       message: "Outreach intelligence started",
       creditsRequired: requiredCredits,

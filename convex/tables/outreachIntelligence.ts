@@ -72,6 +72,39 @@ export const createRunning = internalMutation({
   },
 });
 
+export const createQueued = internalMutation({
+  args: {
+    projectId: v.id("projects"),
+  },
+  handler: async (ctx, { projectId }) => {
+    const now = Date.now();
+
+    return await ctx.db.insert("outreachAnalyses", {
+      projectId,
+      status: "queued",
+      summary:
+        "Die KI-Analyse wurde gestartet und wartet auf den Outreach-Worker.",
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const markRunning = internalMutation({
+  args: {
+    analysisId: v.id("outreachAnalyses"),
+  },
+  handler: async (ctx, { analysisId }) => {
+    await ctx.db.patch(analysisId, {
+      status: "running",
+      summary:
+        "Die KI sammelt Projektkontext, Sitemap und vorhandene Inhalte.",
+      errorMessage: undefined,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const getContext = internalQuery({
   args: {
     projectId: v.id("projects"),

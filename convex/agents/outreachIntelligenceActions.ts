@@ -35,6 +35,20 @@ export const createRunning = action({
   },
 });
 
+export const markRunning = action({
+  args: {
+    analysisId: v.string(),
+    workerSecret: v.string(),
+  },
+  handler: async (ctx, { analysisId, workerSecret }) => {
+    assertWorkerAuthorized(workerSecret);
+
+    await ctx.runMutation(internal.tables.outreachIntelligence.markRunning, {
+      analysisId: analysisId as Id<"outreachAnalyses">,
+    });
+  },
+});
+
 export const getContext = action({
   args: {
     projectId: v.string(),

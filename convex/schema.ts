@@ -496,7 +496,7 @@ export default defineSchema({
 
   outreachAnalyses: defineTable({
     projectId: v.id("projects"),
-    status: v.string(), // 'running' | 'completed' | 'failed'
+    status: v.string(), // 'queued' | 'running' | 'completed' | 'failed'
     summary: v.optional(v.string()),
     sourceCoverageJson: v.optional(v.any()),
     opportunitiesJson: v.optional(v.any()),
