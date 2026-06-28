@@ -17,6 +17,7 @@ export { wordpressPublisher } from "./functions/core/wordpressPublisher";
 // Growth Agents
 export { socialPostCreator } from "./functions/growth/socialCreator";
 export { adCopyWriter } from "./functions/growth/adCopyWriter";
+export { outreachStrategy } from "./functions/growth/outreachStrategy";
 
 // Enterprise Agents
 export { pressReleaseWriter } from "./functions/enterprise/pressRelease";
@@ -32,6 +33,7 @@ import { internalLinker } from "./functions/core/internalLinker";
 import { wordpressPublisher } from "./functions/core/wordpressPublisher";
 import { socialPostCreator } from "./functions/growth/socialCreator";
 import { adCopyWriter } from "./functions/growth/adCopyWriter";
+import { outreachStrategy } from "./functions/growth/outreachStrategy";
 import { pressReleaseWriter } from "./functions/enterprise/pressRelease";
 import { fullContentPipeline } from "./workflows/fullContentPipeline";
 
@@ -43,6 +45,7 @@ export const allAgentFunctions = [
   wordpressPublisher,
   socialPostCreator,
   adCopyWriter,
+  outreachStrategy,
   pressReleaseWriter,
   fullContentPipeline,
 ];
