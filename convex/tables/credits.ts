@@ -1,6 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
-import { Id } from "../_generated/dataModel";
+import {
+  DEFAULT_TIER,
+  TIERS,
+  createInitialCreditDocument,
+  getTierConfig,
+  normalizeTier,
+} from "../lib/creditTiers";
 
 /**
  * Credit System for AI Agent Usage
@@ -11,67 +17,6 @@ import { Id } from "../_generated/dataModel";
  * - Tier-based feature access (Core, Growth, Enterprise)
  * - Monthly credit reset logic
  */
-
-// Tier definitions with credits and enabled agents
-export const TIERS = {
-  free: {
-    monthlyAllowance: 50,
-    concurrencyLimit: 1,
-    enabledAgents: ["seo-writer"], // Only basic writing
-  },
-  core: {
-    monthlyAllowance: 500,
-    concurrencyLimit: 3,
-    enabledAgents: [
-      "seo-writer",
-      "html-designer",
-      "wp-publisher",
-      "internal-linker",
-    ],
-  },
-  growth: {
-    monthlyAllowance: 2000,
-    concurrencyLimit: 5,
-    enabledAgents: [
-      "seo-writer",
-      "html-designer",
-      "wp-publisher",
-      "internal-linker",
-      "social-creator",
-      "ad-copy-writer",
-      "newsletter",
-      "image-generator",
-    ],
-  },
-  enterprise: {
-    monthlyAllowance: 10000,
-    concurrencyLimit: 10,
-    enabledAgents: [
-      "seo-writer",
-      "html-designer",
-      "wp-publisher",
-      "internal-linker",
-      "social-creator",
-      "ad-copy-writer",
-      "newsletter",
-      "image-generator",
-      "press-release",
-      "outreach-intelligence",
-      "outreach-strategy",
-      "press-outreach",
-      "link-building",
-      "editorial-researcher",
-      "content-translator",
-      "video-creator",
-      "carousel-designer",
-      "company-social",
-      "employee-advocacy",
-      "linkbait-creator",
-    ],
-  },
-} as const;
-
-export type TierName = keyof typeof TIERS;
 
 // ============ Queries ============
 
@@ -102,8 +47,8 @@ export const getBalance = query({
       tier: credits.tier,
       monthlyAllowance: credits.monthlyAllowance,
       bonusCredits: credits.bonusCredits || 0,
-      enabledAgents: credits.enabledAgents || TIERS[credits.tier as TierName]?.enabledAgents || [],
-      concurrencyLimit: credits.concurrencyLimit || TIERS[credits.tier as TierName]?.concurrencyLimit || 1,
+      enabledAgents: credits.enabledAgents || getTierConfig(credits.tier).enabledAgents,
+      concurrencyLimit: credits.concurrencyLimit || getTierConfig(credits.tier).concurrencyLimit,
       resetDay: credits.resetDay,
       lastResetAt: credits.lastResetAt,
     };
@@ -135,7 +80,7 @@ export const checkCredits = query({
     }
 
     // Check tier access
-    const enabledAgents = credits.enabledAgents || TIERS[credits.tier as TierName]?.enabledAgents || [];
+    const enabledAgents = credits.enabledAgents || getTierConfig(credits.tier).enabledAgents;
     if (!enabledAgents.includes(agentId)) {
       return {
         allowed: false,
@@ -244,7 +189,7 @@ export const initialize = mutation({
     workspaceId: v.id("workspaces"),
     tier: v.optional(v.string()),
   },
-  handler: async (ctx, { workspaceId, tier = "free" }) => {
+  handler: async (ctx, { workspaceId, tier = DEFAULT_TIER }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Not authenticated");
@@ -260,18 +205,8 @@ export const initialize = mutation({
       return existing._id;
     }
 
-    const tierConfig = TIERS[tier as TierName] || TIERS.free;
-
     const creditId = await ctx.db.insert("credits", {
-      userId: identity.subject,
-      workspaceId,
-      balance: tierConfig.monthlyAllowance,
-      tier,
-      monthlyAllowance: tierConfig.monthlyAllowance,
-      resetDay: new Date().getDate(), // Reset on same day each month
-      lastResetAt: Date.now(),
-      enabledAgents: tierConfig.enabledAgents,
-      concurrencyLimit: tierConfig.concurrencyLimit,
+      ...createInitialCreditDocument(identity.subject, workspaceId, tier),
     });
 
     return creditId;
@@ -309,7 +244,7 @@ export const syncEnabledAgentsForWorkspace = mutation({
       throw new Error("No credit record found");
     }
 
-    const tierConfig = TIERS[credits.tier as TierName] || TIERS.free;
+    const tierConfig = getTierConfig(credits.tier);
 
     await ctx.db.patch(credits._id, {
       enabledAgents: tierConfig.enabledAgents,
@@ -477,7 +412,8 @@ export const upgradeTier = mutation({
       throw new Error("No credit record found");
     }
 
-    const tierConfig = TIERS[newTier as TierName];
+    const tierName = normalizeTier(newTier);
+    const tierConfig = TIERS[tierName];
 
     // Calculate prorated credits if upgrading mid-month
     const daysInMonth = 30;
@@ -486,7 +422,7 @@ export const upgradeTier = mutation({
     const proratedCredits = Math.floor((tierConfig.monthlyAllowance / daysInMonth) * daysRemaining);
 
     await ctx.db.patch(credits._id, {
-      tier: newTier,
+      tier: tierName,
       monthlyAllowance: tierConfig.monthlyAllowance,
       balance: credits.balance + proratedCredits,
       enabledAgents: tierConfig.enabledAgents,
@@ -495,7 +431,7 @@ export const upgradeTier = mutation({
 
     return {
       previousTier: credits.tier,
-      newTier,
+      newTier: tierName,
       proratedCredits,
       newBalance: credits.balance + proratedCredits,
     };

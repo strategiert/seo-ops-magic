@@ -1,5 +1,9 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
+import {
+  createInitialCreditDocument,
+  getTierConfig,
+} from "../lib/creditTiers";
 
 /**
  * Internal Convex Functions for Agent System
@@ -246,17 +250,46 @@ export const checkAndReserveCredits = internalMutation({
     requiredCredits: v.number(),
   },
   handler: async (ctx, { workspaceId, agentId, requiredCredits }) => {
-    const credits = await ctx.db
+    let credits = await ctx.db
       .query("credits")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
       .first();
 
     if (!credits) {
-      return { success: false, error: "No credit record found" };
+      const workspace = await ctx.db.get(workspaceId);
+      if (!workspace) {
+        return { success: false, error: "Workspace not found" };
+      }
+
+      const creditId = await ctx.db.insert(
+        "credits",
+        createInitialCreditDocument(workspace.ownerId, workspaceId)
+      );
+      credits = await ctx.db.get(creditId);
+      if (!credits) {
+        return { success: false, error: "Could not initialize credits" };
+      }
     }
 
     // Check tier access
-    const enabledAgents = credits.enabledAgents || [];
+    const tierConfig = getTierConfig(credits.tier);
+    const savedAgents = Array.isArray(credits.enabledAgents)
+      ? credits.enabledAgents
+      : [];
+    const enabledAgents = Array.from(
+      new Set([...tierConfig.enabledAgents, ...savedAgents])
+    );
+
+    if (
+      enabledAgents.length !== savedAgents.length ||
+      credits.concurrencyLimit !== tierConfig.concurrencyLimit
+    ) {
+      await ctx.db.patch(credits._id, {
+        enabledAgents,
+        concurrencyLimit: tierConfig.concurrencyLimit,
+      });
+    }
+
     if (Array.isArray(enabledAgents) && !enabledAgents.includes(agentId)) {
       return {
         success: false,
@@ -400,7 +433,7 @@ export const updateAgentJob = internalMutation({
       return null;
     }
 
-    const patchData: Record<string, any> = {};
+    const patchData: Record<string, unknown> = {};
 
     if (updates.status !== undefined) {
       patchData.status = updates.status;

@@ -1,6 +1,7 @@
 import { query, mutation, internalMutation } from "../_generated/server";
 import { v } from "convex/values";
 import { requireAuth, getAuthUserId } from "../auth";
+import { createInitialCreditDocument } from "../lib/creditTiers";
 
 /**
  * User profile queries and mutations
@@ -76,10 +77,11 @@ export const upsert = mutation({
       });
 
       // Also create a default workspace for the new user
-      await ctx.db.insert("workspaces", {
+      const workspaceId = await ctx.db.insert("workspaces", {
         name: "Mein Workspace",
         ownerId: userId,
       });
+      await ctx.db.insert("credits", createInitialCreditDocument(userId, workspaceId));
 
       return profileId;
     }
@@ -117,10 +119,14 @@ export const createFromWebhook = internalMutation({
     });
 
     // Create default workspace for the new user
-    await ctx.db.insert("workspaces", {
+    const workspaceId = await ctx.db.insert("workspaces", {
       name: "Mein Workspace",
       ownerId: args.clerkUserId,
     });
+    await ctx.db.insert(
+      "credits",
+      createInitialCreditDocument(args.clerkUserId, workspaceId)
+    );
 
     return profileId;
   },

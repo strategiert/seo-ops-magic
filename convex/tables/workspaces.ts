@@ -1,6 +1,7 @@
 import { internalQuery, query, mutation } from "../_generated/server";
 import { v } from "convex/values";
 import { requireAuth } from "../auth";
+import { createInitialCreditDocument } from "../lib/creditTiers";
 
 /**
  * Workspace queries and mutations
@@ -69,6 +70,8 @@ export const create = mutation({
       name,
       ownerId: userId,
     });
+
+    await ctx.db.insert("credits", createInitialCreditDocument(userId, workspaceId));
 
     return workspaceId;
   },

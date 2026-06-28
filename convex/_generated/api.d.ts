@@ -27,6 +27,7 @@ import type * as agents_routerTriggers from "../agents/routerTriggers.js";
 import type * as agents_triggers from "../agents/triggers.js";
 import type * as auth from "../auth.js";
 import type * as http from "../http.js";
+import type * as lib_creditTiers from "../lib/creditTiers.js";
 import type * as tables_articleDesignRecipes from "../tables/articleDesignRecipes.js";
 import type * as tables_articles from "../tables/articles.js";
 import type * as tables_bodycam from "../tables/bodycam.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   "agents/triggers": typeof agents_triggers;
   auth: typeof auth;
   http: typeof http;
+  "lib/creditTiers": typeof lib_creditTiers;
   "tables/articleDesignRecipes": typeof tables_articleDesignRecipes;
   "tables/articles": typeof tables_articles;
   "tables/bodycam": typeof tables_bodycam;
