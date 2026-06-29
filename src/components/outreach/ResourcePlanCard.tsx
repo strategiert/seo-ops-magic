@@ -17,6 +17,7 @@ const sourceKindLabels: Record<string, string> = {
   brief: "Brief",
   content_asset: "Asset",
   crawl_page: "Crawl-Seite",
+  existing_asset: "Vorhandenes Asset",
   html_export: "HTML",
   new_asset: "Neue Ressource",
   sitemap_url: "Sitemap",

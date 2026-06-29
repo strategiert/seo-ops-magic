@@ -10,6 +10,7 @@ const filesToCheck = [
   "src/components/outreach/OutreachIntelligencePanel.tsx",
   "src/components/outreach/ResourcePlanCard.tsx",
   "src/components/outreach/ResourcePlanDetailDialog.tsx",
+  "src/lib/outreach/assetInventory.ts",
   "src/lib/outreach/resourcePlans.ts",
 ];
 

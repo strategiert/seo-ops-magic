@@ -483,8 +483,9 @@ export const triggerOutreachStrategy = action({
 export const triggerOutreachIntelligence = action({
   args: {
     projectId: v.id("projects"),
+    analysisMode: v.optional(v.union(v.literal("full"), v.literal("new_ideas"))),
   },
-  handler: async (ctx, { projectId }) => {
+  handler: async (ctx, { projectId, analysisMode = "full" }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Not authenticated");
@@ -527,6 +528,7 @@ export const triggerOutreachIntelligence = action({
       {
         projectId,
         analysisId,
+        analysisMode,
         userId: identity.subject,
         customerId: project.workspaceId,
         workspaceId: project.workspaceId,

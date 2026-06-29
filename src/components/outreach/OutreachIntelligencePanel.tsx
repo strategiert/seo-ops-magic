@@ -6,6 +6,7 @@ import {
   Brain,
   CheckCircle2,
   FileSearch,
+  Lightbulb,
   Loader2,
   Sparkles,
   Target,
@@ -47,7 +48,11 @@ type ObservedCounts = {
   contentAssets?: number;
   dashboardPages?: number;
   sitemapUrls?: number;
+  existingAssets?: number;
+  ideaSeeds?: number;
 };
+
+type AnalysisMode = "full" | "new_ideas";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -153,6 +158,8 @@ function getObservedCounts(value: unknown): ObservedCounts {
     contentAssets: asNumber(value.observedCounts.contentAssets),
     dashboardPages: asNumber(value.observedCounts.dashboardPages),
     sitemapUrls: asNumber(value.observedCounts.sitemapUrls),
+    existingAssets: asNumber(value.observedCounts.existingAssets),
+    ideaSeeds: asNumber(value.observedCounts.ideaSeeds),
   };
 }
 
@@ -164,7 +171,77 @@ const sourceLabels: Array<[keyof ObservedCounts, string]> = [
   ["contentAssets", "Assets"],
   ["dashboardPages", "Dashboard"],
   ["sitemapUrls", "Sitemap"],
+  ["existingAssets", "Gefundene Assets"],
 ];
+
+const existingAssetSourceKinds = new Set([
+  "existing_asset",
+  "content_asset",
+  "crawl_link",
+]);
+
+function hasExistingAssetSignal(opportunity: Opportunity): boolean {
+  if (existingAssetSourceKinds.has(opportunity.sourceKind)) return true;
+  if (opportunity.sourceKind === "new_asset") return false;
+
+  return /rechner|kalkulator|tool|pdf|download|whitepaper|report|vorlage|checkliste|studie/i.test(
+    `${opportunity.resourcePlan.resourceType} ${opportunity.resourcePlan.publicName}`
+  );
+}
+
+function splitOpportunityGroups(opportunities: Opportunity[]) {
+  const existingAssets = opportunities.filter(hasExistingAssetSignal);
+  const newIdeas = opportunities.filter(
+    (opportunity) => opportunity.sourceKind === "new_asset"
+  );
+  const contentUpgrades = opportunities.filter(
+    (opportunity) =>
+      !existingAssets.includes(opportunity) && !newIdeas.includes(opportunity)
+  );
+
+  return { existingAssets, newIdeas, contentUpgrades };
+}
+
+function OpportunityGroup({
+  title,
+  description,
+  opportunities,
+  onOpen,
+}: {
+  title: string;
+  description: string;
+  opportunities: Opportunity[];
+  onOpen: (resourcePlan: ResourcePlan) => void;
+}) {
+  if (opportunities.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+        <Badge variant="secondary" className="w-fit rounded-md font-normal">
+          {opportunities.length}
+        </Badge>
+      </div>
+      <div className="divide-y rounded-md border">
+        {opportunities.slice(0, 6).map((opportunity, index) => (
+          <ResourcePlanCard
+            key={`${title}-${opportunity.title}-${index}`}
+            title={opportunity.title}
+            score={opportunity.score}
+            effort={opportunity.effort}
+            sourceKind={opportunity.sourceKind}
+            resourcePlan={opportunity.resourcePlan}
+            onOpen={() => onOpen(opportunity.resourcePlan)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function OutreachIntelligencePanel({
   projectId,
@@ -189,6 +266,10 @@ export function OutreachIntelligencePanel({
     () => normalizeOpportunities(analysis?.opportunitiesJson),
     [analysis?.opportunitiesJson]
   );
+  const groupedOpportunities = useMemo(
+    () => splitOpportunityGroups(opportunities),
+    [opportunities]
+  );
   const counts = useMemo(
     () => getObservedCounts(analysis?.sourceCoverageJson),
     [analysis?.sourceCoverageJson]
@@ -197,19 +278,24 @@ export function OutreachIntelligencePanel({
   const isRunning = isStarting || isQueued || analysis?.status === "running";
   const hasCompletedAnalysis = analysis?.status === "completed";
 
-  const handleStart = async () => {
+  const handleStart = async (analysisMode: AnalysisMode) => {
     setIsStarting(true);
     try {
-      const result = await triggerIntelligence({ projectId });
+      const result = await triggerIntelligence({ projectId, analysisMode });
 
       if (!result.success) {
         throw new Error(result.error || "Analyse konnte nicht gestartet werden.");
       }
 
       toast({
-        title: "KI-Analyse gestartet",
+        title:
+          analysisMode === "new_ideas"
+            ? "Ideenentwicklung gestartet"
+            : "KI-Analyse gestartet",
         description:
-          "Der Agent liest Projektkontext, Sitemap und Content und plant daraus verlinkbare Ressourcen.",
+          analysisMode === "new_ideas"
+            ? "Der Agent nutzt Brand-, Crawl- und Asset-Daten als Rohmaterial und entwickelt neue redaktionelle Ressourcen."
+            : "Der Agent liest Projektkontext, Sitemap, Content und vorhandene Assets und plant daraus verlinkbare Ressourcen.",
       });
     } catch (error) {
       console.error("Error starting outreach intelligence:", error);
@@ -247,7 +333,7 @@ export function OutreachIntelligencePanel({
 
           <div className="flex flex-wrap gap-2">
             <Button
-              onClick={handleStart}
+              onClick={() => handleStart("full")}
               disabled={isRunning}
               className="min-w-[178px]"
             >
@@ -257,6 +343,15 @@ export function OutreachIntelligencePanel({
                 <Sparkles className="mr-2 h-4 w-4" />
               )}
               {isRunning ? "Analysiere..." : "KI analysieren"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleStart("new_ideas")}
+              disabled={isRunning}
+              className="min-w-[196px]"
+            >
+              <Lightbulb className="mr-2 h-4 w-4" />
+              Neue Ideen entwickeln
             </Button>
             <Button variant="outline" onClick={onManualCreate}>
               <Wand2 className="mr-2 h-4 w-4" />
@@ -289,7 +384,7 @@ export function OutreachIntelligencePanel({
               </p>
             </div>
           </div>
-          <Button onClick={handleStart}>
+          <Button onClick={() => handleStart("full")}>
             <Sparkles className="mr-2 h-4 w-4" />
             Erneut starten
           </Button>
@@ -342,18 +437,25 @@ export function OutreachIntelligencePanel({
           )}
 
           {opportunities.length > 0 && (
-            <div className="divide-y rounded-md border">
-              {opportunities.slice(0, 5).map((opportunity, index) => (
-                <ResourcePlanCard
-                  key={`${opportunity.title}-${index}`}
-                  title={opportunity.title}
-                  score={opportunity.score}
-                  effort={opportunity.effort}
-                  sourceKind={opportunity.sourceKind}
-                  resourcePlan={opportunity.resourcePlan}
-                  onOpen={() => setSelectedPlan(opportunity.resourcePlan)}
-                />
-              ))}
+            <div className="space-y-6">
+              <OpportunityGroup
+                title="Vorhandene Assets"
+                description="Rechner, Downloads, Tools, Vorlagen und andere Fundstücke, die zur redaktionellen Ressource ausgebaut werden können."
+                opportunities={groupedOpportunities.existingAssets}
+                onOpen={setSelectedPlan}
+              />
+              <OpportunityGroup
+                title="Neue Ideen"
+                description="Ressourcen, die noch gebaut werden sollten, weil sie für Redaktionen oder Webmaster plausibler verlinkbar sind."
+                opportunities={groupedOpportunities.newIdeas}
+                onOpen={setSelectedPlan}
+              />
+              <OpportunityGroup
+                title="Content-Upgrades"
+                description="Vorhandene Artikel, Briefs oder Seiten, die als Ausgangspunkt für eine bessere Ressource dienen."
+                opportunities={groupedOpportunities.contentUpgrades}
+                onOpen={setSelectedPlan}
+              />
             </div>
           )}
 

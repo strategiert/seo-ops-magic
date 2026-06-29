@@ -46,4 +46,22 @@ assert.match(
   "Agent must pass the resource format taxonomy into the prompt context"
 );
 
+assert.match(
+  source,
+  /buildAssetInventory/,
+  "Agent must build an explicit inventory of existing calculators, downloads, tools, templates, and other assets"
+);
+
+assert.match(
+  source,
+  /Analysemodus/,
+  "Agent prompt context must expose whether it should run a full analysis or focus on new ideas"
+);
+
+assert.match(
+  source,
+  /Vorhandene Assets/,
+  "Agent prompt context must make existing lead magnets and asset candidates visible"
+);
+
 console.log("outreach-resource-plan-contract tests passed");

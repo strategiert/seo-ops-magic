@@ -8,6 +8,12 @@ import {
   normalizeResourcePlan,
 } from "../../../lib/outreach/resourcePlans.js";
 import type { ResourcePlan } from "../../../lib/outreach/resourcePlans.js";
+import { buildAssetInventory } from "../../../lib/outreach/assetInventory.js";
+import type {
+  AssetInventoryContext,
+  AssetInventorySitemap,
+  OutreachAssetInventory,
+} from "../../../lib/outreach/assetInventory.js";
 
 const AGENT_ID = "outreach-intelligence";
 const CREDITS_REQUIRED = AGENT_CREDITS[AGENT_ID];
@@ -20,14 +26,19 @@ const SYSTEM_PROMPT = [
   "",
   "Arbeite praktisch und kampagnenfähig:",
   "- Bewerte vorhandene Artikel, gecrawlte Seiten, HTML-Exports, Briefs, Assets, Sitemap-URLs und Brand-Daten.",
+  "- Verwende die Liste `Vorhandene Assets` als harte Signale: Rechner, Kalkulatoren, Tools, PDF-Downloads, Dokumente, Vorlagen, Whitepaper, Checklisten und Leadmagnete dürfen nicht übersehen werden.",
+  "- Wenn vorhandene Assets wie Rechner, Downloads oder Vorlagen existieren, plane zuerst, wie man diese entkommerzialisiert und als redaktionell empfehlbare Ressource ausbaut.",
   "- Denke zuerst aus Sicht fremder Leser, Redaktionen, Vereine, Pädagogen, Portale, Fachblogs, Webmaster und Journalisten.",
   "- Linkerati sind nicht zwingend Kunden. Baue Ressourcen für Menschen, die verlinken können oder sollen.",
   "- Plane verlinkbare Ressourcen wie Ratgeber, Broschüren, Checklisten, Experteninterviews, Gruppeninterviews, Analysen, Umfragen, Whitepaper, Rechner, Tools, Vorlagen, Glossare, Presse-Ressourcen, Notfallkarten oder interaktive Visualisierungen.",
+  "- Empfiehl Glossare/Lexika nur, wenn sie einen klaren redaktionellen Mehrwert haben, z.B. eigene Daten, sehr gute Definitionen, Beispiele, Downloads, Visualisierung oder ein Tool. Ein generisches Glossar ist fast nie die beste Linkchance.",
   "- Nenne die Ressource nie Linkbait, Linkmagnet oder Link-Magnet in publicName, claudeCodeBrief oder Outreach-Rohmaterial.",
   "- Intern darfst du Linkbait-Potenzial bewerten, aber extern nutzt du Begriffe wie Ressource, Ratgeber, Checkliste, Tool, Broschüre, PDF, Studie, Hilfsmittel oder weiterführende Information.",
   "- Prüfe die entkommerzialisierte Zone: keine Salesbotschaft, kein Warenkorb, keine aggressive Lead-Mechanik, keine Produktwerbung als Hauptzweck.",
   "- DACH-Linkaufbau braucht Tiefe, Seriosität, Quellen, Experten, echte Nützlichkeit und klare Leserhilfe.",
   "- Wenn vorhandener Content schwach ist, plane neue Assets. Erzeuge mindestens zwei `new_asset` Ideen.",
+  "- Im Analysemodus `new_ideas` erzeugst du mindestens vier neue `new_asset` Ideen. Vorhandene Assets dienen dort nur als Rohmaterial oder Inspiration.",
+  "- Im Analysemodus `full` erzeugst du eine Mischung aus vorhandenen Asset-Upgrades und neuen Ideen. Nutze `sourceKind: \"existing_asset\"`, wenn du ein gefundenes Asset aus der Inventur adaptierst.",
   "- Jede Opportunity braucht ein resourcePlan Objekt mit Formatentscheidung, Alternativen, Linkzielgruppen, Leserproblem, redaktionellem Wert, Linkgrund, Glaubwürdigkeitsplan, MVP-Scope, Claude-Code-Build-Brief und Outreach-Rohmaterial.",
   "- Gib konkrete Platzierungsideen auf fremden Seiten an, z.B. \"als weiterführende Information im Abschnitt X\".",
   "- Füll die Kampagne so weit wie möglich selbst aus. Keine Rückfragen, außer Daten fehlen komplett.",
@@ -171,10 +182,13 @@ const OUTREACH_INTELLIGENCE_TOOL: Tool = {
 type OutreachIntelligenceEventData = {
   projectId: string;
   analysisId?: string;
+  analysisMode?: OutreachAnalysisMode;
   userId: string;
   workspaceId: string;
   customerId: string;
 };
+
+type OutreachAnalysisMode = "full" | "new_ideas";
 
 type ContextProject = {
   _id?: string;
@@ -608,7 +622,9 @@ function normalizeStrategy(value: unknown, topOpportunity: GeneratedOpportunity)
 function normalizeGeneratedIntelligence(
   value: unknown,
   context: IntelligenceContext,
-  sitemap: SitemapDiscovery
+  sitemap: SitemapDiscovery,
+  assetInventory: OutreachAssetInventory,
+  analysisMode: OutreachAnalysisMode
 ): GeneratedIntelligence {
   if (!isRecord(value)) {
     throw new Error("Generated intelligence JSON must be an object");
@@ -656,7 +672,10 @@ function normalizeGeneratedIntelligence(
         contentAssets: context.contentAssets?.length ?? 0,
         dashboardPages: context.dashboardPages?.length ?? 0,
         sitemapUrls: sitemap.urls.length,
+        existingAssets: assetInventory.existingAssets.length,
+        ideaSeeds: assetInventory.ideaSeeds.length,
       },
+      analysisMode,
       sitemapErrors: sitemap.errors,
     },
     opportunities: normalizedOpportunities,
@@ -704,10 +723,23 @@ function extractCompetitors(brandProfile: Record<string, unknown> | null | undef
 
 function formatPromptContext(
   context: IntelligenceContext,
-  sitemap: SitemapDiscovery
+  sitemap: SitemapDiscovery,
+  assetInventory: OutreachAssetInventory,
+  analysisMode: OutreachAnalysisMode
 ): string {
   return `Projekt- und Content-Kontext:
 ${safeStringify(context, 62000)}
+
+Analysemodus:
+${analysisMode === "new_ideas"
+  ? "new_ideas — Entwickle primär neue redaktionelle Ressourcen. Vorhandene Assets und Seiten sind Rohmaterial, aber nicht die Grenze der Ideen."
+  : "full — Finde die besten Chancen aus vorhandenen Assets, Content-Upgrades und neuen Ressourcenideen."}
+
+Vorhandene Assets:
+${safeStringify(assetInventory.existingAssets, 14000)}
+
+Ideensamen für neue Ressourcen:
+${safeStringify(assetInventory.ideaSeeds, 8000)}
 
 Verfügbare Ressourcenformate:
 ${RESOURCE_FORMATS.map((format) => `- ${format}`).join("\n")}
@@ -716,6 +748,7 @@ Bewertungslogik:
 - Wähle pro Idee ein Hauptformat und zwei plausible Alternativen.
 - Bewerte Leser-Nutzen, Redaktions-Nutzen, Linkgrund, Glaubwürdigkeit, Aufwand, Evergreen-Faktor, DACH-Tauglichkeit und Outreach-Fit.
 - Plane mindestens zwei neue Ressourcen mit sourceKind "new_asset".
+- Wenn unter Vorhandene Assets Rechner, Tools, Downloads, Vorlagen oder Whitepaper mit Score >= 0.8 stehen, müssen diese vor generischen Glossaren geprüft und als eigene Opportunity berücksichtigt werden.
 - Öffentliche Namen und Pitches dürfen nicht Linkbait, Linkmagnet oder Link-Magnet enthalten.
 
 Live-Sitemap-Discovery:
@@ -740,7 +773,13 @@ export const outreachIntelligence = inngest.createFunction(
   },
   { event: "outreach/intelligence" },
   async ({ event, step }) => {
-    const { projectId, userId, workspaceId, analysisId: incomingAnalysisId } =
+    const {
+      projectId,
+      userId,
+      workspaceId,
+      analysisId: incomingAnalysisId,
+      analysisMode = "full",
+    } =
       event.data as OutreachIntelligenceEventData;
     const workerSecret = getWorkerSecret();
     const inngestEventId = event.id || `outreach-intelligence-${Date.now()}`;
@@ -770,7 +809,7 @@ export const outreachIntelligence = inngest.createFunction(
           projectId,
           agentId: AGENT_ID,
           eventType: "outreach/intelligence",
-          inputData: { projectId },
+          inputData: { projectId, analysisMode },
           creditsReserved: CREDITS_REQUIRED,
         });
       });
@@ -833,9 +872,17 @@ export const outreachIntelligence = inngest.createFunction(
       const generated = (await step.run("generate-outreach-intelligence", async () => {
         await convex.action(api.agents.actions.updateAgentJob, {
           inngestEventId,
-          currentStep: "Ressourcen-Chancen und Kampagne generieren",
+          currentStep:
+            analysisMode === "new_ideas"
+              ? "Neue Ressourcenideen entwickeln"
+              : "Ressourcen-Chancen und Kampagne generieren",
           progress: 50,
         });
+
+        const assetInventory = buildAssetInventory(
+          context as AssetInventoryContext,
+          sitemap as AssetInventorySitemap
+        );
 
         const anthropic = new Anthropic({
           apiKey: process.env.ANTHROPIC_API_KEY,
@@ -853,7 +900,12 @@ export const outreachIntelligence = inngest.createFunction(
           messages: [
             {
               role: "user",
-              content: formatPromptContext(context, sitemap),
+              content: formatPromptContext(
+                context,
+                sitemap,
+                assetInventory,
+                analysisMode
+              ),
             },
           ],
         });
@@ -864,7 +916,9 @@ export const outreachIntelligence = inngest.createFunction(
         return normalizeGeneratedIntelligence(
           extractToolInput(response.content, OUTREACH_INTELLIGENCE_TOOL_NAME),
           context,
-          sitemap
+          sitemap,
+          assetInventory,
+          analysisMode
         );
       })) as GeneratedIntelligence;
 
