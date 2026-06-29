@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAction, useQuery } from "convex/react";
 import {
   AlertCircle,
@@ -15,6 +15,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { ResourcePlanCard } from "@/components/outreach/ResourcePlanCard";
+import { ResourcePlanDetailDialog } from "@/components/outreach/ResourcePlanDetailDialog";
+import {
+  normalizeResourcePlan,
+  sanitizePublicResourceText,
+  type ResourcePlan,
+} from "@/lib/outreach/resourcePlans";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -26,17 +33,10 @@ type OutreachIntelligencePanelProps = {
 
 type Opportunity = {
   title: string;
-  contentType: string;
   sourceKind: string;
-  sourceUrl?: string;
   score: number;
   effort: string;
-  linkabilityReasons: string[];
-  audiences: string[];
-  recommendedAssetUpgrade: string;
-  outreachAngles: string[];
-  searchOperators: string[];
-  campaignName: string;
+  resourcePlan: ResourcePlan;
 };
 
 type ObservedCounts = {
@@ -71,25 +71,65 @@ function asStringArray(value: unknown): string[] {
     .filter((item): item is string => Boolean(item));
 }
 
+const legacyResourceTypeLabels: Record<string, string> = {
+  calculator: "Rechner / Kalkulator",
+  checklist: "Checkliste",
+  comparison: "Vergleichstest",
+  faq: "FAQ",
+  glossary: "Lexikon / Glossar",
+  guide: "Ratgeber / Broschüre",
+  infographic: "Interaktive Grafik / Diagramm",
+  list: "Ressourcenliste",
+  report: "Report / Whitepaper",
+  resource_list: "Ressourcenliste",
+  study: "Studie / Datenauswertung",
+  tool: "Kostenloses Tool",
+};
+
+function buildLegacyResourcePlanInput(
+  value: Record<string, unknown>,
+  title: string
+): Record<string, unknown> {
+  const contentType = asString(value.contentType);
+  const recommendedAssetUpgrade = asString(value.recommendedAssetUpgrade) || "";
+  const outreachAngles = asStringArray(value.outreachAngles);
+  const resourceType = contentType
+    ? legacyResourceTypeLabels[contentType]
+    : undefined;
+
+  return {
+    title,
+    publicName: title,
+    ...(resourceType ? { resourceType } : {}),
+    editorialValue: recommendedAssetUpgrade,
+    linkAudiences: asStringArray(value.audiences),
+    linkReason: asStringArray(value.linkabilityReasons).join("; "),
+    readerProblem: recommendedAssetUpgrade,
+    outreachRawMaterial: {
+      pitchAngle: outreachAngles[0] || "",
+      searchOperators: asStringArray(value.searchOperators),
+    },
+  };
+}
+
 function normalizeOpportunity(value: unknown): Opportunity | null {
   if (!isRecord(value)) return null;
 
   const title = asString(value.title);
   if (!title) return null;
+  const resourcePlan = normalizeResourcePlan(
+    isRecord(value.resourcePlan)
+      ? value.resourcePlan
+      : buildLegacyResourcePlanInput(value, title),
+    title
+  );
 
   return {
     title,
-    contentType: asString(value.contentType) || "other",
     sourceKind: asString(value.sourceKind) || "new_asset",
-    sourceUrl: asString(value.sourceUrl),
     score: asNumber(value.score) ?? 0,
     effort: asString(value.effort) || "medium",
-    linkabilityReasons: asStringArray(value.linkabilityReasons),
-    audiences: asStringArray(value.audiences),
-    recommendedAssetUpgrade: asString(value.recommendedAssetUpgrade) || "",
-    outreachAngles: asStringArray(value.outreachAngles),
-    searchOperators: asStringArray(value.searchOperators),
-    campaignName: asString(value.campaignName) || `${title} Outreach`,
+    resourcePlan,
   };
 }
 
@@ -116,10 +156,6 @@ function getObservedCounts(value: unknown): ObservedCounts {
   };
 }
 
-function formatScore(score: number): string {
-  return `${Math.round(Math.max(0, Math.min(score, 1)) * 100)}%`;
-}
-
 const sourceLabels: Array<[keyof ObservedCounts, string]> = [
   ["crawlPages", "Crawl"],
   ["articles", "Artikel"],
@@ -137,12 +173,17 @@ export function OutreachIntelligencePanel({
 }: OutreachIntelligencePanelProps) {
   const { toast } = useToast();
   const [isStarting, setIsStarting] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<ResourcePlan | null>(null);
   const triggerIntelligence = useAction(
     api.agents.triggers.triggerOutreachIntelligence
   );
   const analysis = useQuery(api.tables.outreachIntelligence.latestByProject, {
     projectId,
   });
+
+  useEffect(() => {
+    setSelectedPlan(null);
+  }, [projectId, analysis?._id]);
 
   const opportunities = useMemo(
     () => normalizeOpportunities(analysis?.opportunitiesJson),
@@ -168,7 +209,7 @@ export function OutreachIntelligencePanel({
       toast({
         title: "KI-Analyse gestartet",
         description:
-          "Der Agent liest Projektkontext, Sitemap und Content und legt danach eine Kampagne an.",
+          "Der Agent liest Projektkontext, Sitemap und Content und plant daraus verlinkbare Ressourcen.",
       });
     } catch (error) {
       console.error("Error starting outreach intelligence:", error);
@@ -197,8 +238,8 @@ export function OutreachIntelligencePanel({
               <div>
                 <h2 className="text-lg font-semibold">KI Outreach Intelligence</h2>
                 <p className="text-sm text-muted-foreground">
-                  Analysiert Brand-Profil, Crawl, Content, Integrationen und Sitemap
-                  und erzeugt daraus eine fertige Outreach-Kampagne.
+                  Analysiert Brand-Profil, Crawl, Content und Sitemap und plant
+                  verlinkbare Ressourcen für Redaktionen, Blogs und Webmaster.
                 </p>
               </div>
             </div>
@@ -232,7 +273,7 @@ export function OutreachIntelligencePanel({
             <span>
               {isQueued
                 ? "Die Analyse steht in der Warteschlange und wird vom Outreach-Worker übernommen."
-                : "Die KI sammelt Website-Struktur, vorhandene Inhalte und mögliche Linkbait-Assets."}
+                : "Die KI sammelt Website-Struktur, vorhandene Inhalte und mögliche redaktionelle Ressourcen."}
             </span>
           </div>
           <Progress value={isQueued ? 12 : 42} />
@@ -263,7 +304,7 @@ export function OutreachIntelligencePanel({
                   Letzte KI-Auswertung
                 </div>
                 <p className="text-sm leading-6 text-muted-foreground">
-                  {analysis.summary}
+                  {sanitizePublicResourceText(analysis.summary || "")}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {sourceLabels.map(([key, label]) => (
@@ -294,7 +335,7 @@ export function OutreachIntelligencePanel({
                 <FileSearch className="h-4 w-4" />
                 <span>
                   Noch keine KI-Auswertung. Starte die Analyse, damit die KI
-                  Linkbait-Potenziale aus vorhandenen Daten findet.
+                  verlinkbare Ressourcen aus vorhandenen Daten und neuen Asset-Ideen plant.
                 </span>
               </div>
             </div>
@@ -302,76 +343,16 @@ export function OutreachIntelligencePanel({
 
           {opportunities.length > 0 && (
             <div className="divide-y rounded-md border">
-              {opportunities.slice(0, 4).map((opportunity, index) => (
-                <div key={`${opportunity.title}-${index}`} className="p-4">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge className="rounded-md">
-                          {formatScore(opportunity.score)}
-                        </Badge>
-                        <Badge variant="outline" className="rounded-md">
-                          {opportunity.contentType}
-                        </Badge>
-                        <Badge variant="outline" className="rounded-md">
-                          {opportunity.sourceKind}
-                        </Badge>
-                        <Badge variant="secondary" className="rounded-md">
-                          Aufwand: {opportunity.effort}
-                        </Badge>
-                      </div>
-                      <h3 className="font-semibold">{opportunity.title}</h3>
-                      {opportunity.recommendedAssetUpgrade && (
-                        <p className="text-sm leading-6 text-muted-foreground">
-                          {opportunity.recommendedAssetUpgrade}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-3">
-                    <div>
-                      <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
-                        Warum linkbar
-                      </p>
-                      <ul className="space-y-1 text-sm">
-                        {opportunity.linkabilityReasons.slice(0, 3).map((reason) => (
-                          <li key={reason} className="leading-5">
-                            {reason}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
-                        Zielgruppen
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {opportunity.audiences.slice(0, 5).map((audience) => (
-                          <Badge
-                            key={audience}
-                            variant="secondary"
-                            className="rounded-md font-normal"
-                          >
-                            {audience}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
-                        Outreach-Winkel
-                      </p>
-                      <ul className="space-y-1 text-sm">
-                        {opportunity.outreachAngles.slice(0, 3).map((angle) => (
-                          <li key={angle} className="leading-5">
-                            {angle}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
+              {opportunities.slice(0, 5).map((opportunity, index) => (
+                <ResourcePlanCard
+                  key={`${opportunity.title}-${index}`}
+                  title={opportunity.title}
+                  score={opportunity.score}
+                  effort={opportunity.effort}
+                  sourceKind={opportunity.sourceKind}
+                  resourcePlan={opportunity.resourcePlan}
+                  onOpen={() => setSelectedPlan(opportunity.resourcePlan)}
+                />
               ))}
             </div>
           )}
@@ -387,6 +368,13 @@ export function OutreachIntelligencePanel({
           )}
         </div>
       )}
+      <ResourcePlanDetailDialog
+        open={Boolean(selectedPlan)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedPlan(null);
+        }}
+        resourcePlan={selectedPlan}
+      />
     </section>
   );
 }

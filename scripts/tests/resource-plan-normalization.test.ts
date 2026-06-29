@@ -4,6 +4,7 @@ import {
   formatResourcePlanBrief,
   hasForbiddenPublicTerm,
   normalizeResourcePlan,
+  sanitizePublicResourceText,
 } from "../../src/lib/outreach/resourcePlans";
 
 const requiredFormats = [
@@ -36,6 +37,7 @@ assert.equal(hasForbiddenPublicTerm("link bait"), true);
 assert.equal(hasForbiddenPublicTerm("Linkmagnet"), true);
 assert.equal(hasForbiddenPublicTerm("Link-Magnet"), true);
 assert.equal(hasForbiddenPublicTerm("Kostenlose Ressource"), false);
+assert.equal(sanitizePublicResourceText("Linkbait"), "Ressource");
 
 const plan = normalizeResourcePlan(
   {
