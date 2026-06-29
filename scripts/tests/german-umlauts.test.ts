@@ -7,6 +7,10 @@ const filesToCheck = [
   "src/components/outreach/SequenceEditor.tsx",
   "src/components/outreach/CreateCampaignDialog.tsx",
   "src/components/outreach/ProspectImportDialog.tsx",
+  "src/components/outreach/OutreachIntelligencePanel.tsx",
+  "src/components/outreach/ResourcePlanCard.tsx",
+  "src/components/outreach/ResourcePlanDetailDialog.tsx",
+  "src/lib/outreach/resourcePlans.ts",
 ];
 
 const asciiUmlautWords = [
