@@ -1,53 +1,113 @@
-# Outreach-Modul — Verbesserungsplan (Council-Synthese)
+# Outreach Mission Control
 
-Stand: 2026-06-30 · Quelle: Code-Review-Council (Architect, Engineer, User-Advocate, Security, Devil's Advocate) + Overview-Map.
-Modul von Codex gebaut. Ziel: Security + Billing härten, Bugs fixen, refaktorieren, ehrliche Produkt-Grenzen.
+Stand: 2026-06-30
 
-## P0 — Security + Billing (sofort, kritisch)
+Quelle: Code-Review-Council (Architect, Engineer, User-Advocate, Security, Devil's Advocate), anschliessende Umsetzung auf `main`, Tests und Build.
 
-1. **Credit-Refund + Retry-Idempotenz (BILLING-BUG, echtes Geld).** `checkAndReserveCredits` (convex/agents/internal.ts:309) zieht balance sofort ab; `refundCredits` (internal.ts:362) wird NIE aufgerufen; `check-credits` ist erster `step.run` → Inngest `retries:2` bucht 2-3× ab. → Reserve idempotent pro `inngestEventId` (Flag im agentJob prüfen), `refundCredits` in jedem Fehlerpfad. Beide Inngest-Fns. **S-M**
-2. **outreachStrategy try/catch + mark-failed.** outreachStrategy.ts:306-471 hat KEIN try/catch → Job bleibt „running"-Zombie, Credits verbrannt. → Body in try/catch wie outreachIntelligence, im catch agentJob='failed' + refund + rethrow. **S**
-3. **Cross-Tenant-Exfiltration: Owner-Check in internalQueries fehlt.** getContext (outreachIntelligence.ts:108), getCampaignContext (outreachInternal.ts:64) laden Projekt/Brand/GSC/Kontakt nur per ID, kein ownerId-Abgleich. Write-Actions (saveStrategyOutput/saveCompleted/createGeneratedCampaign) ebenso. → ownerId/workspace-Scope als Pflicht-Arg durch die Action durchreichen + in internalQuery gegen workspace.ownerId prüfen (return null/throw). **M**
-4. **Worker-Secret härten.** outreachActions.ts:6 / outreachIntelligenceActions.ts:8: `OUTREACH_WORKER_SECRET || INNGEST_EVENT_KEY`-Fallback + non-constant-time `!==`. → dediziertes Secret OHNE Fallback erzwingen + `crypto.timingSafeEqual` (Längen-Guard). Optional: Inngest-Request-Signatur. **S**
-5. **bodycamPages-Tenant-Leak.** getContext (outreachIntelligence.ts:164) `ctx.db.query("bodycamPages").collect()` unscoped → fremde Projektdaten ins LLM-Prompt. → projektbezogen filtern oder entfernen (gehört nicht in Outreach-Kontext). **S**
-6. **SSRF im Sitemap-Fetch.** discoverSitemap (outreachIntelligence.ts:390) fetcht user-kontrollierte domain/wpUrl ohne private/metadata-IP-Block. → vor jedem fetch (auch nach Redirect, `redirect:"manual"`) Hostname auflösen, 127.0.0.1/169.254.169.254/10./172.16./192.168./localhost blocken, nur http(s) + Port 80/443. **M**
+## Aktueller Status
 
-## P1 — Bugs + Fehlerbehandlung
+Das Outreach-Modul ist nach dem Council-Review auf `main` bereinigt und gehaertet. P0-P3 aus dem Verbesserungsplan sind umgesetzt und gepusht. Das Modul kann jetzt als Strategie-, Ressourcen- und Kampagnen-Generator weiterentwickelt werden; der echte Versand-Pfad ist bewusst noch nicht gebaut.
 
-7. **Halluzinierte Kontakte als „found" gespeichert.** LLM erfindet domain/contactEmail/contactName (keine SERP/Verify-Quelle), createProspectsBatch schreibt als `contactStatus:"found"`. → LLM-E-Mails als `unverified` markieren (nicht „found"), im UI als „KI-Vorschlag, unverifiziert" kennzeichnen. (Produktentscheidung — siehe unten.) **S**
-8. **jobId/inngestEventId-Divergenz in outreachStrategy** (`event.id || Date.now()` mehrfach neu berechnet, Z.327/349/435) → einmal oben berechnen, überall nutzen. **S**
-9. **Qualitäts-Gate.** normalize* erzwingt immer ≥1 fallbackOpportunity → Garbage immer „ready". → wenn nur Fallback (0 echte LLM-Opportunities): Status „needs_review" statt „ready"; bei Fallback ggf. reduzierte/keine Credits. **S-M**
-10. **updateGoal verifiedAt** bei Wechsel weg-von-verified explizit leeren (separater Patch, nicht via stripUndefined), damit Re-Verifizierung frischen Timestamp bekommt. **S**
+## Erledigt
 
-## P2 — Refactoring + Architektur + Tests
+### P0 - Security, Billing, Tenant Scope
 
-11. **Kanonisches `requireProjectAccess`** (auth.ts:63) nutzen; 4 Kopien von `verifyProjectAccess` + `stripUndefined`-Dupes entfernen → `convex/lib/`. **M**
-12. **Enum-Validierung.** campaignType/status/goalType/tier/method/rel/approvalStatus als `v.union(v.literal(...))` statt freier `v.string()`. **M**
-13. **Tote `outreachAssets`-Tabelle** entfernen (nie geschrieben) + aus getCampaignBundle. **S**
-14. **Pagination.** listCampaigns + getCampaignBundle (5× `.collect()`) → `paginate()`; latestByProject → Index `.order("desc").first()` statt collect+JS-sort. **M**
-15. **test-Script + Verhaltenstests.** `"test"` in package.json (tsx --test/Vitest) + CI; 2/3 grep-over-source-Tests durch echte Unit-Tests (normalize*, dedup, credit-Logik) ersetzen. **M**
+- Credit-Reservierung und Refund sind retry-idempotent ueber `inngestEventId`/Reservation-Key abgesichert.
+- Fehlerpfade in `outreachStrategy` und `outreachIntelligence` markieren Jobs als `failed` und erstatten reservierte Credits.
+- Worker-Queries und Worker-Writes pruefen `userId` + `workspaceId`, damit keine Cross-Tenant-Daten in Prompts oder Writes rutschen.
+- `bodycamPages` wurde aus dem Outreach-Intelligence-Kontext entfernt.
+- Sitemap-/Website-Fetch laeuft ueber SSRF-Guard (`src/inngest/lib/safeHttp.ts`): nur http/https, Port 80/443, keine privaten/reservierten IPs, keine stillen Redirects.
+- Worker-Secret-Vergleich ist constant-time.
 
-## P3 — UX + Produkt
+Commits: `01650e9`, `2633d4e`
 
-16. **Strategie-Job-Status-Polling** auf OutreachCampaignDetail (wie IntelligencePanel) + Button disabled bis terminal. **M**
-17. **Fehler-Toasts** bei handleProspectStatus/handleCreateGoal (+ Pflichtfeld-Validierung Ziel). **S**
-18. **CSV-Import:** Spalten-Vorschau, Header-Erkennung, contactName lesen, ungültige Zeilen melden. **M**
-19. **Leerer Strategie-Tab:** EmptyState mit „Strategie generieren"-CTA + Import-Hinweis. **S**
-20. **URL/rel-Validierung** (Placement/Goal): URL-Format prüfen, rel als Select (dofollow/nofollow/sponsored). **S**
+### P1 - Qualitaet und Fehlerverhalten
 
-## Produkt-/Rechts-Entscheidungen (brauchen Klaus, NICHT still entscheiden)
+- KI-generierte Kontaktdaten werden als `unverified` gespeichert und sind damit nicht versandfaehig.
+- Fallback-Kampagnen werden als `needs_review` markiert, nicht als fertige `ready`-Kampagnen.
+- `outreachStrategy` nutzt eine konsistente Event-/Job-ID.
+- `updateGoal` setzt `verifiedAt` sauber zurueck, wenn ein Ziel nicht mehr verifiziert ist.
 
-- **Kein Versand-Pfad existiert.** Sequenzen werden erstellt/„freigegeben", aber nie gesendet (kein resend/smtp/sendgrid, keine outbox-Tabelle). Entscheidung: (a) ehrlich als „Strategie-/Sequenz-Generator" labeln (Versand extern), oder (b) Versand bauen (Modul-Erweiterung).
-- **DSGVO/UWG:** Bei jedem künftigen Versand zwingend Rechtsgrundlage, Opt-out/Abmelde, Impressum, Suppression-Enforcement. Aktuell `suppressed` totes Feld. Kaltakquise-Mail in DE per §7 UWG kritisch.
-- **DA-Scores/Tiers** sind LLM-Schätzungen (keine Ahrefs-Quelle). Als „KI-Schätzung" kennzeichnen oder echte API anbinden.
-- **Halluzinierte Kontaktdaten:** vor Versand zwingend verifizieren.
+Commit: `6a6915f`
 
-## Entscheidungen (Klaus, 2026-06-30)
-- **Ausführung in FOKUS-Session** (in headless-seo, `npx convex dev` + Inngest lokal, testbar vor Prod-Deploy) — nicht aus gesättigtem Kontext.
-- **Versand-Pfad WIRD gebaut** (großes Modul). Damit zwingend mit-bauen: echter E-Mail-Versand (Resend/SMTP) + Scheduling/Outbox-Tabelle + Prospect-Status-Übergang „contacted" + **Suppression-Enforcement** + **Consent/Opt-out/Abmelde-Link + Impressum** + **Kontakt-Verifikation** (LLM-erfundene E-Mails NICHT als „found"/versandfähig, erst verifizieren). DE-Recht: §7 UWG/DSGVO Opt-in — Versand nur an rechtlich zulässige Empfänger; Rechtsgrundlage je Outreach-Typ vorab klären. DA-Scores als „KI-Schätzung" labeln bis echte API.
+### P2 - Architektur und Tests
 
-## Bereits erledigt (commit 01650e9)
-- Constant-time worker-secret compare (`convex/lib/constantTimeEqual.ts`) — Timing-Leak gefixt; INNGEST_EVENT_KEY-Fallback noch drin (TODO P0-4: erst `OUTREACH_WORKER_SECRET` in Prod-Env setzen, dann Fallback raus).
+- Outreach-Validierungen sind zentralisiert (`convex/lib/outreachValidators.ts`).
+- Gemeinsames `stripUndefined` liegt in `convex/lib/objects.ts`.
+- Outreach nutzt das kanonische `requireProjectAccess`.
+- Tote `outreachAssets`-Tabelle und tote Bundle-Abfrage wurden entfernt.
+- `latestByProject` nutzt den Index statt collect+Sort.
+- `npm test` laeuft ueber `scripts/tests/run-all.ts`.
 
-## Ausführungs-Reihenfolge (Fokus-Session)
-P0 (1-6, inkl. Billing-Refund-Idempotenz via onFailure, Owner-Checks, Fallback-Entfernung nach Env-Setup, SSRF, bodycam-Scope) → `convex dev`/Inngest-Test → Commit · P1 (7-10) → Test → Commit · P2 (11-15) → Test → Commit · P3 (16-20) → Test → Commit · dann **Modul 1b Versand-Pfad** (Outbox+Send+Suppression+Consent+Verifikation) · dann **Modul 2 (Social)** · 2. Council-Loop über den finalen Code · Modul-2-Test · Report.
+Commit: `840cb60`
+
+### P3 - UX und Produktklarheit
+
+- Campaign-Detail pollt den Strategie-Job-Status ueber `getJobStatusByEventId`.
+- Strategie-Button ist waehrend queued/running gesperrt.
+- Fehler-Toasts und Pflichtfeldvalidierung fuer Prospect-Status, Goals und Placements sind drin.
+- CSV-Import erkennt Header, liest `contactName`, zeigt Preview und meldet ungueltige Zeilen.
+- Strategie-Tab hat einen echten Empty-State mit CTA.
+- Placement/Goal validieren URL-Format; `rel` ist ein Select (`dofollow`, `nofollow`, `sponsored`, `ugc`).
+
+Commit: `e32ec7f`
+
+### Ressourcen-Planer / Linkbait-Ideen
+
+- Outreach Intelligence plant jetzt redaktionell verlinkbare Ressourcen statt nur vorhandene Seiten zu verwerten.
+- Neue Ideen sind explizit moeglich (`new_ideas`/`full`), vorhandene Assets und Content dienen als Rohmaterial.
+- Unterstuetzte Formate: Ratgeber, Broschuere, Checkliste, Experteninterview, Gruppeninterview, Analyse, Umfrage, Whitepaper, Rechner, Tool, Vorlage, Glossar, Presse-Ressource, Notfallkarte, interaktive Visualisierung und Ressourcenliste.
+- Ressourcenplaene haben Bewertung, Zielgruppen, Outreach-Rohmaterial und ein Claude-Code-Briefing.
+- UI-Komponenten fuer Ressourcenplan-Karten und Detaildialog sind vorhanden.
+
+Commits: `8a595d8` bis `1944406`
+
+## Verifiziert
+
+- `npm test` erfolgreich.
+- `npm run build` erfolgreich.
+- `main` ist sauber und synchron mit `origin/main`.
+
+## Offene Blocker / Risiken
+
+1. **Prod-Secret noch nicht finalisiert.** In Vercel/Convex wurde kein `OUTREACH_WORKER_SECRET` gefunden. Der Code behaelt deshalb vorerst den expliziten Fallback auf `INNGEST_EVENT_KEY`, damit Live nicht bricht. Naechster Security-Schritt: `OUTREACH_WORKER_SECRET` in Vercel + Convex setzen, dann Fallback entfernen.
+2. **Convex Deploy/Codegen nicht lokal verifiziert.** Der lokale Account hatte keinen Zugriff auf das ausgewaehlte Convex-Projekt. Tests/Build sind gruen, aber Convex-Deploy braucht Zugriff oder muss ueber die Live-Pipeline laufen.
+3. **Echter Versand fehlt bewusst.** Sequenzen/Kampagnen koennen geplant werden, aber es gibt noch keine Outbox, keinen Mailversand, keine Mailbox-Rotation, kein Reply-Management und kein Warm-up.
+4. **DA/Tier bleiben KI-Schaetzungen.** Solange keine echte Datenquelle angebunden ist, muessen Scores als KI-Einschaetzung behandelt werden.
+
+## Naechste Reihenfolge
+
+### Modul 1b - Versand-Pfad
+
+Ziel: aus Strategie und Sequenzentwurf einen kontrollierten, rechtlich und technisch sauberen Versandprozess bauen.
+
+- Outbox-Tabelle mit Scheduling, Status, Retry, Error, Provider-Message-ID.
+- Versand-Provider-Abstraktion zuerst generisch, dann z.B. SMTP/Resend als Adapter.
+- Suppression-Liste technisch erzwingen.
+- Consent-/Rechtsgrundlage pro Outreach-Typ speichern.
+- Opt-out/Abmelde-Link + Impressum in jede Versandmail.
+- Kontakt-Verifikation vor Versand erzwingen; `unverified` darf nicht gesendet werden.
+- Prospect-Status-Uebergang nach Versand (`contacted`, `replied`, `bounced`, `suppressed`).
+- Audit-Log fuer Versandereignisse.
+
+### Modul 1c - Deliverability / Warm-up
+
+Ziel: Woodpecker-artige Kernfunktionen selbst besitzen, ohne externes Tool als Betriebssystem.
+
+- Mailbox-Identitaeten, Tageslimits, Ramp-up, Cooldowns.
+- Rotation nach Kampagne, Projekt und Domain.
+- Bounce-/Reply-Signale auswerten.
+- Spam-Risiko-Regeln vor Versand.
+- Domain-/Mailbox-Gesundheit als Dashboard.
+
+### Modul 2 - Social / PR / Sales als gleiche Outreach-Basis
+
+Ziel: Outreach bleibt generisch. SEO-Linkbuilding ist ein Playbook, nicht das Datenmodell.
+
+- Kampagnentypen fuer PR, Sales, Partnerships, Seeding.
+- Andere Prompt-Profile und Sequenz-Tonality pro Use Case.
+- Ressourcen-/Leadmagnet-Planer auch fuer LinkedIn/Sales/PR nutzbar machen.
+
+### 2. Council-Loop
+
+Nach Modul 1b/1c: erneuter Review mit Fokus auf Billing, Recht/Compliance, Deliverability, Tenant-Isolation, UX und echte End-to-End-Testbarkeit.
