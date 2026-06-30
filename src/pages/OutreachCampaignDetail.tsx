@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Loader2, Plus, Upload } from "lucide-react";
+import { Loader2, Plus, Send, Upload } from "lucide-react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { EmptyState } from "@/components/data-state/EmptyState";
 import { OutreachStats } from "@/components/outreach/OutreachStats";
 import { ProspectImportDialog } from "@/components/outreach/ProspectImportDialog";
 import { ProspectStatusBadge } from "@/components/outreach/ProspectStatusBadge";
@@ -43,6 +44,19 @@ const prospectStatuses = [
   "suppressed",
 ];
 
+const relOptions = ["dofollow", "nofollow", "sponsored", "ugc"];
+
+function isValidHttpUrl(value: string): boolean {
+  if (!value.trim()) return true;
+
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -53,12 +67,32 @@ function asStringArray(value: unknown): string[] {
     : [];
 }
 
-function StrategyPanel({ strategyJson }: { strategyJson: unknown }) {
+function StrategyPanel({
+  strategyJson,
+  onGenerate,
+  disabled,
+}: {
+  strategyJson: unknown;
+  onGenerate: () => void;
+  disabled: boolean;
+}) {
   if (!isRecord(strategyJson)) {
     return (
-      <div className="border rounded-lg p-6 text-muted-foreground">
-        Noch keine Strategie generiert.
-      </div>
+      <EmptyState
+        icon={Send}
+        title="Noch keine Strategie generiert"
+        description="Starte den Agenten oder importiere Prospects als Grundlage fuer eine manuelle Sequenz."
+        action={{
+          label: "Strategie generieren",
+          onClick: onGenerate,
+          icon: Send,
+          variant: "default",
+        }}
+      >
+        {disabled && (
+          <p className="mt-3 text-sm text-muted-foreground">Der Agent laeuft bereits.</p>
+        )}
+      </EmptyState>
     );
   }
 
@@ -143,6 +177,7 @@ export default function OutreachCampaignDetail() {
   const { toast } = useToast();
   const [importOpen, setImportOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [strategyEventId, setStrategyEventId] = useState<string | null>(null);
   const [goalForm, setGoalForm] = useState({
     goalType: "backlink",
     targetUrl: "",
@@ -171,6 +206,10 @@ export default function OutreachCampaignDetail() {
     api.tables.linkBuilding.listPlacements,
     typedCampaignId ? { campaignId: typedCampaignId } : "skip"
   );
+  const strategyJob = useQuery(
+    api.agents.triggers.getJobStatusByEventId,
+    strategyEventId ? { inngestEventId: strategyEventId } : "skip"
+  );
 
   const triggerOutreachStrategy = useAction(api.agents.triggers.triggerOutreachStrategy);
   const updateProspect = useMutation(api.tables.outreach.updateProspect);
@@ -188,6 +227,9 @@ export default function OutreachCampaignDetail() {
   const sequence = useMemo(() => {
     return [...(bundle?.sequences ?? [])].sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
   }, [bundle?.sequences]);
+
+  const isStrategyRunning =
+    isGenerating || strategyJob?.status === "queued" || strategyJob?.status === "running";
 
   if (bundle === undefined) {
     return (
@@ -225,6 +267,7 @@ export default function OutreachCampaignDetail() {
         title: "Strategie gestartet",
         description: result.eventId ? `Event: ${result.eventId}` : "Der Agent laeuft.",
       });
+      setStrategyEventId(result.eventId ?? null);
     } catch (error) {
       console.error("Error triggering outreach strategy:", error);
       toast({
@@ -241,27 +284,68 @@ export default function OutreachCampaignDetail() {
     prospectId: Id<"outreachProspects">,
     status: string
   ) => {
-    await updateProspect({ prospectId, status });
+    try {
+      await updateProspect({ prospectId, status });
+      toast({ title: "Status aktualisiert" });
+    } catch (error) {
+      console.error("Error updating prospect status:", error);
+      toast({
+        title: "Status nicht gespeichert",
+        description: "Der Prospect-Status konnte nicht aktualisiert werden.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCreateGoal = async () => {
-    await createGoal({
-      campaignId: typedCampaignId,
-      goalType: goalForm.goalType,
-      targetUrl: goalForm.targetUrl.trim() || undefined,
-      sourceUrl: goalForm.sourceUrl.trim() || undefined,
-      description: goalForm.description.trim() || undefined,
-    });
-    setGoalForm({
-      goalType: "backlink",
-      targetUrl: "",
-      sourceUrl: "",
-      description: "",
-    });
-    toast({
-      title: "Ziel erfasst",
-      description: "Das Outreach-Ziel wurde angelegt.",
-    });
+    const targetUrl = goalForm.targetUrl.trim();
+    const sourceUrl = goalForm.sourceUrl.trim();
+    const description = goalForm.description.trim();
+
+    if (!targetUrl && !sourceUrl && !description) {
+      toast({
+        title: "Ziel unvollstaendig",
+        description: "Bitte gib mindestens URL oder Notiz an.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isValidHttpUrl(targetUrl) || !isValidHttpUrl(sourceUrl)) {
+      toast({
+        title: "URL ungueltig",
+        description: "Bitte nutze vollstaendige http(s)-URLs.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await createGoal({
+        campaignId: typedCampaignId,
+        goalType: goalForm.goalType,
+        targetUrl: targetUrl || undefined,
+        sourceUrl: sourceUrl || undefined,
+        description: description || undefined,
+      });
+      setGoalForm({
+        goalType: "backlink",
+        targetUrl: "",
+        sourceUrl: "",
+        description: "",
+      });
+      toast({
+        title: "Ziel erfasst",
+        description: "Das Outreach-Ziel wurde angelegt.",
+      });
+    } catch (error) {
+      console.error("Error creating outreach goal:", error);
+      toast({
+        title: "Ziel nicht gespeichert",
+        description: "Das Outreach-Ziel konnte nicht angelegt werden.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCreatePlacement = async () => {
@@ -277,30 +361,48 @@ export default function OutreachCampaignDetail() {
       return;
     }
 
-    await createPlacement({
-      campaignId: typedCampaignId,
-      goalId:
-        placementForm.goalId === "none"
-          ? undefined
-          : (placementForm.goalId as Id<"outreachGoals">),
-      sourceUrl,
-      targetUrl,
-      anchorText: placementForm.anchorText.trim() || undefined,
-      rel: placementForm.rel.trim() || undefined,
-    });
+    if (!isValidHttpUrl(sourceUrl) || !isValidHttpUrl(targetUrl)) {
+      toast({
+        title: "URL ungueltig",
+        description: "Bitte nutze vollstaendige http(s)-URLs.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    setPlacementForm({
-      goalId: "none",
-      sourceUrl: "",
-      targetUrl: "",
-      anchorText: "",
-      rel: "",
-    });
+    try {
+      await createPlacement({
+        campaignId: typedCampaignId,
+        goalId:
+          placementForm.goalId === "none"
+            ? undefined
+            : (placementForm.goalId as Id<"outreachGoals">),
+        sourceUrl,
+        targetUrl,
+        anchorText: placementForm.anchorText.trim() || undefined,
+        rel: placementForm.rel || undefined,
+      });
 
-    toast({
-      title: "Placement erfasst",
-      description: "Der Link wurde gespeichert.",
-    });
+      setPlacementForm({
+        goalId: "none",
+        sourceUrl: "",
+        targetUrl: "",
+        anchorText: "",
+        rel: "",
+      });
+
+      toast({
+        title: "Placement erfasst",
+        description: "Der Link wurde gespeichert.",
+      });
+    } catch (error) {
+      console.error("Error creating placement:", error);
+      toast({
+        title: "Placement nicht gespeichert",
+        description: "Der Link konnte nicht gespeichert werden.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -321,12 +423,18 @@ export default function OutreachCampaignDetail() {
               <Upload className="h-4 w-4 mr-2" />
               Prospects importieren
             </Button>
-            <Button onClick={handleGenerateStrategy} disabled={isGenerating}>
-              {isGenerating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {isGenerating ? "Startet..." : "Strategie generieren"}
+            <Button onClick={handleGenerateStrategy} disabled={isStrategyRunning}>
+              {isStrategyRunning && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {isStrategyRunning ? "Laeuft..." : "Strategie generieren"}
             </Button>
           </div>
         </div>
+        {strategyJob && (
+          <div className="rounded-md border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
+            Strategie-Job: {strategyJob.status}
+            {strategyJob.currentStep ? ` - ${strategyJob.currentStep}` : ""}
+          </div>
+        )}
 
         <OutreachStats stats={stats} />
 
@@ -339,7 +447,11 @@ export default function OutreachCampaignDetail() {
           </TabsList>
 
           <TabsContent value="strategy">
-            <StrategyPanel strategyJson={bundle.campaign.strategyJson} />
+            <StrategyPanel
+              strategyJson={bundle.campaign.strategyJson}
+              onGenerate={handleGenerateStrategy}
+              disabled={isStrategyRunning}
+            />
           </TabsContent>
 
           <TabsContent value="prospects">
@@ -602,17 +714,23 @@ export default function OutreachCampaignDetail() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="placement-rel">Rel</Label>
-                    <Input
-                      id="placement-rel"
-                      value={placementForm.rel}
-                      onChange={(event) =>
-                        setPlacementForm((current) => ({
-                          ...current,
-                          rel: event.target.value,
-                        }))
+                    <Select
+                      value={placementForm.rel || "dofollow"}
+                      onValueChange={(rel) =>
+                        setPlacementForm((current) => ({ ...current, rel }))
                       }
-                      placeholder="dofollow, nofollow, sponsored"
-                    />
+                    >
+                      <SelectTrigger id="placement-rel">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {relOptions.map((rel) => (
+                          <SelectItem key={rel} value={rel}>
+                            {rel}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <Button onClick={handleCreatePlacement} className="w-full">
                     <Plus className="h-4 w-4 mr-2" />

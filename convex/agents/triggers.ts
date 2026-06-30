@@ -634,6 +634,29 @@ export const getJobStatus = query({
   },
 });
 
+export const getJobStatusByEventId = query({
+  args: {
+    inngestEventId: v.string(),
+  },
+  handler: async (ctx, { inngestEventId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const job = await ctx.db
+      .query("agentJobs")
+      .withIndex("by_inngest_event", (q) => q.eq("inngestEventId", inngestEventId))
+      .first();
+
+    if (!job || job.userId !== identity.subject) {
+      return null;
+    }
+
+    return job;
+  },
+});
+
 /**
  * Get jobs for a specific article
  */

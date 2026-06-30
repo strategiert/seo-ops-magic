@@ -24,6 +24,12 @@ type ParsedProspect = {
   contactPage?: string;
 };
 
+type ParseResult = {
+  prospects: ParsedProspect[];
+  invalidRows: number;
+  headers: string[];
+};
+
 interface ProspectImportDialogProps {
   campaignId: Id<"outreachCampaigns">;
   open: boolean;
@@ -55,29 +61,62 @@ function parseDomain(value: string): { domain: string; url?: string } {
   return { domain };
 }
 
-function parseProspectRows(input: string): ParsedProspect[] {
-  return input
+function splitRow(line: string): string[] {
+  return line.split(/[,\t;]/).map((part) => part.trim()).filter(Boolean);
+}
+
+function detectHeader(parts: string[]): string[] {
+  const normalized = parts.map((part) => part.toLowerCase());
+  const known = ["domain", "url", "method", "email", "contactemail", "contactname", "name", "contactpage"];
+  return normalized.some((part) => known.includes(part)) ? normalized : [];
+}
+
+function parseProspectRows(input: string): ParseResult {
+  const rows = input
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter(Boolean)
+    .filter(Boolean);
+
+  const firstParts = rows[0] ? splitRow(rows[0]) : [];
+  const headers = detectHeader(firstParts);
+  const dataRows = headers.length > 0 ? rows.slice(1) : rows;
+  let invalidRows = 0;
+
+  const prospects = dataRows
     .map((line) => {
-      const parts = line.split(/[,\t;]/).map((part) => part.trim()).filter(Boolean);
-      const { domain, url } = parseDomain(parts[0] || "");
+      const parts = splitRow(line);
+      const valueFor = (names: string[], fallbackIndex: number) => {
+        const index = headers.findIndex((header) => names.includes(header));
+        return index >= 0 ? parts[index] : parts[fallbackIndex];
+      };
+
+      const domainInput = valueFor(["domain", "url"], 0) || "";
+      const { domain, url } = parseDomain(domainInput);
       const email = parts.find((part) => part.includes("@"));
       const method = parts.find((part) =>
         ["resource_page", "broken_link", "guest_post", "competitor_replication", "unlinked_mention"].includes(part)
       );
       const contactPage = parts.find((part) => part.startsWith("http") && part !== url);
+      const contactName =
+        valueFor(["contactname", "name"], 3) ||
+        parts.find((part) => !part.includes("@") && !part.startsWith("http") && part !== method && part !== domainInput);
 
-      return {
+      const prospect = {
         domain,
         url,
-        contactEmail: email,
-        method,
-        contactPage,
+        contactEmail: valueFor(["email", "contactemail"], -1) || email,
+        method: valueFor(["method"], -1) || method,
+        contactName,
+        contactPage: valueFor(["contactpage"], -1) || contactPage,
       };
     })
-    .filter((prospect) => prospect.domain.length > 0);
+    .filter((prospect) => {
+      const valid = prospect.domain.length > 0;
+      if (!valid) invalidRows += 1;
+      return valid;
+    });
+
+  return { prospects, invalidRows, headers };
 }
 
 export function ProspectImportDialog({
@@ -90,7 +129,8 @@ export function ProspectImportDialog({
   const [input, setInput] = useState("");
   const [isImporting, setIsImporting] = useState(false);
 
-  const parsedProspects = useMemo(() => parseProspectRows(input), [input]);
+  const parseResult = useMemo(() => parseProspectRows(input), [input]);
+  const parsedProspects = parseResult.prospects;
 
   const handleClose = () => {
     if (!isImporting) {
@@ -155,7 +195,22 @@ export function ProspectImportDialog({
           />
           <p className="text-sm text-muted-foreground">
             Erkannte Prospects: {parsedProspects.length}
+            {parseResult.invalidRows > 0 ? ` · Ungueltige Zeilen: ${parseResult.invalidRows}` : ""}
           </p>
+          {parsedProspects.length > 0 && (
+            <div className="rounded-md border p-3 text-sm">
+              <p className="font-medium">Vorschau</p>
+              <div className="mt-2 space-y-1 text-muted-foreground">
+                {parsedProspects.slice(0, 5).map((prospect) => (
+                  <div key={`${prospect.domain}-${prospect.contactEmail || ""}`}>
+                    {prospect.domain}
+                    {prospect.contactName ? ` · ${prospect.contactName}` : ""}
+                    {prospect.contactEmail ? ` · ${prospect.contactEmail}` : ""}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
