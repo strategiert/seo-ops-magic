@@ -42,5 +42,12 @@ Modul von Codex gebaut. Ziel: Security + Billing härten, Bugs fixen, refaktorie
 - **DA-Scores/Tiers** sind LLM-Schätzungen (keine Ahrefs-Quelle). Als „KI-Schätzung" kennzeichnen oder echte API anbinden.
 - **Halluzinierte Kontaktdaten:** vor Versand zwingend verifizieren.
 
-## Ausführungs-Reihenfolge
-P0 (1-6) → Build/Test → Commit · P1 (7-10) → Build/Test → Commit · P2 (11-15) → Build/Test → Commit · P3 (16-20) → Build/Test → Commit. Produkt-Entscheidungen an Klaus melden.
+## Entscheidungen (Klaus, 2026-06-30)
+- **Ausführung in FOKUS-Session** (in headless-seo, `npx convex dev` + Inngest lokal, testbar vor Prod-Deploy) — nicht aus gesättigtem Kontext.
+- **Versand-Pfad WIRD gebaut** (großes Modul). Damit zwingend mit-bauen: echter E-Mail-Versand (Resend/SMTP) + Scheduling/Outbox-Tabelle + Prospect-Status-Übergang „contacted" + **Suppression-Enforcement** + **Consent/Opt-out/Abmelde-Link + Impressum** + **Kontakt-Verifikation** (LLM-erfundene E-Mails NICHT als „found"/versandfähig, erst verifizieren). DE-Recht: §7 UWG/DSGVO Opt-in — Versand nur an rechtlich zulässige Empfänger; Rechtsgrundlage je Outreach-Typ vorab klären. DA-Scores als „KI-Schätzung" labeln bis echte API.
+
+## Bereits erledigt (commit 01650e9)
+- Constant-time worker-secret compare (`convex/lib/constantTimeEqual.ts`) — Timing-Leak gefixt; INNGEST_EVENT_KEY-Fallback noch drin (TODO P0-4: erst `OUTREACH_WORKER_SECRET` in Prod-Env setzen, dann Fallback raus).
+
+## Ausführungs-Reihenfolge (Fokus-Session)
+P0 (1-6, inkl. Billing-Refund-Idempotenz via onFailure, Owner-Checks, Fallback-Entfernung nach Env-Setup, SSRF, bodycam-Scope) → `convex dev`/Inngest-Test → Commit · P1 (7-10) → Test → Commit · P2 (11-15) → Test → Commit · P3 (16-20) → Test → Commit · dann **Modul 1b Versand-Pfad** (Outbox+Send+Suppression+Consent+Verifikation) · dann **Modul 2 (Social)** · 2. Council-Loop über den finalen Code · Modul-2-Test · Report.
