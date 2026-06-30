@@ -2,8 +2,11 @@ import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
+import { constantTimeEqual } from "../lib/constantTimeEqual";
 
 function assertWorkerAuthorized(workerSecret: string): void {
+  // TODO(security P0-4): OUTREACH_WORKER_SECRET in Prod-Env zwingend setzen, dann
+  // den INNGEST_EVENT_KEY-Fallback entfernen (geteilter Key vermischt Trust-Domains).
   const expectedSecret =
     process.env.OUTREACH_WORKER_SECRET || process.env.INNGEST_EVENT_KEY;
 
@@ -11,7 +14,7 @@ function assertWorkerAuthorized(workerSecret: string): void {
     throw new Error("OUTREACH_WORKER_SECRET is not configured");
   }
 
-  if (workerSecret !== expectedSecret) {
+  if (!constantTimeEqual(workerSecret, expectedSecret)) {
     throw new Error("Unauthorized outreach worker");
   }
 }
