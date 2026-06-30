@@ -1,6 +1,35 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+  type QueryCtx,
+} from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
+
+async function assertCampaignOwner(
+  ctx: QueryCtx | MutationCtx,
+  campaignId: Id<"outreachCampaigns">,
+  userId: string,
+  workspaceId: Id<"workspaces">
+) {
+  const campaign = await ctx.db.get(campaignId);
+  if (!campaign) {
+    throw new Error("Campaign not found");
+  }
+
+  const project = await ctx.db.get(campaign.projectId);
+  if (!project || project.workspaceId !== workspaceId) {
+    throw new Error("Unauthorized: Campaign workspace mismatch");
+  }
+
+  const workspace = await ctx.db.get(project.workspaceId);
+  if (!workspace || workspace.ownerId !== userId) {
+    throw new Error("Unauthorized: No access to this campaign");
+  }
+
+  return { campaign, project, workspace };
+}
 
 function stripUndefined<T extends object>(value: T): Partial<T> {
   const cleaned: Partial<T> = {};
@@ -64,13 +93,16 @@ function hasContactLocation(prospect: {
 export const getCampaignContext = internalQuery({
   args: {
     campaignId: v.id("outreachCampaigns"),
+    userId: v.string(),
+    workspaceId: v.id("workspaces"),
   },
-  handler: async (ctx, { campaignId }) => {
-    const campaign = await ctx.db.get(campaignId);
-    if (!campaign) return null;
-
-    const project = await ctx.db.get(campaign.projectId);
-    const workspace = project ? await ctx.db.get(project.workspaceId) : null;
+  handler: async (ctx, { campaignId, userId, workspaceId }) => {
+    const { campaign, project, workspace } = await assertCampaignOwner(
+      ctx,
+      campaignId,
+      userId,
+      workspaceId
+    );
     const brandProfile = project
       ? await ctx.db
           .query("brandProfiles")
@@ -111,6 +143,8 @@ export const getCampaignContext = internalQuery({
 export const saveStrategyOutput = internalMutation({
   args: {
     campaignId: v.id("outreachCampaigns"),
+    userId: v.string(),
+    workspaceId: v.id("workspaces"),
     strategyJson: v.any(),
     prospects: v.array(
       v.object({
@@ -131,11 +165,16 @@ export const saveStrategyOutput = internalMutation({
       variants: v.optional(v.any()),
     }),
   },
-  handler: async (ctx, { campaignId, strategyJson, prospects, sequence }) => {
-    const campaign = await ctx.db.get(campaignId);
-    if (!campaign) {
-      throw new Error("Campaign not found");
-    }
+  handler: async (
+    ctx,
+    { campaignId, userId, workspaceId, strategyJson, prospects, sequence }
+  ) => {
+    const { campaign } = await assertCampaignOwner(
+      ctx,
+      campaignId,
+      userId,
+      workspaceId
+    );
 
     const now = Date.now();
 

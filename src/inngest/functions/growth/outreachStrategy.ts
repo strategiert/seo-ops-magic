@@ -306,79 +306,84 @@ export const outreachStrategy = inngest.createFunction(
   async ({ event, step }) => {
     const { campaignId, projectId, userId, workspaceId } = event.data as OutreachEventData;
     const workerSecret = getWorkerSecret();
+    const inngestEventId = event.id || `outreach-strategy-${Date.now()}`;
     const startTime = Date.now();
     let inputTokens = 0;
     let outputTokens = 0;
 
-    await step.run("check-credits", async () => {
-      const result = await convex.action(api.agents.actions.checkAndReserveCredits, {
-        workspaceId,
-        agentId: AGENT_ID,
-        requiredCredits: CREDITS_REQUIRED,
+    try {
+      await step.run("create-job-record", async () => {
+        await convex.action(api.agents.actions.createAgentJob, {
+          inngestEventId,
+          userId,
+          workspaceId,
+          projectId,
+          agentId: AGENT_ID,
+          eventType: "outreach/strategy",
+          inputData: { campaignId },
+          creditsReserved: 0,
+        });
       });
 
-      if (!result.success) {
-        throw new Error(result.error || "Credit check failed");
-      }
-    });
+      await step.run("check-credits", async () => {
+        const result = await convex.action(api.agents.actions.checkAndReserveCredits, {
+          workspaceId,
+          agentId: AGENT_ID,
+          requiredCredits: CREDITS_REQUIRED,
+          reservationKey: inngestEventId,
+        });
 
-    await step.run("create-job-record", async () => {
-      await convex.action(api.agents.actions.createAgentJob, {
-        inngestEventId: event.id || `${Date.now()}`,
-        userId,
-        workspaceId,
-        projectId,
-        agentId: AGENT_ID,
-        eventType: "outreach/strategy",
-        inputData: { campaignId },
-        creditsReserved: CREDITS_REQUIRED,
-      });
-    });
-
-    const context = await step.run("fetch-campaign-context", async () => {
-      const result = await convex.action(api.agents.outreachActions.getCampaignContext, {
-        campaignId,
-        workerSecret,
-      }) as CampaignContext | null;
-
-      if (!result?.campaign) {
-        throw new Error(`Campaign not found: ${campaignId}`);
-      }
-
-      await convex.action(api.agents.actions.updateAgentJob, {
-        inngestEventId: event.id || `${Date.now()}`,
-        status: "running",
-        currentStep: "Fetching campaign context",
-        progress: 15,
+        if (!result.success) {
+          throw new Error(result.error || "Credit check failed");
+        }
       });
 
-      return result;
-    });
+      const context = await step.run("fetch-campaign-context", async () => {
+        const result = await convex.action(api.agents.outreachActions.getCampaignContext, {
+          campaignId,
+          userId,
+          workspaceId,
+          workerSecret,
+        }) as CampaignContext | null;
 
-    const generated = await step.run("generate-strategy", async () => {
-      await convex.action(api.agents.actions.updateAgentJob, {
-        inngestEventId: event.id || `${Date.now()}`,
-        currentStep: "Generating outreach strategy",
-        progress: 35,
+        if (!result?.campaign) {
+          throw new Error(`Campaign not found: ${campaignId}`);
+        }
+
+        await convex.action(api.agents.actions.updateAgentJob, {
+          inngestEventId,
+          status: "running",
+          currentStep: "Fetching campaign context",
+          progress: 15,
+        });
+
+        return result;
       });
 
-      const anthropic = new Anthropic({
-        apiKey: process.env.ANTHROPIC_API_KEY,
-      });
+      const generated = await step.run("generate-strategy", async () => {
+        await convex.action(api.agents.actions.updateAgentJob, {
+          inngestEventId,
+          currentStep: "Generating outreach strategy",
+          progress: 35,
+        });
 
-      const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 5000,
-        system: SYSTEM_PROMPT,
-        tools: [OUTREACH_STRATEGY_TOOL],
-        tool_choice: {
-          type: "tool",
-          name: OUTREACH_STRATEGY_TOOL_NAME,
-        },
-        messages: [
-          {
-            role: "user",
-            content: `Erstelle eine Outreach-Strategie für diese Kampagne.
+        const anthropic = new Anthropic({
+          apiKey: process.env.ANTHROPIC_API_KEY,
+        });
+
+        const response = await anthropic.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 5000,
+          system: SYSTEM_PROMPT,
+          tools: [OUTREACH_STRATEGY_TOOL],
+          tool_choice: {
+            type: "tool",
+            name: OUTREACH_STRATEGY_TOOL_NAME,
+          },
+          messages: [
+            {
+              role: "user",
+              content: `Erstelle eine Outreach-Strategie für diese Kampagne.
 
 Kampagne:
 ${safeStringify(context.campaign, 4000)}
@@ -396,76 +401,99 @@ Bereits importierte Prospects:
 ${safeStringify(context.prospects || [], 5000)}
 
 Gib nur JSON im geforderten Format zurück.`,
-          },
-        ],
+            },
+          ],
+        });
+
+        inputTokens = response.usage.input_tokens;
+        outputTokens = response.usage.output_tokens;
+
+        return normalizeGeneratedStrategy(
+          extractToolInput(response.content, OUTREACH_STRATEGY_TOOL_NAME)
+        );
       });
 
-      inputTokens = response.usage.input_tokens;
-      outputTokens = response.usage.output_tokens;
+      const saved = await step.run("save-strategy", async () => {
+        await convex.action(api.agents.actions.updateAgentJob, {
+          inngestEventId,
+          currentStep: "Saving strategy",
+          progress: 80,
+        });
 
-      return normalizeGeneratedStrategy(
-        extractToolInput(response.content, OUTREACH_STRATEGY_TOOL_NAME)
-      );
-    });
-
-    const saved = await step.run("save-strategy", async () => {
-      await convex.action(api.agents.actions.updateAgentJob, {
-        inngestEventId: event.id || `${Date.now()}`,
-        currentStep: "Saving strategy",
-        progress: 80,
-      });
-
-      return await convex.action(api.agents.outreachActions.saveStrategyOutput, {
-        campaignId,
-        workerSecret,
-        strategyJson: generated.strategy,
-        prospects: generated.prospects,
-        sequence: generated.sequence,
-      });
-    });
-
-    const durationMs = Date.now() - startTime;
-
-    await step.run("log-usage", async () => {
-      await convex.action(api.agents.actions.logUsage, {
-        userId,
-        workspaceId,
-        projectId,
-        agentId: AGENT_ID,
-        jobId: event.id,
-        creditsUsed: CREDITS_REQUIRED,
-        inputTokens,
-        outputTokens,
-        status: "completed",
-        durationMs,
-      });
-
-      await convex.action(api.agents.actions.updateAgentJob, {
-        inngestEventId: event.id || `${Date.now()}`,
-        status: "completed",
-        progress: 100,
-        currentStep: "Done",
-        creditsUsed: CREDITS_REQUIRED,
-        result: {
+        return await convex.action(api.agents.outreachActions.saveStrategyOutput, {
           campaignId,
-          prospectsCreated: saved.insertedProspectIds.length,
-          sequenceId: saved.sequenceId,
-        },
+          userId,
+          workspaceId,
+          workerSecret,
+          strategyJson: generated.strategy,
+          prospects: generated.prospects,
+          sequence: generated.sequence,
+        });
       });
-    });
 
-    return {
-      success: true,
-      campaignId,
-      prospectsCreated: saved.insertedProspectIds.length,
-      sequenceId: saved.sequenceId,
-      creditsUsed: CREDITS_REQUIRED,
-      durationMs,
-      usage: {
-        inputTokens,
-        outputTokens,
-        estimatedCostCents: calculateCostCents(inputTokens, outputTokens),
-      },
-    };
+      const durationMs = Date.now() - startTime;
+
+      await step.run("log-usage", async () => {
+        await convex.action(api.agents.actions.logUsage, {
+          userId,
+          workspaceId,
+          projectId,
+          agentId: AGENT_ID,
+          jobId: inngestEventId,
+          creditsUsed: CREDITS_REQUIRED,
+          inputTokens,
+          outputTokens,
+          status: "completed",
+          durationMs,
+        });
+
+        await convex.action(api.agents.actions.updateAgentJob, {
+          inngestEventId,
+          status: "completed",
+          progress: 100,
+          currentStep: "Done",
+          creditsUsed: CREDITS_REQUIRED,
+          result: {
+            campaignId,
+            prospectsCreated: saved.insertedProspectIds.length,
+            sequenceId: saved.sequenceId,
+          },
+        });
+      });
+
+      return {
+        success: true,
+        campaignId,
+        prospectsCreated: saved.insertedProspectIds.length,
+        sequenceId: saved.sequenceId,
+        creditsUsed: CREDITS_REQUIRED,
+        durationMs,
+        usage: {
+          inputTokens,
+          outputTokens,
+          estimatedCostCents: calculateCostCents(inputTokens, outputTokens),
+        },
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown outreach strategy error";
+
+      await step.run("mark-failed", async () => {
+        await convex.action(api.agents.actions.refundReservedCredits, {
+          inngestEventId,
+          reason: errorMessage,
+        });
+
+        await convex.action(api.agents.actions.updateAgentJob, {
+          inngestEventId,
+          status: "failed",
+          currentStep: "Failed",
+          progress: 100,
+          errorMessage,
+        });
+      });
+
+      throw error;
+    }
   }
 );

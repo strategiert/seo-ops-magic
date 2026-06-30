@@ -424,8 +424,8 @@ export const triggerOutreachStrategy = action({
     }
 
     const campaign = await ctx.runQuery(
-      internal.tables.outreachInternal.getCampaignContext,
-      { campaignId }
+      internal.tables.outreach.getCampaignForWorkerTrigger,
+      { campaignId, userId: identity.subject }
     );
     if (!campaign?.campaign) {
       throw new Error("Campaign not found");
@@ -541,6 +541,8 @@ export const triggerOutreachIntelligence = action({
         analysisId,
         errorMessage:
           eventResult.error || "Inngest konnte die Analyse nicht starten.",
+        userId: identity.subject,
+        workspaceId: project.workspaceId,
       });
 
       return { success: false, error: eventResult.error };

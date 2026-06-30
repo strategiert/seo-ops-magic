@@ -1,4 +1,5 @@
 import {
+  internalQuery,
   internalMutation,
   mutation,
   query,
@@ -138,6 +139,26 @@ export const getCampaignBundle = query({
   },
 });
 
+export const getCampaignForWorkerTrigger = internalQuery({
+  args: {
+    campaignId: v.id("outreachCampaigns"),
+    userId: v.string(),
+  },
+  handler: async (ctx, { campaignId, userId }) => {
+    const campaign = await ctx.db.get(campaignId);
+    if (!campaign) return null;
+
+    const project = await ctx.db.get(campaign.projectId);
+    const workspace = project ? await ctx.db.get(project.workspaceId) : null;
+
+    if (!project || !workspace || workspace.ownerId !== userId) {
+      return null;
+    }
+
+    return { campaign, project, workspace };
+  },
+});
+
 export const createCampaign = mutation({
   args: {
     projectId: v.id("projects"),
@@ -179,6 +200,8 @@ export const createCampaign = mutation({
 export const createGeneratedCampaignInternal = internalMutation({
   args: {
     projectId: v.id("projects"),
+    userId: v.string(),
+    workspaceId: v.id("workspaces"),
     name: v.string(),
     campaignType: v.string(),
     targetDomain: v.optional(v.string()),
@@ -189,6 +212,16 @@ export const createGeneratedCampaignInternal = internalMutation({
     status: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.workspaceId !== args.workspaceId) {
+      throw new Error("Unauthorized: Project workspace mismatch");
+    }
+
+    const workspace = await ctx.db.get(project.workspaceId);
+    if (!workspace || workspace.ownerId !== args.userId) {
+      throw new Error("Unauthorized: No access to this project");
+    }
+
     await validateTargetArticleIds(ctx, args.targetArticleIds, args.projectId);
 
     const now = Date.now();

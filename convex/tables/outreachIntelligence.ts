@@ -22,6 +22,40 @@ async function verifyProjectAccess(
   return workspace?.ownerId === userId;
 }
 
+async function assertProjectOwner(
+  ctx: QueryCtx | MutationCtx,
+  projectId: Id<"projects">,
+  userId: string,
+  workspaceId: Id<"workspaces">
+) {
+  const project = await ctx.db.get(projectId);
+  if (!project || project.workspaceId !== workspaceId) {
+    throw new Error("Unauthorized: Project workspace mismatch");
+  }
+
+  const workspace = await ctx.db.get(project.workspaceId);
+  if (!workspace || workspace.ownerId !== userId) {
+    throw new Error("Unauthorized: No access to this project");
+  }
+
+  return { project, workspace };
+}
+
+async function assertAnalysisOwner(
+  ctx: QueryCtx | MutationCtx,
+  analysisId: Id<"outreachAnalyses">,
+  userId: string,
+  workspaceId: Id<"workspaces">
+) {
+  const analysis = await ctx.db.get(analysisId);
+  if (!analysis) {
+    throw new Error("Analysis not found");
+  }
+
+  await assertProjectOwner(ctx, analysis.projectId, userId, workspaceId);
+  return analysis;
+}
+
 function excerpt(value: string | undefined, maxLength = 1200): string {
   return (value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
@@ -59,8 +93,12 @@ export const latestByProject = query({
 export const createRunning = internalMutation({
   args: {
     projectId: v.id("projects"),
+    userId: v.string(),
+    workspaceId: v.id("workspaces"),
   },
-  handler: async (ctx, { projectId }) => {
+  handler: async (ctx, { projectId, userId, workspaceId }) => {
+    await assertProjectOwner(ctx, projectId, userId, workspaceId);
+
     const now = Date.now();
 
     return await ctx.db.insert("outreachAnalyses", {
@@ -93,8 +131,12 @@ export const createQueued = internalMutation({
 export const markRunning = internalMutation({
   args: {
     analysisId: v.id("outreachAnalyses"),
+    userId: v.string(),
+    workspaceId: v.id("workspaces"),
   },
-  handler: async (ctx, { analysisId }) => {
+  handler: async (ctx, { analysisId, userId, workspaceId }) => {
+    await assertAnalysisOwner(ctx, analysisId, userId, workspaceId);
+
     await ctx.db.patch(analysisId, {
       status: "running",
       summary:
@@ -108,12 +150,16 @@ export const markRunning = internalMutation({
 export const getContext = internalQuery({
   args: {
     projectId: v.id("projects"),
+    userId: v.string(),
+    workspaceId: v.id("workspaces"),
   },
-  handler: async (ctx, { projectId }) => {
-    const project = await ctx.db.get(projectId);
-    if (!project) return null;
-
-    const workspace = await ctx.db.get(project.workspaceId);
+  handler: async (ctx, { projectId, userId, workspaceId }) => {
+    const { project, workspace } = await assertProjectOwner(
+      ctx,
+      projectId,
+      userId,
+      workspaceId
+    );
     const brandProfile = await ctx.db
       .query("brandProfiles")
       .withIndex("by_project", (q) => q.eq("projectId", projectId))
@@ -135,7 +181,6 @@ export const getContext = internalQuery({
       contentAssets,
       integrations,
       gscConnection,
-      dashboardPages,
     ] = await Promise.all([
       ctx.db
         .query("articles")
@@ -161,7 +206,6 @@ export const getContext = internalQuery({
         .query("gscConnections")
         .withIndex("by_project", (q) => q.eq("projectId", projectId))
         .first(),
-      ctx.db.query("bodycamPages").collect(),
     ]);
 
     return {
@@ -237,13 +281,7 @@ export const getContext = internalQuery({
             propertyPermissionLevel: gscConnection.propertyPermissionLevel,
           }
         : null,
-      dashboardPages: dashboardPages.slice(0, 40).map((page) => ({
-        id: page._id,
-        pageKey: page.pageKey,
-        lang: page.lang,
-        isDirty: page.isDirty,
-        contentExcerpt: excerpt(page.contentJson, 1200),
-      })),
+      dashboardPages: [],
     };
   },
 });
@@ -256,6 +294,8 @@ export const saveCompleted = internalMutation({
     opportunitiesJson: v.any(),
     recommendedCampaignJson: v.any(),
     createdCampaignId: v.optional(v.id("outreachCampaigns")),
+    userId: v.string(),
+    workspaceId: v.id("workspaces"),
   },
   handler: async (
     ctx,
@@ -266,8 +306,12 @@ export const saveCompleted = internalMutation({
       opportunitiesJson,
       recommendedCampaignJson,
       createdCampaignId,
+      userId,
+      workspaceId,
     }
   ) => {
+    await assertAnalysisOwner(ctx, analysisId, userId, workspaceId);
+
     await ctx.db.patch(analysisId, {
       status: "completed",
       summary,
@@ -284,8 +328,12 @@ export const saveFailed = internalMutation({
   args: {
     analysisId: v.id("outreachAnalyses"),
     errorMessage: v.string(),
+    userId: v.string(),
+    workspaceId: v.id("workspaces"),
   },
-  handler: async (ctx, { analysisId, errorMessage }) => {
+  handler: async (ctx, { analysisId, errorMessage, userId, workspaceId }) => {
+    await assertAnalysisOwner(ctx, analysisId, userId, workspaceId);
+
     await ctx.db.patch(analysisId, {
       status: "failed",
       errorMessage,

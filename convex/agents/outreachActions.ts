@@ -5,8 +5,8 @@ import type { Id } from "../_generated/dataModel";
 import { constantTimeEqual } from "../lib/constantTimeEqual";
 
 function assertWorkerAuthorized(workerSecret: string): void {
-  // TODO(security P0-4): OUTREACH_WORKER_SECRET in Prod-Env zwingend setzen, dann
-  // den INNGEST_EVENT_KEY-Fallback entfernen (geteilter Key vermischt Trust-Domains).
+  // TODO(security P0-4): OUTREACH_WORKER_SECRET in Convex + Vercel setzen,
+  // dann INNGEST_EVENT_KEY-Fallback entfernen.
   const expectedSecret =
     process.env.OUTREACH_WORKER_SECRET || process.env.INNGEST_EVENT_KEY;
 
@@ -22,13 +22,17 @@ function assertWorkerAuthorized(workerSecret: string): void {
 export const getCampaignContext = action({
   args: {
     campaignId: v.string(),
+    userId: v.string(),
+    workspaceId: v.string(),
     workerSecret: v.string(),
   },
-  handler: async (ctx, { campaignId, workerSecret }) => {
+  handler: async (ctx, { campaignId, userId, workspaceId, workerSecret }) => {
     assertWorkerAuthorized(workerSecret);
 
     return await ctx.runQuery(internal.tables.outreachInternal.getCampaignContext, {
       campaignId: campaignId as Id<"outreachCampaigns">,
+      userId,
+      workspaceId: workspaceId as Id<"workspaces">,
     });
   },
 });
@@ -36,6 +40,8 @@ export const getCampaignContext = action({
 export const saveStrategyOutput = action({
   args: {
     campaignId: v.string(),
+    userId: v.string(),
+    workspaceId: v.string(),
     workerSecret: v.string(),
     strategyJson: v.any(),
     prospects: v.array(
@@ -57,13 +63,15 @@ export const saveStrategyOutput = action({
       variants: v.optional(v.any()),
     }),
   },
-  handler: async (ctx, { campaignId, workerSecret, ...strategyOutput }) => {
+  handler: async (ctx, { campaignId, userId, workspaceId, workerSecret, ...strategyOutput }) => {
     assertWorkerAuthorized(workerSecret);
 
     return await ctx.runMutation(
       internal.tables.outreachInternal.saveStrategyOutput,
       {
         campaignId: campaignId as Id<"outreachCampaigns">,
+        userId,
+        workspaceId: workspaceId as Id<"workspaces">,
         ...strategyOutput,
       }
     );

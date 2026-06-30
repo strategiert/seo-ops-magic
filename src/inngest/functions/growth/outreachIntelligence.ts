@@ -3,6 +3,7 @@ import type { Tool } from "@anthropic-ai/sdk/resources/messages";
 import { inngest } from "../../client.js";
 import { api, convex, AGENT_CREDITS, calculateCostCents } from "../../lib/convex.js";
 import { extractToolInput } from "../../lib/anthropicToolInput.js";
+import { fetchSafeTextWithTimeout } from "../../lib/safeHttp.js";
 import {
   RESOURCE_FORMATS,
   normalizeResourcePlan,
@@ -361,26 +362,12 @@ function extractRobotsSitemaps(robots: string): string[] {
 }
 
 async function fetchTextWithTimeout(url: string, timeoutMs = 8000): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        Accept: "application/xml,text/xml,text/plain,*/*",
-        "User-Agent": "SEO-Ops-Magic-Outreach-Intelligence/1.0",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`${response.status} ${response.statusText}`);
-    }
-
-    return (await response.text()).slice(0, 2_000_000);
-  } finally {
-    clearTimeout(timeout);
-  }
+  return await fetchSafeTextWithTimeout(url, timeoutMs, {
+    headers: {
+      Accept: "application/xml,text/xml,text/plain,*/*",
+      "User-Agent": "SEO-Ops-Magic-Outreach-Intelligence/1.0",
+    },
+  });
 }
 
 function looksLikeSitemapUrl(url: string): boolean {
@@ -789,18 +776,6 @@ export const outreachIntelligence = inngest.createFunction(
     let analysisId: string | undefined = incomingAnalysisId;
 
     try {
-      await step.run("check-credits", async () => {
-        const result = await convex.action(api.agents.actions.checkAndReserveCredits, {
-          workspaceId,
-          agentId: AGENT_ID,
-          requiredCredits: CREDITS_REQUIRED,
-        });
-
-        if (!result.success) {
-          throw new Error(result.error || "Credit check failed");
-        }
-      });
-
       await step.run("create-job-record", async () => {
         await convex.action(api.agents.actions.createAgentJob, {
           inngestEventId,
@@ -810,8 +785,21 @@ export const outreachIntelligence = inngest.createFunction(
           agentId: AGENT_ID,
           eventType: "outreach/intelligence",
           inputData: { projectId, analysisMode },
-          creditsReserved: CREDITS_REQUIRED,
+          creditsReserved: 0,
         });
+      });
+
+      await step.run("check-credits", async () => {
+        const result = await convex.action(api.agents.actions.checkAndReserveCredits, {
+          workspaceId,
+          agentId: AGENT_ID,
+          requiredCredits: CREDITS_REQUIRED,
+          reservationKey: inngestEventId,
+        });
+
+        if (!result.success) {
+          throw new Error(result.error || "Credit check failed");
+        }
       });
 
       analysisId = (await step.run("prepare-analysis-record", async () => {
@@ -820,6 +808,8 @@ export const outreachIntelligence = inngest.createFunction(
             api.agents.outreachIntelligenceActions.markRunning,
             {
               analysisId: incomingAnalysisId,
+              userId,
+              workspaceId,
               workerSecret,
             }
           );
@@ -831,6 +821,8 @@ export const outreachIntelligence = inngest.createFunction(
           api.agents.outreachIntelligenceActions.createRunning,
           {
             projectId,
+            userId,
+            workspaceId,
             workerSecret,
           }
         );
@@ -848,6 +840,8 @@ export const outreachIntelligence = inngest.createFunction(
           api.agents.outreachIntelligenceActions.getContext,
           {
             projectId,
+            userId,
+            workspaceId,
             workerSecret,
           }
         )) as IntelligenceContext | null;
@@ -938,6 +932,8 @@ export const outreachIntelligence = inngest.createFunction(
           api.agents.outreachIntelligenceActions.createGeneratedCampaign,
           {
             projectId,
+            userId,
+            workspaceId,
             name: generated.recommendedCampaign.name,
             campaignType: "linkbuilding",
             targetDomain: generated.recommendedCampaign.targetDomain,
@@ -972,6 +968,8 @@ export const outreachIntelligence = inngest.createFunction(
           opportunitiesJson: generated.opportunities,
           recommendedCampaignJson: generated.recommendedCampaign,
           createdCampaignId,
+          userId,
+          workspaceId,
           workerSecret,
         });
       });
@@ -1024,10 +1022,17 @@ export const outreachIntelligence = inngest.createFunction(
         error instanceof Error ? error.message : "Unknown outreach intelligence error";
 
       await step.run("mark-failed", async () => {
+        await convex.action(api.agents.actions.refundReservedCredits, {
+          inngestEventId,
+          reason: errorMessage,
+        });
+
         if (analysisId) {
           await convex.action(api.agents.outreachIntelligenceActions.saveFailed, {
             analysisId,
             errorMessage,
+            userId,
+            workspaceId,
             workerSecret,
           });
         }

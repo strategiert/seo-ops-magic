@@ -248,8 +248,30 @@ export const checkAndReserveCredits = internalMutation({
     workspaceId: v.id("workspaces"),
     agentId: v.string(),
     requiredCredits: v.number(),
+    reservationKey: v.optional(v.string()),
   },
-  handler: async (ctx, { workspaceId, agentId, requiredCredits }) => {
+  handler: async (ctx, { workspaceId, agentId, requiredCredits, reservationKey }) => {
+    const existingJob = reservationKey
+      ? await ctx.db
+          .query("agentJobs")
+          .withIndex("by_inngest_event", (q) =>
+            q.eq("inngestEventId", reservationKey)
+          )
+          .first()
+      : null;
+
+    if (
+      existingJob?.creditsReserved &&
+      existingJob.creditsReserved > 0 &&
+      !existingJob.creditsRefunded
+    ) {
+      return {
+        success: true,
+        reserved: existingJob.creditsReserved,
+        alreadyReserved: true,
+      };
+    }
+
     let credits = await ctx.db
       .query("credits")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
@@ -309,6 +331,16 @@ export const checkAndReserveCredits = internalMutation({
     await ctx.db.patch(credits._id, {
       balance: credits.balance - requiredCredits,
     });
+
+    if (existingJob) {
+      await ctx.db.patch(existingJob._id, {
+        creditsReserved: requiredCredits,
+        creditsReservedAt: Date.now(),
+        creditsRefunded: false,
+        creditsRefundReason: undefined,
+        creditsRefundedAt: undefined,
+      });
+    }
 
     return {
       success: true,
@@ -382,6 +414,52 @@ export const refundCredits = internalMutation({
   },
 });
 
+export const refundReservedCredits = internalMutation({
+  args: {
+    inngestEventId: v.string(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, { inngestEventId, reason }) => {
+    const job = await ctx.db
+      .query("agentJobs")
+      .withIndex("by_inngest_event", (q) => q.eq("inngestEventId", inngestEventId))
+      .first();
+
+    if (!job || job.creditsReserved <= 0) {
+      return { success: true, refunded: 0, skipped: "no_reserved_credits" };
+    }
+
+    if (job.creditsRefunded) {
+      return { success: true, refunded: 0, skipped: "already_refunded" };
+    }
+
+    const credits = await ctx.db
+      .query("credits")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", job.workspaceId))
+      .first();
+
+    if (!credits) {
+      return { success: false, refunded: 0, error: "Credits not found" };
+    }
+
+    await ctx.db.patch(credits._id, {
+      balance: credits.balance + job.creditsReserved,
+    });
+
+    await ctx.db.patch(job._id, {
+      creditsRefunded: true,
+      creditsRefundedAt: Date.now(),
+      creditsRefundReason: reason,
+    });
+
+    return {
+      success: true,
+      refunded: job.creditsReserved,
+      newBalance: credits.balance + job.creditsReserved,
+    };
+  },
+});
+
 // ============ Agent Jobs ============
 
 export const createAgentJob = internalMutation({
@@ -396,6 +474,15 @@ export const createAgentJob = internalMutation({
     creditsReserved: v.number(),
   },
   handler: async (ctx, args) => {
+    const existingJob = await ctx.db
+      .query("agentJobs")
+      .withIndex("by_inngest_event", (q) => q.eq("inngestEventId", args.inngestEventId))
+      .first();
+
+    if (existingJob) {
+      return existingJob._id;
+    }
+
     const jobId = await ctx.db.insert("agentJobs", {
       inngestEventId: args.inngestEventId,
       userId: args.userId,

@@ -197,12 +197,14 @@ export const checkAndReserveCredits = action({
     workspaceId: v.string(),
     agentId: v.string(),
     requiredCredits: v.number(),
+    reservationKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const result = await ctx.runMutation(internal.agents.internal.checkAndReserveCredits, {
       workspaceId: args.workspaceId as Id<"workspaces">,
       agentId: args.agentId,
       requiredCredits: args.requiredCredits,
+      reservationKey: args.reservationKey,
     });
     return result;
   },
@@ -255,6 +257,19 @@ export const refundCredits = action({
       amount: args.amount,
     });
     return result;
+  },
+});
+
+export const refundReservedCredits = action({
+  args: {
+    inngestEventId: v.string(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.runMutation(
+      internal.agents.internal.refundReservedCredits,
+      args
+    );
   },
 });
 

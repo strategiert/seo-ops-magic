@@ -434,7 +434,11 @@ export default defineSchema({
     errorMessage: v.optional(v.string()),
     // Credits
     creditsReserved: v.number(), // Reserved on job start
+    creditsReservedAt: v.optional(v.number()),
     creditsUsed: v.optional(v.number()), // Actual usage (may differ)
+    creditsRefunded: v.optional(v.boolean()),
+    creditsRefundedAt: v.optional(v.number()),
+    creditsRefundReason: v.optional(v.string()),
     // Timing
     createdAt: v.number(),
     startedAt: v.optional(v.number()),
