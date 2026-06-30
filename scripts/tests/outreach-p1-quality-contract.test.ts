@@ -10,7 +10,7 @@ const intelligence = read("src/inngest/functions/growth/outreachIntelligence.ts"
 const badge = read("src/components/outreach/ProspectStatusBadge.tsx");
 const detailPage = read("src/pages/OutreachCampaignDetail.tsx");
 
-assert.match(schema, /'missing' \| 'found' \| 'unverified' \| 'verified' \| 'bad'/);
+assert.match(schema, /contactStatus:\s*v\.optional\(contactStatusValidator\)/);
 
 assert.match(outreachInternal, /contactStatus:\s*"unverified"/);
 assert.doesNotMatch(

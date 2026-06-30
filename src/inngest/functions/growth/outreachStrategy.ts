@@ -200,6 +200,14 @@ function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function asTier(value: unknown): string | undefined {
+  const text = asString(value)?.toUpperCase();
+  if (!text) return undefined;
+
+  const tier = text.match(/[ABCD]/)?.[0];
+  return tier && ["A", "B", "C", "D"].includes(tier) ? tier : undefined;
+}
+
 function defaultSequence(): GeneratedSequence {
   return {
     name: "Linkbuilding Outreach",
@@ -234,7 +242,7 @@ function normalizeProspects(value: unknown): GeneratedProspect[] {
       url: asString(prospect.url),
       method: asString(prospect.method),
       score: asNumber(prospect.score),
-      tier: asString(prospect.tier),
+      tier: asTier(prospect.tier),
       reasoning: asString(prospect.reasoning),
       contactEmail: asString(prospect.contactEmail),
       contactName: asString(prospect.contactName),

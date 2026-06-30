@@ -8,19 +8,7 @@ import {
 } from "../_generated/server";
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
-import { requireAuth } from "../auth";
-
-async function verifyProjectAccess(
-  ctx: QueryCtx | MutationCtx,
-  projectId: Id<"projects">,
-  userId: string
-): Promise<boolean> {
-  const project = await ctx.db.get(projectId);
-  if (!project) return false;
-
-  const workspace = await ctx.db.get(project.workspaceId);
-  return workspace?.ownerId === userId;
-}
+import { requireProjectAccess } from "../auth";
 
 async function assertProjectOwner(
   ctx: QueryCtx | MutationCtx,
@@ -75,18 +63,17 @@ export const latestByProject = query({
     projectId: v.id("projects"),
   },
   handler: async (ctx, { projectId }) => {
-    const userId = await requireAuth(ctx);
-
-    if (!(await verifyProjectAccess(ctx, projectId, userId))) {
+    try {
+      await requireProjectAccess(ctx, projectId);
+    } catch {
       return null;
     }
 
-    const analyses = await ctx.db
+    return await ctx.db
       .query("outreachAnalyses")
-      .withIndex("by_project", (q) => q.eq("projectId", projectId))
-      .collect();
-
-    return analyses.sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
+      .withIndex("by_project_created", (q) => q.eq("projectId", projectId))
+      .order("desc")
+      .first();
   },
 });
 
@@ -347,16 +334,13 @@ export const removeAnalysis = mutation({
     analysisId: v.id("outreachAnalyses"),
   },
   handler: async (ctx, { analysisId }) => {
-    const userId = await requireAuth(ctx);
     const analysis = await ctx.db.get(analysisId);
 
     if (!analysis) {
       throw new Error("Analysis not found");
     }
 
-    if (!(await verifyProjectAccess(ctx, analysis.projectId, userId))) {
-      throw new Error("Unauthorized: No access to this project");
-    }
+    await requireProjectAccess(ctx, analysis.projectId);
 
     await ctx.db.delete(analysisId);
   },

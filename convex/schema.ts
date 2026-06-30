@@ -1,5 +1,17 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import {
+  campaignTypeValidator,
+  contactStatusValidator,
+  goalStatusValidator,
+  goalTypeValidator,
+  outreachCampaignStatusValidator,
+  placementRelValidator,
+  placementStatusValidator,
+  prospectStatusValidator,
+  prospectTierValidator,
+  sequenceApprovalStatusValidator,
+} from "./lib/outreachValidators";
 
 /**
  * Convex Schema - migrated from Supabase
@@ -484,13 +496,13 @@ export default defineSchema({
   outreachCampaigns: defineTable({
     projectId: v.id("projects"),
     name: v.string(),
-    campaignType: v.string(), // 'linkbuilding' | 'pr' | 'sales' | 'partnership' | 'seeding'
+    campaignType: campaignTypeValidator,
     targetDomain: v.optional(v.string()),
     targetArticleIds: v.optional(v.array(v.id("articles"))),
     competitors: v.optional(v.array(v.string())),
     goalTargetsJson: v.optional(v.any()),
     strategyJson: v.optional(v.any()),
-    status: v.string(), // 'draft' | 'ready' | 'active' | 'paused' | 'review' | 'done'
+    status: outreachCampaignStatusValidator,
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -511,36 +523,21 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_project", ["projectId"])
+    .index("by_project_created", ["projectId", "createdAt"])
     .index("by_project_status", ["projectId", "status"]),
-
-  outreachAssets: defineTable({
-    projectId: v.id("projects"),
-    campaignId: v.id("outreachCampaigns"),
-    articleId: v.optional(v.id("articles")),
-    assetType: v.string(), // 'article' | 'study' | 'case_study' | 'tool' | 'infographic' | 'landing_page'
-    url: v.optional(v.string()),
-    title: v.string(),
-    pitchAngle: v.optional(v.string()),
-    status: v.string(), // 'draft' | 'approved' | 'archived'
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_project", ["projectId"])
-    .index("by_campaign", ["campaignId"])
-    .index("by_article", ["articleId"]),
 
   outreachProspects: defineTable({
     projectId: v.id("projects"),
     campaignId: v.id("outreachCampaigns"),
-    campaignType: v.string(),
+    campaignType: campaignTypeValidator,
     domain: v.string(),
     url: v.optional(v.string()),
     method: v.optional(v.string()),
     score: v.optional(v.number()),
-    tier: v.optional(v.string()), // 'A' | 'B' | 'C' | 'D'
-    status: v.string(), // 'new' | 'qualified' | 'contacted' | 'replied' | 'won' | 'lost' | 'suppressed'
+    tier: v.optional(prospectTierValidator),
+    status: prospectStatusValidator,
     reasoning: v.optional(v.string()),
-    contactStatus: v.optional(v.string()), // 'missing' | 'found' | 'unverified' | 'verified' | 'bad'
+    contactStatus: v.optional(contactStatusValidator),
     lastTouchedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -576,7 +573,7 @@ export default defineSchema({
     name: v.string(),
     steps: v.array(v.any()),
     variants: v.optional(v.any()),
-    approvalStatus: v.string(), // 'draft' | 'approved'
+    approvalStatus: sequenceApprovalStatusValidator,
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -587,11 +584,11 @@ export default defineSchema({
     projectId: v.id("projects"),
     campaignId: v.id("outreachCampaigns"),
     prospectId: v.optional(v.id("outreachProspects")),
-    goalType: v.string(), // 'backlink' | 'press_mention' | 'interview' | 'quote' | 'meeting' | 'opportunity' | 'partnership' | 'referral'
+    goalType: goalTypeValidator,
     targetUrl: v.optional(v.string()),
     sourceUrl: v.optional(v.string()),
     description: v.optional(v.string()),
-    status: v.string(), // 'open' | 'won' | 'lost' | 'verified'
+    status: goalStatusValidator,
     verifiedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -608,10 +605,10 @@ export default defineSchema({
     sourceUrl: v.string(),
     targetUrl: v.string(),
     anchorText: v.optional(v.string()),
-    rel: v.optional(v.string()),
+    rel: v.optional(placementRelValidator),
     firstSeenAt: v.optional(v.number()),
     lastCheckedAt: v.optional(v.number()),
-    status: v.string(), // 'live' | 'changed' | 'lost' | 'manual'
+    status: placementStatusValidator,
     createdAt: v.number(),
     updatedAt: v.number(),
   })

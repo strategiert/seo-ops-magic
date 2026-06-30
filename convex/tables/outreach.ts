@@ -8,38 +8,18 @@ import {
 } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { v } from "convex/values";
-import { requireAuth } from "../auth";
-
-/**
- * Verify user has access to a project.
- * Access is granted when the user owns the workspace containing the project.
- */
-async function verifyProjectAccess(
-  ctx: QueryCtx | MutationCtx,
-  projectId: Id<"projects">,
-  userId: string
-): Promise<boolean> {
-  const project = await ctx.db.get(projectId);
-  if (!project) return false;
-
-  const workspace = await ctx.db.get(project.workspaceId);
-  if (!workspace) return false;
-
-  return workspace.ownerId === userId;
-}
-
-function stripUndefined<T extends object>(value: T): Partial<T> {
-  const cleaned: Partial<T> = {};
-
-  for (const key of Object.keys(value) as Array<keyof T>) {
-    const entryValue = value[key];
-    if (entryValue !== undefined) {
-      cleaned[key] = entryValue;
-    }
-  }
-
-  return cleaned;
-}
+import { requireProjectAccess } from "../auth";
+import { stripUndefined } from "../lib/objects";
+import {
+  campaignTypeValidator,
+  contactStatusValidator,
+  goalStatusValidator,
+  goalTypeValidator,
+  outreachCampaignStatusValidator,
+  prospectStatusValidator,
+  prospectTierValidator,
+  sequenceApprovalStatusValidator,
+} from "../lib/outreachValidators";
 
 async function validateTargetArticleIds(
   ctx: QueryCtx | MutationCtx,
@@ -66,12 +46,12 @@ async function validateTargetArticleIds(
 export const listCampaigns = query({
   args: {
     projectId: v.id("projects"),
-    campaignType: v.optional(v.string()),
+    campaignType: v.optional(campaignTypeValidator),
   },
   handler: async (ctx, { projectId, campaignType }) => {
-    const userId = await requireAuth(ctx);
-
-    if (!(await verifyProjectAccess(ctx, projectId, userId))) {
+    try {
+      await requireProjectAccess(ctx, projectId);
+    } catch {
       return [];
     }
 
@@ -96,20 +76,16 @@ export const getCampaignBundle = query({
     campaignId: v.id("outreachCampaigns"),
   },
   handler: async (ctx, { campaignId }) => {
-    const userId = await requireAuth(ctx);
-
     const campaign = await ctx.db.get(campaignId);
     if (!campaign) return null;
 
-    if (!(await verifyProjectAccess(ctx, campaign.projectId, userId))) {
+    try {
+      await requireProjectAccess(ctx, campaign.projectId);
+    } catch {
       return null;
     }
 
-    const [assets, prospects, contacts, sequences, goals] = await Promise.all([
-      ctx.db
-        .query("outreachAssets")
-        .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
-        .collect(),
+    const [prospects, contacts, sequences, goals] = await Promise.all([
       ctx.db
         .query("outreachProspects")
         .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
@@ -130,7 +106,6 @@ export const getCampaignBundle = query({
 
     return {
       campaign,
-      assets,
       prospects,
       contacts,
       sequences,
@@ -163,18 +138,14 @@ export const createCampaign = mutation({
   args: {
     projectId: v.id("projects"),
     name: v.string(),
-    campaignType: v.string(),
+    campaignType: campaignTypeValidator,
     targetDomain: v.optional(v.string()),
     targetArticleIds: v.optional(v.array(v.id("articles"))),
     competitors: v.optional(v.array(v.string())),
     goalTargetsJson: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuth(ctx);
-
-    if (!(await verifyProjectAccess(ctx, args.projectId, userId))) {
-      throw new Error("Unauthorized: No access to this project");
-    }
+    await requireProjectAccess(ctx, args.projectId);
 
     await validateTargetArticleIds(ctx, args.targetArticleIds, args.projectId);
 
@@ -203,13 +174,13 @@ export const createGeneratedCampaignInternal = internalMutation({
     userId: v.string(),
     workspaceId: v.id("workspaces"),
     name: v.string(),
-    campaignType: v.string(),
+    campaignType: campaignTypeValidator,
     targetDomain: v.optional(v.string()),
     targetArticleIds: v.optional(v.array(v.id("articles"))),
     competitors: v.optional(v.array(v.string())),
     goalTargetsJson: v.optional(v.any()),
     strategyJson: v.optional(v.any()),
-    status: v.optional(v.string()),
+    status: v.optional(outreachCampaignStatusValidator),
   },
   handler: async (ctx, args) => {
     const project = await ctx.db.get(args.projectId);
@@ -252,19 +223,15 @@ export const updateCampaign = mutation({
     targetArticleIds: v.optional(v.array(v.id("articles"))),
     competitors: v.optional(v.array(v.string())),
     goalTargetsJson: v.optional(v.any()),
-    status: v.optional(v.string()),
+    status: v.optional(outreachCampaignStatusValidator),
   },
   handler: async (ctx, { campaignId, ...updates }) => {
-    const userId = await requireAuth(ctx);
-
     const campaign = await ctx.db.get(campaignId);
     if (!campaign) {
       throw new Error("Campaign not found");
     }
 
-    if (!(await verifyProjectAccess(ctx, campaign.projectId, userId))) {
-      throw new Error("Unauthorized: No access to this project");
-    }
+    await requireProjectAccess(ctx, campaign.projectId);
 
     await validateTargetArticleIds(
       ctx,
@@ -297,16 +264,12 @@ export const createProspectsBatch = mutation({
     ),
   },
   handler: async (ctx, { campaignId, prospects }) => {
-    const userId = await requireAuth(ctx);
-
     const campaign = await ctx.db.get(campaignId);
     if (!campaign) {
       throw new Error("Campaign not found");
     }
 
-    if (!(await verifyProjectAccess(ctx, campaign.projectId, userId))) {
-      throw new Error("Unauthorized: No access to this project");
-    }
+    await requireProjectAccess(ctx, campaign.projectId);
 
     const insertedProspectIds: Id<"outreachProspects">[] = [];
 
@@ -362,22 +325,18 @@ export const updateProspect = mutation({
     prospectId: v.id("outreachProspects"),
     method: v.optional(v.string()),
     score: v.optional(v.number()),
-    tier: v.optional(v.string()),
-    status: v.optional(v.string()),
+    tier: v.optional(prospectTierValidator),
+    status: v.optional(prospectStatusValidator),
     reasoning: v.optional(v.string()),
-    contactStatus: v.optional(v.string()),
+    contactStatus: v.optional(contactStatusValidator),
   },
   handler: async (ctx, { prospectId, ...updates }) => {
-    const userId = await requireAuth(ctx);
-
     const prospect = await ctx.db.get(prospectId);
     if (!prospect) {
       throw new Error("Prospect not found");
     }
 
-    if (!(await verifyProjectAccess(ctx, prospect.projectId, userId))) {
-      throw new Error("Unauthorized: No access to this project");
-    }
+    await requireProjectAccess(ctx, prospect.projectId);
 
     const now = Date.now();
 
@@ -403,16 +362,12 @@ export const updateContact = mutation({
     suppressionReason: v.optional(v.string()),
   },
   handler: async (ctx, { contactId, ...updates }) => {
-    const userId = await requireAuth(ctx);
-
     const contact = await ctx.db.get(contactId);
     if (!contact) {
       throw new Error("Contact not found");
     }
 
-    if (!(await verifyProjectAccess(ctx, contact.projectId, userId))) {
-      throw new Error("Unauthorized: No access to this project");
-    }
+    await requireProjectAccess(ctx, contact.projectId);
 
     await ctx.db.patch(contactId, {
       ...stripUndefined(updates),
@@ -430,19 +385,15 @@ export const upsertSequence = mutation({
     name: v.string(),
     steps: v.array(v.any()),
     variants: v.optional(v.any()),
-    approvalStatus: v.string(),
+    approvalStatus: sequenceApprovalStatusValidator,
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuth(ctx);
-
     const campaign = await ctx.db.get(args.campaignId);
     if (!campaign) {
       throw new Error("Campaign not found");
     }
 
-    if (!(await verifyProjectAccess(ctx, campaign.projectId, userId))) {
-      throw new Error("Unauthorized: No access to this project");
-    }
+    await requireProjectAccess(ctx, campaign.projectId);
 
     const now = Date.now();
 
@@ -491,23 +442,19 @@ export const createGoal = mutation({
   args: {
     campaignId: v.id("outreachCampaigns"),
     prospectId: v.optional(v.id("outreachProspects")),
-    goalType: v.string(),
+    goalType: goalTypeValidator,
     targetUrl: v.optional(v.string()),
     sourceUrl: v.optional(v.string()),
     description: v.optional(v.string()),
-    status: v.optional(v.string()),
+    status: v.optional(goalStatusValidator),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuth(ctx);
-
     const campaign = await ctx.db.get(args.campaignId);
     if (!campaign) {
       throw new Error("Campaign not found");
     }
 
-    if (!(await verifyProjectAccess(ctx, campaign.projectId, userId))) {
-      throw new Error("Unauthorized: No access to this project");
-    }
+    await requireProjectAccess(ctx, campaign.projectId);
 
     if (args.prospectId) {
       const prospect = await ctx.db.get(args.prospectId);
@@ -541,23 +488,19 @@ export const updateGoal = mutation({
   args: {
     goalId: v.id("outreachGoals"),
     prospectId: v.optional(v.id("outreachProspects")),
-    goalType: v.optional(v.string()),
+    goalType: v.optional(goalTypeValidator),
     targetUrl: v.optional(v.string()),
     sourceUrl: v.optional(v.string()),
     description: v.optional(v.string()),
-    status: v.optional(v.string()),
+    status: v.optional(goalStatusValidator),
   },
   handler: async (ctx, { goalId, ...updates }) => {
-    const userId = await requireAuth(ctx);
-
     const goal = await ctx.db.get(goalId);
     if (!goal) {
       throw new Error("Goal not found");
     }
 
-    if (!(await verifyProjectAccess(ctx, goal.projectId, userId))) {
-      throw new Error("Unauthorized: No access to this project");
-    }
+    await requireProjectAccess(ctx, goal.projectId);
 
     if (updates.prospectId !== undefined) {
       const prospect = await ctx.db.get(updates.prospectId);
@@ -595,12 +538,12 @@ export const prospectStats = query({
     campaignId: v.id("outreachCampaigns"),
   },
   handler: async (ctx, { campaignId }) => {
-    const userId = await requireAuth(ctx);
-
     const campaign = await ctx.db.get(campaignId);
     if (!campaign) return null;
 
-    if (!(await verifyProjectAccess(ctx, campaign.projectId, userId))) {
+    try {
+      await requireProjectAccess(ctx, campaign.projectId);
+    } catch {
       return null;
     }
 

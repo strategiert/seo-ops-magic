@@ -6,6 +6,8 @@ import {
   type QueryCtx,
 } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
+import { stripUndefined } from "../lib/objects";
+import { prospectTierValidator } from "../lib/outreachValidators";
 
 async function assertCampaignOwner(
   ctx: QueryCtx | MutationCtx,
@@ -29,19 +31,6 @@ async function assertCampaignOwner(
   }
 
   return { campaign, project, workspace };
-}
-
-function stripUndefined<T extends object>(value: T): Partial<T> {
-  const cleaned: Partial<T> = {};
-
-  for (const key of Object.keys(value) as Array<keyof T>) {
-    const entryValue = value[key];
-    if (entryValue !== undefined) {
-      cleaned[key] = entryValue;
-    }
-  }
-
-  return cleaned;
 }
 
 function canonicalizeDomain(input: string): string {
@@ -152,7 +141,7 @@ export const saveStrategyOutput = internalMutation({
         url: v.optional(v.string()),
         method: v.optional(v.string()),
         score: v.optional(v.number()),
-        tier: v.optional(v.string()),
+        tier: v.optional(prospectTierValidator),
         reasoning: v.optional(v.string()),
         contactEmail: v.optional(v.string()),
         contactName: v.optional(v.string()),

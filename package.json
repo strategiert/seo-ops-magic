@@ -9,6 +9,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "test": "npx tsx scripts/tests/run-all.ts",
     "preview": "vite preview"
   },
   "dependencies": {
