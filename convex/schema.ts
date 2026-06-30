@@ -540,7 +540,7 @@ export default defineSchema({
     tier: v.optional(v.string()), // 'A' | 'B' | 'C' | 'D'
     status: v.string(), // 'new' | 'qualified' | 'contacted' | 'replied' | 'won' | 'lost' | 'suppressed'
     reasoning: v.optional(v.string()),
-    contactStatus: v.optional(v.string()), // 'missing' | 'found' | 'verified' | 'bad'
+    contactStatus: v.optional(v.string()), // 'missing' | 'found' | 'unverified' | 'verified' | 'bad'
     lastTouchedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

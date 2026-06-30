@@ -8,6 +8,11 @@ const statusLabels: Record<string, string> = {
   won: "Gewonnen",
   lost: "Verloren",
   suppressed: "Gesperrt",
+  missing: "Fehlt",
+  found: "Gefunden",
+  unverified: "KI-Vorschlag",
+  verified: "Geprueft",
+  bad: "Ungueltig",
 };
 
 const statusClasses: Record<string, string> = {
@@ -18,6 +23,11 @@ const statusClasses: Record<string, string> = {
   won: "bg-green-500/20 text-green-700",
   lost: "bg-red-500/20 text-red-700",
   suppressed: "bg-zinc-500/20 text-zinc-700",
+  missing: "bg-muted text-muted-foreground",
+  found: "bg-sky-500/20 text-sky-700",
+  unverified: "bg-amber-500/20 text-amber-700",
+  verified: "bg-emerald-500/20 text-emerald-700",
+  bad: "bg-red-500/20 text-red-700",
 };
 
 export function ProspectStatusBadge({ status }: { status: string }) {

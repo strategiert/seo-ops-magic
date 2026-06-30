@@ -270,6 +270,7 @@ type GeneratedIntelligence = {
   sourceCoverage: Record<string, unknown>;
   opportunities: GeneratedOpportunity[];
   recommendedCampaign: RecommendedCampaign;
+  fallbackUsed: boolean;
 };
 
 function getWorkerSecret(): string {
@@ -625,8 +626,10 @@ function normalizeGeneratedIntelligence(
         .sort((a, b) => b.score - a.score)
     : [];
 
-  const normalizedOpportunities =
-    opportunities.length > 0 ? opportunities : [fallbackOpportunity(context)];
+  const fallbackUsed = opportunities.length === 0;
+  const normalizedOpportunities = fallbackUsed
+    ? [fallbackOpportunity(context)]
+    : opportunities;
 
   const topOpportunity = normalizedOpportunities[0];
   const campaign = isRecord(value.recommendedCampaign) ? value.recommendedCampaign : {};
@@ -664,9 +667,11 @@ function normalizeGeneratedIntelligence(
       },
       analysisMode,
       sitemapErrors: sitemap.errors,
+      fallbackUsed,
     },
     opportunities: normalizedOpportunities,
     recommendedCampaign,
+    fallbackUsed,
   };
 }
 
@@ -954,7 +959,7 @@ export const outreachIntelligence = inngest.createFunction(
                 (opportunity) => opportunity.resourcePlan
               ),
             },
-            status: "ready",
+            status: generated.fallbackUsed ? "needs_review" : "ready",
             workerSecret,
           }
         );

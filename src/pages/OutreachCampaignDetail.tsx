@@ -352,6 +352,7 @@ export default function OutreachCampaignDetail() {
                     <TableHead>Score</TableHead>
                     <TableHead>Tier</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Kontakt</TableHead>
                     <TableHead>Begruendung</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -393,6 +394,9 @@ export default function OutreachCampaignDetail() {
                             ))}
                           </SelectContent>
                         </Select>
+                      </TableCell>
+                      <TableCell>
+                        <ProspectStatusBadge status={prospect.contactStatus || "missing"} />
                       </TableCell>
                       <TableCell className="max-w-[360px] text-sm text-muted-foreground">
                         <span className="line-clamp-2">{prospect.reasoning || "-"}</span>

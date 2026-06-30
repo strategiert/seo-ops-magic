@@ -278,10 +278,10 @@ export const saveStrategyOutput = internalMutation({
           existingProspect.contactStatus === "missing"
         ) {
           await ctx.db.patch(existingProspect.id, {
-            contactStatus: "found",
+            contactStatus: "unverified",
             updatedAt: now,
           });
-          existingProspect.contactStatus = "found";
+          existingProspect.contactStatus = "unverified";
         }
 
         continue;
@@ -293,7 +293,7 @@ export const saveStrategyOutput = internalMutation({
         campaignType: campaign.campaignType,
         domain: canonicalDomain,
         status: prospect.score !== undefined ? "qualified" : "new",
-        contactStatus: hasContactLocation(prospect) ? "found" : "missing",
+        contactStatus: hasContactLocation(prospect) ? "unverified" : "missing",
         createdAt: now,
         updatedAt: now,
         ...stripUndefined({
@@ -308,7 +308,7 @@ export const saveStrategyOutput = internalMutation({
       insertedProspectIds.push(prospectId);
       prospectsByDomain.set(canonicalDomain, {
         id: prospectId,
-        contactStatus: hasContactLocation(prospect) ? "found" : "missing",
+        contactStatus: hasContactLocation(prospect) ? "unverified" : "missing",
       });
 
       if (hasGeneratedContact(prospect)) {

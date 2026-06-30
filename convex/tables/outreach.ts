@@ -571,17 +571,20 @@ export const updateGoal = mutation({
     }
 
     const now = Date.now();
-
-    await ctx.db.patch(goalId, {
+    const patchData: Record<string, unknown> = {
       ...stripUndefined(updates),
       updatedAt: now,
-      ...stripUndefined({
-        verifiedAt:
-          updates.status === "verified" && goal.verifiedAt === undefined
-            ? now
-            : undefined,
-      }),
-    });
+    };
+
+    if (updates.status === "verified" && goal.verifiedAt === undefined) {
+      patchData.verifiedAt = now;
+    }
+
+    if (updates.status !== undefined && updates.status !== "verified") {
+      patchData.verifiedAt = undefined;
+    }
+
+    await ctx.db.patch(goalId, patchData);
 
     return goalId;
   },
