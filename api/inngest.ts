@@ -9,6 +9,7 @@ import { internalLinker } from "../src/inngest/functions/core/internalLinker.js"
 import { socialPostCreator } from "../src/inngest/functions/growth/socialCreator.js";
 import { outreachStrategy } from "../src/inngest/functions/growth/outreachStrategy.js";
 import { outreachIntelligence } from "../src/inngest/functions/growth/outreachIntelligence.js";
+import { outreachSendMessage } from "../src/inngest/functions/growth/outreachSendMessage.js";
 
 // NOTE: adCopyWriter, pressReleaseWriter and fullContentPipeline are stubs
 // (TODOs: Convex persistence, credit handling, agentJobs status updates).
@@ -25,5 +26,6 @@ export default serve({
     socialPostCreator,
     outreachStrategy,
     outreachIntelligence,
+    outreachSendMessage,
   ],
 });

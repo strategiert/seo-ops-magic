@@ -48,6 +48,49 @@ export const sequenceApprovalStatusValidator = v.union(
   v.literal("approved")
 );
 
+export const outreachMailboxStatusValidator = v.union(
+  v.literal("draft"),
+  v.literal("verified"),
+  v.literal("active"),
+  v.literal("paused")
+);
+
+export const outreachSuppressionScopeValidator = v.union(
+  v.literal("email"),
+  v.literal("domain")
+);
+
+export const outreachSuppressionSourceValidator = v.union(
+  v.literal("manual"),
+  v.literal("opt_out"),
+  v.literal("bounce"),
+  v.literal("complaint"),
+  v.literal("provider")
+);
+
+export const outreachMessageStatusValidator = v.union(
+  v.literal("draft"),
+  v.literal("queued"),
+  v.literal("sending"),
+  v.literal("sent"),
+  v.literal("failed"),
+  v.literal("suppressed"),
+  v.literal("cancelled")
+);
+
+export const outreachEmailEventTypeValidator = v.union(
+  v.literal("sent"),
+  v.literal("delivered"),
+  v.literal("bounced"),
+  v.literal("complained"),
+  v.literal("failed"),
+  v.literal("opened"),
+  v.literal("clicked"),
+  v.literal("replied"),
+  v.literal("opted_out"),
+  v.literal("suppressed")
+);
+
 export const goalTypeValidator = v.union(
   v.literal("backlink"),
   v.literal("press_mention"),

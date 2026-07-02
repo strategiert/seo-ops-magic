@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Loader2, Plus, Send, Upload } from "lucide-react";
+import { Loader2, Mail, Plus, Send, Upload } from "lucide-react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { EmptyState } from "@/components/data-state/EmptyState";
@@ -177,6 +177,7 @@ export default function OutreachCampaignDetail() {
   const { toast } = useToast();
   const [importOpen, setImportOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [strategyEventId, setStrategyEventId] = useState<string | null>(null);
   const [goalForm, setGoalForm] = useState({
     goalType: "backlink",
@@ -206,12 +207,17 @@ export default function OutreachCampaignDetail() {
     api.tables.linkBuilding.listPlacements,
     typedCampaignId ? { campaignId: typedCampaignId } : "skip"
   );
+  const sendReadiness = useQuery(
+    api.tables.outreachMail.getCampaignSendReadiness,
+    typedCampaignId ? { campaignId: typedCampaignId } : "skip"
+  );
   const strategyJob = useQuery(
     api.agents.triggers.getJobStatusByEventId,
     strategyEventId ? { inngestEventId: strategyEventId } : "skip"
   );
 
   const triggerOutreachStrategy = useAction(api.agents.triggers.triggerOutreachStrategy);
+  const triggerOutreachMessageSend = useAction(api.agents.triggers.triggerOutreachMessageSend);
   const updateProspect = useMutation(api.tables.outreach.updateProspect);
   const createGoal = useMutation(api.tables.outreach.createGoal);
   const createPlacement = useMutation(api.tables.linkBuilding.createPlacement);
@@ -294,6 +300,30 @@ export default function OutreachCampaignDetail() {
         description: "Der Prospect-Status konnte nicht aktualisiert werden.",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleSendFirstStep = async () => {
+    setIsSending(true);
+    try {
+      const result = await triggerOutreachMessageSend({ campaignId: typedCampaignId });
+      if (!result.success) {
+        throw new Error(result.error || "Outreach send trigger failed");
+      }
+
+      toast({
+        title: "Versand gestartet",
+        description: `${result.queuedCount || 0} Nachrichten wurden in die Outbox gelegt.`,
+      });
+    } catch (error) {
+      console.error("Error triggering outreach send:", error);
+      toast({
+        title: "Versand fehlgeschlagen",
+        description: "Die Nachrichten konnten nicht gestartet werden.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -443,6 +473,7 @@ export default function OutreachCampaignDetail() {
             <TabsTrigger value="strategy">Strategie</TabsTrigger>
             <TabsTrigger value="prospects">Prospects</TabsTrigger>
             <TabsTrigger value="sequence">Sequenz</TabsTrigger>
+            <TabsTrigger value="send">Versand</TabsTrigger>
             <TabsTrigger value="goals">Ziele</TabsTrigger>
           </TabsList>
 
@@ -522,6 +553,101 @@ export default function OutreachCampaignDetail() {
 
           <TabsContent value="sequence">
             <SequenceEditor campaignId={typedCampaignId} sequence={sequence} />
+          </TabsContent>
+
+          <TabsContent value="send">
+            <div className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-4">
+                <div className="border rounded-lg p-4">
+                  <p className="text-sm text-muted-foreground">Absender</p>
+                  <p className="mt-1 font-medium">
+                    {sendReadiness?.mailbox
+                      ? `${sendReadiness.mailbox.fromName} <${sendReadiness.mailbox.fromEmail}>`
+                      : "Noch nicht geladen"}
+                  </p>
+                </div>
+                <div className="border rounded-lg p-4">
+                  <p className="text-sm text-muted-foreground">Sequenz</p>
+                  <p className="mt-1 font-medium">
+                    {sendReadiness?.sequenceApproved ? "Freigegeben" : "Nicht freigegeben"}
+                  </p>
+                </div>
+                <div className="border rounded-lg p-4">
+                  <p className="text-sm text-muted-foreground">Sendbar</p>
+                  <p className="mt-1 text-2xl font-bold">
+                    {sendReadiness?.eligibleContacts ?? 0}
+                  </p>
+                </div>
+                <div className="border rounded-lg p-4">
+                  <p className="text-sm text-muted-foreground">Gesendet</p>
+                  <p className="mt-1 text-2xl font-bold">
+                    {sendReadiness?.sentCount ?? 0}
+                  </p>
+                </div>
+              </div>
+
+              <div className="border rounded-lg p-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
+                  <h3 className="font-semibold">Erste Sequenzstufe senden</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Erstellt Outbox-Nachrichten fuer geeignete Kontakte und sendet sie ueber Resend.
+                  </p>
+                  {sendReadiness?.blocked && Object.keys(sendReadiness.blocked).length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      {Object.entries(sendReadiness.blocked).map(([reason, count]) => (
+                        <Badge key={reason} variant="outline">
+                          {reason}: {String(count)}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <Button
+                  onClick={handleSendFirstStep}
+                  disabled={
+                    isSending ||
+                    !sendReadiness?.sequenceApproved ||
+                    (sendReadiness?.eligibleContacts ?? 0) === 0
+                  }
+                >
+                  {isSending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Mail className="h-4 w-4 mr-2" />
+                  )}
+                  {isSending ? "Sendet..." : "Versand starten"}
+                </Button>
+              </div>
+
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Empfaenger</TableHead>
+                      <TableHead>Betreff</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Fehler</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(sendReadiness?.messages ?? []).map((message) => (
+                      <TableRow key={message._id}>
+                        <TableCell>{message.toEmail}</TableCell>
+                        <TableCell className="max-w-[360px] truncate">
+                          {message.subject}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{message.status}</Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[360px] truncate text-sm text-muted-foreground">
+                          {message.errorMessage || "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="goals">

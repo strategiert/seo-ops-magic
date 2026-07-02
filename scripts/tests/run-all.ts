@@ -9,6 +9,8 @@ const tests = [
   "scripts/tests/outreach-resource-plan-contract.test.ts",
   "scripts/tests/outreach-asset-inventory.test.ts",
   "scripts/tests/outreach-ui-mode-contract.test.ts",
+  "scripts/tests/outreach-mail-core.test.ts",
+  "scripts/tests/outreach-mail-core-contract.test.ts",
   "scripts/tests/resource-plan-normalization.test.ts",
   "scripts/tests/german-umlauts.test.ts",
   "scripts/tests/anthropic-tool-input.test.ts",

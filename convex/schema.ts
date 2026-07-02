@@ -6,6 +6,11 @@ import {
   goalStatusValidator,
   goalTypeValidator,
   outreachCampaignStatusValidator,
+  outreachEmailEventTypeValidator,
+  outreachMailboxStatusValidator,
+  outreachMessageStatusValidator,
+  outreachSuppressionScopeValidator,
+  outreachSuppressionSourceValidator,
   placementRelValidator,
   placementStatusValidator,
   prospectStatusValidator,
@@ -579,6 +584,93 @@ export default defineSchema({
   })
     .index("by_project", ["projectId"])
     .index("by_campaign", ["campaignId"]),
+
+  outreachMailboxes: defineTable({
+    workspaceId: v.id("workspaces"),
+    projectId: v.optional(v.id("projects")),
+    provider: v.literal("resend"),
+    fromEmail: v.string(),
+    fromName: v.string(),
+    replyTo: v.optional(v.string()),
+    senderAddress: v.optional(v.string()),
+    status: outreachMailboxStatusValidator,
+    dailyLimit: v.optional(v.number()),
+    sentToday: v.optional(v.number()),
+    lastSentAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_project", ["projectId"])
+    .index("by_workspace_status", ["workspaceId", "status"]),
+
+  outreachSuppressions: defineTable({
+    workspaceId: v.id("workspaces"),
+    projectId: v.optional(v.id("projects")),
+    scope: outreachSuppressionScopeValidator,
+    value: v.string(),
+    reason: v.optional(v.string()),
+    source: outreachSuppressionSourceValidator,
+    active: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_project", ["projectId"])
+    .index("by_workspace_value", ["workspaceId", "value"])
+    .index("by_project_value", ["projectId", "value"]),
+
+  outreachMessages: defineTable({
+    workspaceId: v.id("workspaces"),
+    projectId: v.id("projects"),
+    campaignId: v.id("outreachCampaigns"),
+    prospectId: v.id("outreachProspects"),
+    contactId: v.id("outreachContacts"),
+    sequenceId: v.optional(v.id("outreachSequences")),
+    stepIndex: v.number(),
+    mailboxId: v.optional(v.id("outreachMailboxes")),
+    provider: v.literal("resend"),
+    fromEmail: v.string(),
+    fromName: v.string(),
+    replyTo: v.optional(v.string()),
+    toEmail: v.string(),
+    subject: v.string(),
+    bodyText: v.string(),
+    status: outreachMessageStatusValidator,
+    scheduledAt: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
+    providerMessageId: v.optional(v.string()),
+    providerEventId: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    optOutToken: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_project", ["projectId"])
+    .index("by_campaign", ["campaignId"])
+    .index("by_campaign_status", ["campaignId", "status"])
+    .index("by_status", ["status"])
+    .index("by_provider_message", ["providerMessageId"])
+    .index("by_contact", ["contactId"]),
+
+  outreachEmailEvents: defineTable({
+    workspaceId: v.id("workspaces"),
+    projectId: v.id("projects"),
+    campaignId: v.optional(v.id("outreachCampaigns")),
+    messageId: v.optional(v.id("outreachMessages")),
+    provider: v.literal("resend"),
+    providerMessageId: v.optional(v.string()),
+    eventType: outreachEmailEventTypeValidator,
+    recipientEmail: v.optional(v.string()),
+    rawJson: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_project", ["projectId"])
+    .index("by_message", ["messageId"])
+    .index("by_provider_message", ["providerMessageId"])
+    .index("by_event_type", ["eventType"]),
 
   outreachGoals: defineTable({
     projectId: v.id("projects"),

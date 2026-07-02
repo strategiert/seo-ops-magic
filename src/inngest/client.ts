@@ -212,6 +212,17 @@ export type Events = {
       error?: string;
     };
   };
+
+  "outreach/send-message": {
+    data: {
+      messageId: string;
+      campaignId: string;
+      projectId: string;
+      userId: string;
+      customerId: string;
+      workspaceId: string;
+    };
+  };
 };
 
 // Create the Inngest client

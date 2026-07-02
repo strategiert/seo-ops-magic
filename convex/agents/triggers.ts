@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { action, mutation, query } from "../_generated/server";
-import { internal } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 
 /**
@@ -473,6 +473,74 @@ export const triggerOutreachStrategy = action({
       eventId: eventResult.eventId,
       message: "Outreach strategy generation started",
       creditsRequired: requiredCredits,
+    };
+  },
+});
+
+/**
+ * Queue and trigger the first approved outreach sequence step.
+ */
+export const triggerOutreachMessageSend = action({
+  args: {
+    campaignId: v.id("outreachCampaigns"),
+  },
+  handler: async (ctx, { campaignId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const campaign = await ctx.runQuery(
+      internal.tables.outreach.getCampaignForWorkerTrigger,
+      { campaignId, userId: identity.subject }
+    );
+    if (!campaign?.campaign || !campaign.project || !campaign.workspace) {
+      throw new Error("Campaign not found");
+    }
+
+    const eventKey = process.env.INNGEST_EVENT_KEY;
+    if (!eventKey) {
+      throw new Error("INNGEST_EVENT_KEY not configured");
+    }
+
+    const queued = await ctx.runMutation(api.tables.outreachMail.queueCampaignFirstStep, {
+      campaignId,
+    });
+
+    const eventIds: string[] = [];
+    for (const messageId of queued.messageIds) {
+      const eventResult = await sendInngestEvent(
+        "outreach/send-message",
+        {
+          messageId,
+          projectId: campaign.campaign.projectId,
+          campaignId,
+          userId: identity.subject,
+          customerId: campaign.project.workspaceId,
+          workspaceId: campaign.project.workspaceId,
+        },
+        eventKey
+      );
+
+      if (!eventResult.success) {
+        return {
+          success: false,
+          error: eventResult.error,
+          queuedCount: queued.messageIds.length,
+          skipped: queued.skipped,
+        };
+      }
+
+      if (eventResult.eventId) {
+        eventIds.push(eventResult.eventId);
+      }
+    }
+
+    return {
+      success: true,
+      queuedCount: queued.messageIds.length,
+      skipped: queued.skipped,
+      eventIds,
     };
   },
 });

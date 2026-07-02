@@ -12,13 +12,14 @@ export { routerAgent } from "./agents/routerAgent";
 export { seoContentWriter } from "./functions/core/seoWriter";
 export { htmlDesigner } from "./functions/core/htmlDesigner";
 export { internalLinker } from "./functions/core/internalLinker";
-export { wordpressPublisher } from "./functions/core/wordpressPublisher";
+export { wordpressPublisher } from "./functions/core/wpPublisher";
 
 // Growth Agents
 export { socialPostCreator } from "./functions/growth/socialCreator";
 export { adCopyWriter } from "./functions/growth/adCopyWriter";
 export { outreachStrategy } from "./functions/growth/outreachStrategy";
 export { outreachIntelligence } from "./functions/growth/outreachIntelligence";
+export { outreachSendMessage } from "./functions/growth/outreachSendMessage";
 
 // Enterprise Agents
 export { pressReleaseWriter } from "./functions/enterprise/pressRelease";
@@ -31,11 +32,12 @@ import { routerAgent } from "./agents/routerAgent";
 import { seoContentWriter } from "./functions/core/seoWriter";
 import { htmlDesigner } from "./functions/core/htmlDesigner";
 import { internalLinker } from "./functions/core/internalLinker";
-import { wordpressPublisher } from "./functions/core/wordpressPublisher";
+import { wordpressPublisher } from "./functions/core/wpPublisher";
 import { socialPostCreator } from "./functions/growth/socialCreator";
 import { adCopyWriter } from "./functions/growth/adCopyWriter";
 import { outreachStrategy } from "./functions/growth/outreachStrategy";
 import { outreachIntelligence } from "./functions/growth/outreachIntelligence";
+import { outreachSendMessage } from "./functions/growth/outreachSendMessage";
 import { pressReleaseWriter } from "./functions/enterprise/pressRelease";
 import { fullContentPipeline } from "./workflows/fullContentPipeline";
 
@@ -49,6 +51,7 @@ export const allAgentFunctions = [
   adCopyWriter,
   outreachStrategy,
   outreachIntelligence,
+  outreachSendMessage,
   pressReleaseWriter,
   fullContentPipeline,
 ];
